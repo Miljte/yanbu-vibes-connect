@@ -9,16 +9,394 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
-      [_ in never]: never
+      chat_messages: {
+        Row: {
+          created_at: string | null
+          id: string
+          is_deleted: boolean | null
+          is_promotion: boolean | null
+          message: string
+          message_type: Database["public"]["Enums"]["message_type"] | null
+          place_id: string | null
+          user_id: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          is_deleted?: boolean | null
+          is_promotion?: boolean | null
+          message: string
+          message_type?: Database["public"]["Enums"]["message_type"] | null
+          place_id?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          is_deleted?: boolean | null
+          is_promotion?: boolean | null
+          message?: string
+          message_type?: Database["public"]["Enums"]["message_type"] | null
+          place_id?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "chat_messages_place_id_fkey"
+            columns: ["place_id"]
+            isOneToOne: false
+            referencedRelation: "places"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      event_attendees: {
+        Row: {
+          event_id: string | null
+          id: string
+          registered_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          event_id?: string | null
+          id?: string
+          registered_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          event_id?: string | null
+          id?: string
+          registered_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "event_attendees_event_id_fkey"
+            columns: ["event_id"]
+            isOneToOne: false
+            referencedRelation: "events"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      events: {
+        Row: {
+          created_at: string | null
+          current_attendees: number | null
+          description: string | null
+          end_time: string | null
+          id: string
+          is_active: boolean | null
+          max_attendees: number | null
+          organizer_id: string
+          place_id: string | null
+          start_time: string
+          title: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          current_attendees?: number | null
+          description?: string | null
+          end_time?: string | null
+          id?: string
+          is_active?: boolean | null
+          max_attendees?: number | null
+          organizer_id: string
+          place_id?: string | null
+          start_time: string
+          title: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          current_attendees?: number | null
+          description?: string | null
+          end_time?: string | null
+          id?: string
+          is_active?: boolean | null
+          max_attendees?: number | null
+          organizer_id?: string
+          place_id?: string | null
+          start_time?: string
+          title?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "events_place_id_fkey"
+            columns: ["place_id"]
+            isOneToOne: false
+            referencedRelation: "places"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      merchant_subscriptions: {
+        Row: {
+          created_at: string | null
+          end_date: string | null
+          id: string
+          merchant_id: string | null
+          monthly_fee: number | null
+          place_id: string | null
+          start_date: string | null
+          status: Database["public"]["Enums"]["subscription_status"] | null
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          end_date?: string | null
+          id?: string
+          merchant_id?: string | null
+          monthly_fee?: number | null
+          place_id?: string | null
+          start_date?: string | null
+          status?: Database["public"]["Enums"]["subscription_status"] | null
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          end_date?: string | null
+          id?: string
+          merchant_id?: string | null
+          monthly_fee?: number | null
+          place_id?: string | null
+          start_date?: string | null
+          status?: Database["public"]["Enums"]["subscription_status"] | null
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "merchant_subscriptions_place_id_fkey"
+            columns: ["place_id"]
+            isOneToOne: false
+            referencedRelation: "places"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      places: {
+        Row: {
+          address: string | null
+          created_at: string | null
+          crowd_level: Database["public"]["Enums"]["crowd_level"] | null
+          description: string | null
+          female_percentage: number | null
+          id: string
+          images: string[] | null
+          is_active: boolean | null
+          latitude: number
+          longitude: number
+          male_percentage: number | null
+          merchant_id: string | null
+          name: string
+          type: Database["public"]["Enums"]["place_type"]
+          updated_at: string | null
+          working_hours: Json | null
+        }
+        Insert: {
+          address?: string | null
+          created_at?: string | null
+          crowd_level?: Database["public"]["Enums"]["crowd_level"] | null
+          description?: string | null
+          female_percentage?: number | null
+          id?: string
+          images?: string[] | null
+          is_active?: boolean | null
+          latitude: number
+          longitude: number
+          male_percentage?: number | null
+          merchant_id?: string | null
+          name: string
+          type: Database["public"]["Enums"]["place_type"]
+          updated_at?: string | null
+          working_hours?: Json | null
+        }
+        Update: {
+          address?: string | null
+          created_at?: string | null
+          crowd_level?: Database["public"]["Enums"]["crowd_level"] | null
+          description?: string | null
+          female_percentage?: number | null
+          id?: string
+          images?: string[] | null
+          is_active?: boolean | null
+          latitude?: number
+          longitude?: number
+          male_percentage?: number | null
+          merchant_id?: string | null
+          name?: string
+          type?: Database["public"]["Enums"]["place_type"]
+          updated_at?: string | null
+          working_hours?: Json | null
+        }
+        Relationships: []
+      }
+      profiles: {
+        Row: {
+          age: number | null
+          avatar_preset: string | null
+          created_at: string | null
+          gender: string | null
+          id: string
+          interests: string[] | null
+          location_sharing_enabled: boolean | null
+          nickname: string
+          notifications_enabled: boolean | null
+          updated_at: string | null
+        }
+        Insert: {
+          age?: number | null
+          avatar_preset?: string | null
+          created_at?: string | null
+          gender?: string | null
+          id: string
+          interests?: string[] | null
+          location_sharing_enabled?: boolean | null
+          nickname: string
+          notifications_enabled?: boolean | null
+          updated_at?: string | null
+        }
+        Update: {
+          age?: number | null
+          avatar_preset?: string | null
+          created_at?: string | null
+          gender?: string | null
+          id?: string
+          interests?: string[] | null
+          location_sharing_enabled?: boolean | null
+          nickname?: string
+          notifications_enabled?: boolean | null
+          updated_at?: string | null
+        }
+        Relationships: []
+      }
+      reported_messages: {
+        Row: {
+          created_at: string | null
+          id: string
+          message_id: string | null
+          reason: string | null
+          reported_by: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          status: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          id?: string
+          message_id?: string | null
+          reason?: string | null
+          reported_by?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          id?: string
+          message_id?: string | null
+          reason?: string | null
+          reported_by?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          status?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "reported_messages_message_id_fkey"
+            columns: ["message_id"]
+            isOneToOne: false
+            referencedRelation: "chat_messages"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      user_locations: {
+        Row: {
+          accuracy: number | null
+          id: string
+          latitude: number
+          longitude: number
+          updated_at: string | null
+          user_id: string | null
+        }
+        Insert: {
+          accuracy?: number | null
+          id?: string
+          latitude: number
+          longitude: number
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Update: {
+          accuracy?: number | null
+          id?: string
+          latitude?: number
+          longitude?: number
+          updated_at?: string | null
+          user_id?: string | null
+        }
+        Relationships: []
+      }
+      user_roles: {
+        Row: {
+          assigned_at: string | null
+          assigned_by: string | null
+          id: string
+          role: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Insert: {
+          assigned_at?: string | null
+          assigned_by?: string | null
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id: string
+        }
+        Update: {
+          assigned_at?: string | null
+          assigned_by?: string | null
+          id?: string
+          role?: Database["public"]["Enums"]["app_role"]
+          user_id?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
-      [_ in never]: never
+      calculate_distance: {
+        Args: { lat1: number; lon1: number; lat2: number; lon2: number }
+        Returns: number
+      }
+      get_user_role: {
+        Args: { _user_id: string }
+        Returns: Database["public"]["Enums"]["app_role"]
+      }
+      has_role: {
+        Args: {
+          _user_id: string
+          _role: Database["public"]["Enums"]["app_role"]
+        }
+        Returns: boolean
+      }
     }
     Enums: {
-      [_ in never]: never
+      app_role: "user" | "merchant" | "admin"
+      crowd_level: "low" | "medium" | "high"
+      message_type: "user" | "merchant" | "system"
+      place_type:
+        | "cafe"
+        | "restaurant"
+        | "mall"
+        | "beach"
+        | "park"
+        | "event_venue"
+      subscription_status: "active" | "inactive" | "suspended"
     }
     CompositeTypes: {
       [_ in never]: never
@@ -133,6 +511,19 @@ export type CompositeTypes<
 
 export const Constants = {
   public: {
-    Enums: {},
+    Enums: {
+      app_role: ["user", "merchant", "admin"],
+      crowd_level: ["low", "medium", "high"],
+      message_type: ["user", "merchant", "system"],
+      place_type: [
+        "cafe",
+        "restaurant",
+        "mall",
+        "beach",
+        "park",
+        "event_venue",
+      ],
+      subscription_status: ["active", "inactive", "suspended"],
+    },
   },
 } as const
