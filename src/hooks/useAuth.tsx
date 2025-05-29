@@ -23,72 +23,58 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    let isMounted = true;
+    let mounted = true;
 
-    const initializeAuth = async () => {
+    const initAuth = async () => {
       try {
         console.log('Initializing auth...');
         
-        // Get initial session
-        const { data: { session: initialSession }, error } = await supabase.auth.getSession();
+        // Get current session
+        const { data: { session: currentSession } } = await supabase.auth.getSession();
         
-        if (error) {
-          console.error('Error getting session:', error);
-        }
-
-        if (isMounted) {
-          setSession(initialSession);
-          setUser(initialSession?.user || null);
+        if (mounted) {
+          setSession(currentSession);
+          setUser(currentSession?.user || null);
           
-          if (initialSession?.user) {
-            // Use setTimeout to defer the role fetching to avoid blocking
-            setTimeout(() => {
-              if (isMounted) {
-                fetchUserRole(initialSession.user.id);
-              }
-            }, 0);
+          // Fetch user role if logged in
+          if (currentSession?.user) {
+            fetchUserRole(currentSession.user.id);
           } else {
-            setUserRole(null);
+            setUserRole('user'); // Default role for non-authenticated users
           }
           
-          // Set loading to false regardless of role fetching
           setLoading(false);
         }
       } catch (error) {
         console.error('Auth initialization error:', error);
-        if (isMounted) {
+        if (mounted) {
           setLoading(false);
+          setUserRole('user');
         }
       }
     };
 
-    initializeAuth();
+    // Initialize auth
+    initAuth();
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      console.log('Auth state changed:', event, session?.user?.id);
+      console.log('Auth state changed:', event);
       
-      if (isMounted) {
+      if (mounted) {
         setSession(session);
         setUser(session?.user || null);
         
         if (session?.user) {
-          // Use setTimeout to defer the role fetching
-          setTimeout(() => {
-            if (isMounted) {
-              fetchUserRole(session.user.id);
-            }
-          }, 0);
+          fetchUserRole(session.user.id);
         } else {
-          setUserRole(null);
+          setUserRole('user');
         }
-        
-        // Don't set loading here as it's already false from initialization
       }
     });
 
     return () => {
-      isMounted = false;
+      mounted = false;
       subscription.unsubscribe();
     };
   }, []);
@@ -97,34 +83,22 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     try {
       console.log('Fetching user role for:', userId);
       
-      // Fetch all roles for the user and prioritize the highest one
       const { data, error } = await supabase
         .from('user_roles')
         .select('role')
-        .eq('user_id', userId);
+        .eq('user_id', userId)
+        .order('role', { ascending: false }) // admin > merchant > user
+        .limit(1);
       
       if (error) {
         console.error('Error fetching user role:', error);
-        setUserRole('user'); // Default to user role
-        return;
-      }
-      
-      console.log('User roles found:', data);
-      
-      if (!data || data.length === 0) {
-        console.log('No roles found, defaulting to user');
         setUserRole('user');
         return;
       }
       
-      // Prioritize roles: admin > merchant > user
-      const rolePriority = { 'admin': 3, 'merchant': 2, 'user': 1 };
-      const highestRole = data.reduce((highest, current) => {
-        return (rolePriority[current.role as keyof typeof rolePriority] || 0) > (rolePriority[highest.role as keyof typeof rolePriority] || 0) ? current : highest;
-      });
-      
-      console.log('Setting user role to:', highestRole.role);
-      setUserRole(highestRole.role);
+      const role = data?.[0]?.role || 'user';
+      console.log('User role set to:', role);
+      setUserRole(role);
     } catch (error) {
       console.error('Error fetching user role:', error);
       setUserRole('user');

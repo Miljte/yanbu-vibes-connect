@@ -4,19 +4,25 @@ import { useAuth } from './useAuth';
 export const useRoles = () => {
   const { userRole } = useAuth();
 
-  const isUser = userRole === 'user';
+  const isUser = userRole === 'user' || !userRole;
   const isMerchant = userRole === 'merchant' || userRole === 'admin';
   const isAdmin = userRole === 'admin';
 
   const hasPermission = (permission: string): boolean => {
+    // Allow basic permissions for all users
+    const basicPermissions = [
+      'view_map',
+      'access_chat',
+      'rsvp_events',
+      'edit_profile',
+      'report_messages'
+    ];
+
+    if (basicPermissions.includes(permission)) {
+      return true;
+    }
+
     const permissions = {
-      // User permissions
-      'view_map': true,
-      'access_chat': true,
-      'rsvp_events': true,
-      'edit_profile': true,
-      'report_messages': true,
-      
       // Merchant permissions
       'merchant_dashboard': isMerchant,
       'send_promotions': isMerchant,
@@ -38,7 +44,7 @@ export const useRoles = () => {
   };
 
   return {
-    userRole,
+    userRole: userRole || 'user',
     isUser,
     isMerchant,
     isAdmin,
