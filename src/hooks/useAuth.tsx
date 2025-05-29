@@ -1,3 +1,4 @@
+
 import { useState, useEffect, createContext, useContext } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
@@ -33,10 +34,6 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         
         if (error) {
           console.error('Error getting session:', error);
-          if (isMounted) {
-            setLoading(false);
-          }
-          return;
         }
 
         if (isMounted) {
@@ -44,11 +41,17 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
           setUser(initialSession?.user || null);
           
           if (initialSession?.user) {
-            await fetchUserRole(initialSession.user.id);
+            // Use setTimeout to defer the role fetching to avoid blocking
+            setTimeout(() => {
+              if (isMounted) {
+                fetchUserRole(initialSession.user.id);
+              }
+            }, 0);
           } else {
             setUserRole(null);
           }
           
+          // Set loading to false regardless of role fetching
           setLoading(false);
         }
       } catch (error) {
@@ -62,7 +65,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
     initializeAuth();
 
     // Listen for auth changes
-    const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+    const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
       console.log('Auth state changed:', event, session?.user?.id);
       
       if (isMounted) {
@@ -70,12 +73,17 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         setUser(session?.user || null);
         
         if (session?.user) {
-          await fetchUserRole(session.user.id);
+          // Use setTimeout to defer the role fetching
+          setTimeout(() => {
+            if (isMounted) {
+              fetchUserRole(session.user.id);
+            }
+          }, 0);
         } else {
           setUserRole(null);
         }
         
-        setLoading(false);
+        // Don't set loading here as it's already false from initialization
       }
     });
 
