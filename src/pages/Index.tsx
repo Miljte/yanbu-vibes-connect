@@ -1,11 +1,12 @@
 
 import React, { useState } from 'react';
 import ModernMap from "@/components/ModernMap";
-import EnhancedProximityChat from "@/components/EnhancedProximityChat";
+import RealTimeProximityChat from "@/components/RealTimeProximityChat";
 import ModernEvents from "@/components/ModernEvents";
 import ModernProfile from "@/components/ModernProfile";
-import EnhancedAdminDashboard from "@/components/EnhancedAdminDashboard";
+import SuperAdminDashboard from "@/components/SuperAdminDashboard";
 import FullMerchantDashboard from "@/components/FullMerchantDashboard";
+import MerchantEngagementPanel from "@/components/MerchantEngagementPanel";
 import ModernBottomNavigation from "@/components/ModernBottomNavigation";
 import { useAuth } from "@/hooks/useAuth";
 import { useRoles } from "@/hooks/useRoles";
@@ -13,7 +14,7 @@ import { useLocalization } from "@/contexts/LocalizationContext";
 import { useTheme } from "@/contexts/ThemeContext";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
-import { Settings, Moon, Sun, Languages, Shield, Store } from "lucide-react";
+import { Settings, Moon, Sun, Languages, Shield, Store, Megaphone } from "lucide-react";
 
 const Index = () => {
   const [activeSection, setActiveSection] = useState('map');
@@ -40,7 +41,7 @@ const Index = () => {
       case 'events':
         return <ModernEvents />;
       case 'chat':
-        return <EnhancedProximityChat />;
+        return <RealTimeProximityChat />;
       case 'profile':
         return user ? <ModernProfile /> : (
           <div className={`min-h-screen bg-background p-4 flex items-center justify-center pb-20 ${isRTL ? 'rtl' : 'ltr'}`}>
@@ -57,11 +58,11 @@ const Index = () => {
               </div>
               
               <div className="space-y-6">
-                {/* Admin Dashboard - Only for admins */}
+                {/* Super Admin Dashboard - Only for admins */}
                 {hasPermission('admin_dashboard') && (
                   <Card 
                     className="cursor-pointer hover:shadow-lg transition-all border-0 shadow-md bg-card"
-                    onClick={() => setActiveSection('admin')}
+                    onClick={() => setActiveSection('super-admin')}
                   >
                     <CardContent className="p-6">
                       <div className="flex items-center space-x-4">
@@ -69,8 +70,8 @@ const Index = () => {
                           <Shield className="w-6 h-6 text-red-600 dark:text-red-400" />
                         </div>
                         <div>
-                          <h3 className="text-xl font-semibold text-foreground mb-2">Admin Control Center</h3>
-                          <p className="text-muted-foreground">Full platform management, user moderation, and system oversight</p>
+                          <h3 className="text-xl font-semibold text-foreground mb-2">🛡️ Super Admin Control</h3>
+                          <p className="text-muted-foreground">Real-time surveillance, user management, and system control</p>
                         </div>
                       </div>
                     </CardContent>
@@ -89,8 +90,28 @@ const Index = () => {
                           <Store className="w-6 h-6 text-blue-600 dark:text-blue-400" />
                         </div>
                         <div>
-                          <h3 className="text-xl font-semibold text-foreground mb-2">Merchant Dashboard</h3>
-                          <p className="text-muted-foreground">Manage your stores, post events, and track analytics</p>
+                          <h3 className="text-xl font-semibold text-foreground mb-2">🏪 Merchant Dashboard</h3>
+                          <p className="text-muted-foreground">Manage stores, events, and view analytics</p>
+                        </div>
+                      </div>
+                    </CardContent>
+                  </Card>
+                )}
+
+                {/* Merchant Engagement Panel - Only for merchants */}
+                {hasPermission('merchant_dashboard') && (
+                  <Card 
+                    className="cursor-pointer hover:shadow-lg transition-all border-0 shadow-md bg-card"
+                    onClick={() => setActiveSection('merchant-engagement')}
+                  >
+                    <CardContent className="p-6">
+                      <div className="flex items-center space-x-4">
+                        <div className="bg-orange-100 dark:bg-orange-900/30 p-3 rounded-lg">
+                          <Megaphone className="w-6 h-6 text-orange-600 dark:text-orange-400" />
+                        </div>
+                        <div>
+                          <h3 className="text-xl font-semibold text-foreground mb-2">🎯 Customer Engagement</h3>
+                          <p className="text-muted-foreground">Send promotions and connect with nearby customers</p>
                         </div>
                       </div>
                     </CardContent>
@@ -104,13 +125,13 @@ const Index = () => {
                       <div className="bg-green-100 dark:bg-green-900/30 p-3 rounded-lg">
                         <Settings className="w-6 h-6 text-green-600 dark:text-green-400" />
                       </div>
-                      <h3 className="text-xl font-semibold text-foreground">Settings</h3>
+                      <h3 className="text-xl font-semibold text-foreground">⚙️ Settings</h3>
                     </div>
                     
                     <div className="space-y-4">
                       {/* Theme Toggle */}
                       <div className="flex items-center justify-between">
-                        <span className="text-foreground">Dark Mode</span>
+                        <span className="text-foreground">🌓 Dark Mode</span>
                         <Button
                           variant="outline"
                           size="sm"
@@ -124,7 +145,7 @@ const Index = () => {
 
                       {/* Language Toggle */}
                       <div className="flex items-center justify-between">
-                        <span className="text-foreground">Language</span>
+                        <span className="text-foreground">🌍 Language</span>
                         <Button
                           variant="outline"
                           size="sm"
@@ -136,23 +157,32 @@ const Index = () => {
                         </Button>
                       </div>
 
-                      {/* Feature Toggles */}
-                      <div className="flex items-center justify-between">
-                        <span className="text-foreground">Live GPS Tracking</span>
-                        <div className="w-12 h-6 bg-primary rounded-full relative">
-                          <div className="w-5 h-5 bg-background rounded-full absolute top-0.5 right-0.5 shadow-sm"></div>
+                      {/* Feature Status */}
+                      <div className="space-y-3 pt-4 border-t border-border">
+                        <h4 className="font-semibold text-foreground">🚀 Active Features</h4>
+                        <div className="flex items-center justify-between">
+                          <span className="text-foreground">📍 Real-time GPS Tracking</span>
+                          <div className="w-12 h-6 bg-green-600 rounded-full relative">
+                            <div className="w-5 h-5 bg-background rounded-full absolute top-0.5 right-0.5 shadow-sm"></div>
+                          </div>
                         </div>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-foreground">Chat Notifications</span>
-                        <div className="w-12 h-6 bg-primary rounded-full relative">
-                          <div className="w-5 h-5 bg-background rounded-full absolute top-0.5 right-0.5 shadow-sm"></div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-foreground">💬 Auto Chat Unlock (500m)</span>
+                          <div className="w-12 h-6 bg-green-600 rounded-full relative">
+                            <div className="w-5 h-5 bg-background rounded-full absolute top-0.5 right-0.5 shadow-sm"></div>
+                          </div>
                         </div>
-                      </div>
-                      <div className="flex items-center justify-between">
-                        <span className="text-foreground">Proximity Alerts</span>
-                        <div className="w-12 h-6 bg-primary rounded-full relative">
-                          <div className="w-5 h-5 bg-background rounded-full absolute top-0.5 right-0.5 shadow-sm"></div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-foreground">🔄 Real-time Sync</span>
+                          <div className="w-12 h-6 bg-green-600 rounded-full relative">
+                            <div className="w-5 h-5 bg-background rounded-full absolute top-0.5 right-0.5 shadow-sm"></div>
+                          </div>
+                        </div>
+                        <div className="flex items-center justify-between">
+                          <span className="text-foreground">🎯 Yanbu Area Lock</span>
+                          <div className="w-12 h-6 bg-green-600 rounded-full relative">
+                            <div className="w-5 h-5 bg-background rounded-full absolute top-0.5 right-0.5 shadow-sm"></div>
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -168,8 +198,14 @@ const Index = () => {
             <div className="text-foreground">Access denied</div>
           </div>
         );
-      case 'admin':
-        return hasPermission('admin_dashboard') ? <EnhancedAdminDashboard /> : (
+      case 'merchant-engagement':
+        return hasPermission('merchant_dashboard') ? <MerchantEngagementPanel /> : (
+          <div className={`min-h-screen bg-background p-4 flex items-center justify-center pb-20 ${isRTL ? 'rtl' : 'ltr'}`}>
+            <div className="text-foreground">Access denied</div>
+          </div>
+        );
+      case 'super-admin':
+        return hasPermission('admin_dashboard') ? <SuperAdminDashboard /> : (
           <div className={`min-h-screen bg-background p-4 flex items-center justify-center pb-20 ${isRTL ? 'rtl' : 'ltr'}`}>
             <div className="text-foreground">Access denied</div>
           </div>
