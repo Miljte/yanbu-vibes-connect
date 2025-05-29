@@ -256,18 +256,18 @@ export const useRealtimeLocation = () => {
       );
 
       // Update every 45 seconds to maintain online status
-      updateInterval = setInterval(() => {
+      updateInterval = setInterval(async () => {
         if (location) {
-          const updatePromise = supabase
-            .from('user_locations')
-            .update({ updated_at: new Date().toISOString() })
-            .eq('user_id', user.id);
-          
-          updatePromise.then(() => {
+          try {
+            await supabase
+              .from('user_locations')
+              .update({ updated_at: new Date().toISOString() })
+              .eq('user_id', user.id);
+            
             console.log('🔄 Online status refreshed');
-          }).catch(err => {
+          } catch (err) {
             console.error('❌ Online status update failed:', err);
-          });
+          }
         }
       }, 45000);
     };
