@@ -9,6 +9,36 @@ export type Json =
 export type Database = {
   public: {
     Tables: {
+      admin_logs: {
+        Row: {
+          action_type: string
+          admin_id: string
+          created_at: string | null
+          details: Json | null
+          id: string
+          target_entity_id: string | null
+          target_user_id: string | null
+        }
+        Insert: {
+          action_type: string
+          admin_id: string
+          created_at?: string | null
+          details?: Json | null
+          id?: string
+          target_entity_id?: string | null
+          target_user_id?: string | null
+        }
+        Update: {
+          action_type?: string
+          admin_id?: string
+          created_at?: string | null
+          details?: Json | null
+          id?: string
+          target_entity_id?: string | null
+          target_user_id?: string | null
+        }
+        Relationships: []
+      }
       chat_messages: {
         Row: {
           created_at: string | null
@@ -86,6 +116,7 @@ export type Database = {
           description: string | null
           end_time: string | null
           id: string
+          image_url: string | null
           is_active: boolean | null
           max_attendees: number | null
           organizer_id: string
@@ -100,6 +131,7 @@ export type Database = {
           description?: string | null
           end_time?: string | null
           id?: string
+          image_url?: string | null
           is_active?: boolean | null
           max_attendees?: number | null
           organizer_id: string
@@ -114,6 +146,7 @@ export type Database = {
           description?: string | null
           end_time?: string | null
           id?: string
+          image_url?: string | null
           is_active?: boolean | null
           max_attendees?: number | null
           organizer_id?: string
@@ -176,6 +209,53 @@ export type Database = {
           },
         ]
       }
+      offers: {
+        Row: {
+          created_at: string | null
+          description: string
+          expires_at: string | null
+          id: string
+          image_url: string | null
+          is_active: boolean | null
+          merchant_id: string
+          place_id: string | null
+          title: string
+          updated_at: string | null
+        }
+        Insert: {
+          created_at?: string | null
+          description: string
+          expires_at?: string | null
+          id?: string
+          image_url?: string | null
+          is_active?: boolean | null
+          merchant_id: string
+          place_id?: string | null
+          title: string
+          updated_at?: string | null
+        }
+        Update: {
+          created_at?: string | null
+          description?: string
+          expires_at?: string | null
+          id?: string
+          image_url?: string | null
+          is_active?: boolean | null
+          merchant_id?: string
+          place_id?: string | null
+          title?: string
+          updated_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "offers_place_id_fkey"
+            columns: ["place_id"]
+            isOneToOne: false
+            referencedRelation: "places"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       places: {
         Row: {
           address: string | null
@@ -184,6 +264,7 @@ export type Database = {
           description: string | null
           female_percentage: number | null
           id: string
+          image_urls: string[] | null
           images: string[] | null
           is_active: boolean | null
           latitude: number
@@ -202,6 +283,7 @@ export type Database = {
           description?: string | null
           female_percentage?: number | null
           id?: string
+          image_urls?: string[] | null
           images?: string[] | null
           is_active?: boolean | null
           latitude: number
@@ -220,6 +302,7 @@ export type Database = {
           description?: string | null
           female_percentage?: number | null
           id?: string
+          image_urls?: string[] | null
           images?: string[] | null
           is_active?: boolean | null
           latitude?: number
@@ -313,6 +396,36 @@ export type Database = {
           },
         ]
       }
+      user_bans: {
+        Row: {
+          banned_at: string | null
+          banned_by: string
+          expires_at: string | null
+          id: string
+          is_active: boolean | null
+          reason: string | null
+          user_id: string
+        }
+        Insert: {
+          banned_at?: string | null
+          banned_by: string
+          expires_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          reason?: string | null
+          user_id: string
+        }
+        Update: {
+          banned_at?: string | null
+          banned_by?: string
+          expires_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          reason?: string | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       user_locations: {
         Row: {
           accuracy: number | null
@@ -337,6 +450,36 @@ export type Database = {
           longitude?: number
           updated_at?: string | null
           user_id?: string | null
+        }
+        Relationships: []
+      }
+      user_mutes: {
+        Row: {
+          expires_at: string | null
+          id: string
+          is_active: boolean | null
+          muted_at: string | null
+          muted_by: string
+          reason: string | null
+          user_id: string
+        }
+        Insert: {
+          expires_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          muted_at?: string | null
+          muted_by: string
+          reason?: string | null
+          user_id: string
+        }
+        Update: {
+          expires_at?: string | null
+          id?: string
+          is_active?: boolean | null
+          muted_at?: string | null
+          muted_by?: string
+          reason?: string | null
+          user_id?: string
         }
         Relationships: []
       }
