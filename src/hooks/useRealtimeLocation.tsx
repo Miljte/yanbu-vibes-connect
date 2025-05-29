@@ -104,6 +104,29 @@ export const useRealtimeLocation = () => {
     }
   };
 
+  // Update user online status
+  const updateOnlineStatus = async (isOnline: boolean) => {
+    if (!user) return;
+    
+    try {
+      if (isOnline) {
+        // User is online - update location timestamp
+        console.log('🟢 Marking user as ONLINE');
+      } else {
+        // User going offline - set timestamp to 11 minutes ago (marks as offline)
+        console.log('🔴 Marking user as OFFLINE');
+        await supabase
+          .from('user_locations')
+          .update({ 
+            updated_at: new Date(Date.now() - 11 * 60 * 1000).toISOString() 
+          })
+          .eq('user_id', user.id);
+      }
+    } catch (error) {
+      console.error('❌ Error updating online status:', error);
+    }
+  };
+
   useEffect(() => {
     if (!user) {
       console.log('👤 No user - stopping location tracking');
@@ -160,7 +183,7 @@ export const useRealtimeLocation = () => {
         await fetchNearbyPlaces(newLocation);
 
         try {
-          // Update/insert user location in database using UPSERT
+          // Update/insert user location in database using UPSERT (marks as online)
           const { error: locationError } = await supabase
             .from('user_locations')
             .upsert({
@@ -168,7 +191,7 @@ export const useRealtimeLocation = () => {
               latitude: newLocation.latitude,
               longitude: newLocation.longitude,
               accuracy: newLocation.accuracy,
-              updated_at: new Date().toISOString()
+              updated_at: new Date().toISOString() // Current timestamp = online
             }, {
               onConflict: 'user_id'
             });
@@ -243,10 +266,10 @@ export const useRealtimeLocation = () => {
         clearInterval(updateInterval);
         updateInterval = null;
       }
-    };
 
-    // Start tracking when component mounts
-    startTracking();
+      // Mark user as offline when stopping tracking
+      updateOnlineStatus(false);
+    };
 
     // Handle app visibility changes
     const handleVisibilityChange = () => {
@@ -262,14 +285,11 @@ export const useRealtimeLocation = () => {
     // Handle page unload (user closes app)
     const handleBeforeUnload = async () => {
       console.log('👋 User leaving app - marking offline');
-      if (user) {
-        // Mark user as offline (11 minutes ago = offline)
-        await supabase
-          .from('user_locations')
-          .update({ updated_at: new Date(Date.now() - 11 * 60 * 1000).toISOString() })
-          .eq('user_id', user.id);
-      }
+      updateOnlineStatus(false);
     };
+
+    // Start tracking when component mounts
+    startTracking();
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('beforeunload', handleBeforeUnload);
@@ -279,14 +299,6 @@ export const useRealtimeLocation = () => {
       stopTracking();
       document.removeEventListener('visibilitychange', handleVisibilityChange);
       window.removeEventListener('beforeunload', handleBeforeUnload);
-      
-      // Mark user as offline when component unmounts
-      if (user) {
-        supabase
-          .from('user_locations')
-          .update({ updated_at: new Date(Date.now() - 11 * 60 * 1000).toISOString() })
-          .eq('user_id', user.id);
-      }
     };
   }, [user]);
 

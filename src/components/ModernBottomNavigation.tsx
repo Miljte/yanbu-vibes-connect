@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { MapPin, Calendar, User, Settings, Crown, Store } from 'lucide-react';
+import { MapPin, Calendar, Settings, Crown, Store } from 'lucide-react';
 
 interface NavigationItem {
   id: string;
@@ -51,12 +51,6 @@ const ModernBottomNavigation: React.FC<ModernBottomNavigationProps> = ({
       label: 'Business',
       icon: <Store className="w-5 h-5" />,
       show: isMerchant
-    },
-    {
-      id: 'profile',
-      label: 'Profile',
-      icon: <User className="w-5 h-5" />,
-      show: true
     },
     {
       id: 'settings',

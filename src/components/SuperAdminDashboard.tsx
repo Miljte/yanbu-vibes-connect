@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { Shield, Users, Eye, Ban, Crown, Trash2, MessageSquare, MapPin, Settings, UserX, Volume2, VolumeX, UserCheck } from 'lucide-react';
+import { Shield, Users, Eye, Ban, Crown, Trash2, MessageSquare, MapPin, Settings, UserX, Volume2, VolumeX, UserCheck, RefreshCw } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
@@ -8,6 +8,7 @@ import { Input } from '@/components/ui/input';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -44,25 +45,37 @@ const SuperAdminDashboard = () => {
   const [roleFilter, setRoleFilter] = useState('all');
   const [loading, setLoading] = useState(true);
   const [syncing, setSyncing] = useState(false);
+  const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
   const { user } = useAuth();
 
   useEffect(() => {
     initializeDashboard();
     setupRealtimeSubscriptions();
+    
+    // Auto-refresh every 30 seconds for real-time updates
+    const refreshInterval = setInterval(() => {
+      fetchAllUsers();
+      setLastRefresh(new Date());
+    }, 30000);
+
+    return () => clearInterval(refreshInterval);
   }, []);
 
   const initializeDashboard = async () => {
     setLoading(true);
-    await syncUsersIfNeeded();
-    await fetchAllUsers();
-    await fetchAdminLogs();
+    console.log('🚀 Initializing Super Admin Dashboard...');
+    await Promise.all([
+      syncUsersIfNeeded(),
+      fetchAllUsers(),
+      fetchAdminLogs()
+    ]);
     setLoading(false);
   };
 
   const syncUsersIfNeeded = async () => {
     try {
       setSyncing(true);
-      console.log('🔄 Syncing users from auth to profiles...');
+      console.log('🔄 Force syncing all auth users to profiles...');
       
       const { data, error } = await supabase.functions.invoke('sync-users');
       
@@ -72,7 +85,7 @@ const SuperAdminDashboard = () => {
         return;
       }
 
-      console.log('✅ Sync completed:', data);
+      console.log('✅ Sync result:', data);
       if (data?.createdProfiles > 0) {
         toast.success(`Synced ${data.createdProfiles} new users`);
       }
@@ -86,8 +99,18 @@ const SuperAdminDashboard = () => {
 
   const fetchAllUsers = async () => {
     try {
-      console.log('👥 Fetching all users...');
+      console.log('👥 Fetching ALL users from database...');
       
+      // Get ALL auth users using admin API
+      const { data: { users: authUsers }, error: authError } = await supabase.auth.admin.listUsers();
+      
+      if (authError) {
+        console.error('❌ Error fetching auth users:', authError);
+        throw authError;
+      }
+
+      console.log(`✅ Found ${authUsers?.length || 0} auth users`);
+
       // Get all profiles
       const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
@@ -101,10 +124,17 @@ const SuperAdminDashboard = () => {
         .from('user_roles')
         .select('user_id, role');
 
-      // Get user locations for online status
+      // Get user locations for online status (updated within last 10 minutes = online)
+      const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
       const { data: locationsData } = await supabase
         .from('user_locations')
-        .select('user_id, latitude, longitude, updated_at');
+        .select('user_id, latitude, longitude, updated_at')
+        .gte('updated_at', tenMinutesAgo);
+
+      // Get ALL user locations for last seen
+      const { data: allLocationsData } = await supabase
+        .from('user_locations')
+        .select('user_id, updated_at');
 
       // Get bans and mutes
       const { data: bansData } = await supabase
@@ -117,35 +147,44 @@ const SuperAdminDashboard = () => {
         .select('user_id')
         .eq('is_active', true);
 
-      // Combine all data
-      const usersWithDetails = profilesData?.map(profile => {
-        const userRole = rolesData?.find(role => role.user_id === profile.id);
-        const location = locationsData?.find(loc => loc.user_id === profile.id);
-        const isBanned = bansData?.some(ban => ban.user_id === profile.id);
-        const isMuted = mutesData?.some(mute => mute.user_id === profile.id);
+      // Combine ALL data - prioritize auth users to ensure everyone is shown
+      const usersWithDetails = authUsers?.map(authUser => {
+        const profile = profilesData?.find(p => p.id === authUser.id);
+        const userRole = rolesData?.find(role => role.user_id === authUser.id);
+        const recentLocation = locationsData?.find(loc => loc.user_id === authUser.id);
+        const lastLocation = allLocationsData?.find(loc => loc.user_id === authUser.id);
+        const isBanned = bansData?.some(ban => ban.user_id === authUser.id);
+        const isMuted = mutesData?.some(mute => mute.user_id === authUser.id);
         
         // Check if user is online (activity within last 10 minutes)
-        const lastSeen = location?.updated_at || profile.created_at;
-        const isOnline = lastSeen ? new Date(lastSeen) > new Date(Date.now() - 10 * 60 * 1000) : false;
+        const isOnline = !!recentLocation;
+        const lastSeen = lastLocation?.updated_at || authUser.created_at;
 
         return {
-          id: profile.id,
-          nickname: profile.nickname,
-          email: '', // Will be filled by auth data if available
-          created_at: profile.created_at,
+          id: authUser.id,
+          nickname: profile?.nickname || authUser.email?.split('@')[0] || 'Unknown User',
+          email: authUser.email || '',
+          created_at: authUser.created_at,
           role: userRole?.role || 'user',
           is_banned: isBanned || false,
           is_muted: isMuted || false,
           last_seen: lastSeen,
           is_online: isOnline,
-          location: location ? { latitude: location.latitude, longitude: location.longitude } : undefined,
-          age: profile.age,
-          gender: profile.gender
+          location: recentLocation ? { 
+            latitude: recentLocation.latitude, 
+            longitude: recentLocation.longitude 
+          } : undefined,
+          age: profile?.age,
+          gender: profile?.gender
         };
       }) || [];
 
-      console.log(`✅ Found ${usersWithDetails.length} users total`);
+      console.log(`✅ Processed ${usersWithDetails.length} total users`);
+      console.log(`🟢 Online users: ${usersWithDetails.filter(u => u.is_online).length}`);
+      console.log(`🔴 Offline users: ${usersWithDetails.filter(u => !u.is_online).length}`);
+      
       setUsers(usersWithDetails);
+      
     } catch (error) {
       console.error('❌ Error fetching users:', error);
       toast.error('Failed to load users');
@@ -180,31 +219,49 @@ const SuperAdminDashboard = () => {
   };
 
   const setupRealtimeSubscriptions = () => {
+    // Real-time subscription for user locations (online status)
+    const locationsChannel = supabase
+      .channel('admin-locations')
+      .on('postgres_changes', { 
+        event: '*', 
+        schema: 'public', 
+        table: 'user_locations' 
+      }, () => {
+        console.log('📍 Location update detected, refreshing users...');
+        fetchAllUsers();
+      })
+      .subscribe();
+
+    // Real-time subscription for profiles
     const profilesChannel = supabase
       .channel('admin-profiles')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => {
+      .on('postgres_changes', { 
+        event: '*', 
+        schema: 'public', 
+        table: 'profiles' 
+      }, () => {
+        console.log('👤 Profile update detected, refreshing users...');
         fetchAllUsers();
       })
       .subscribe();
 
+    // Real-time subscription for roles
     const rolesChannel = supabase
       .channel('admin-roles')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'user_roles' }, () => {
+      .on('postgres_changes', { 
+        event: '*', 
+        schema: 'public', 
+        table: 'user_roles' 
+      }, () => {
+        console.log('👑 Role update detected, refreshing users...');
         fetchAllUsers();
-      })
-      .subscribe();
-
-    const logsChannel = supabase
-      .channel('admin-logs')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'admin_logs' }, () => {
-        fetchAdminLogs();
       })
       .subscribe();
 
     return () => {
+      supabase.removeChannel(locationsChannel);
       supabase.removeChannel(profilesChannel);
       supabase.removeChannel(rolesChannel);
-      supabase.removeChannel(logsChannel);
     };
   };
 
@@ -235,7 +292,11 @@ const SuperAdminDashboard = () => {
 
       if (error) throw error;
 
-      await logAdminAction('role_change', userId, { newRole, previousRole: users.find(u => u.id === userId)?.role });
+      await logAdminAction('role_change', userId, { 
+        newRole, 
+        previousRole: users.find(u => u.id === userId)?.role 
+      });
+      
       toast.success(`User promoted to ${newRole}`);
       fetchAllUsers();
     } catch (error) {
@@ -370,24 +431,45 @@ const SuperAdminDashboard = () => {
       <div className="container mx-auto max-w-7xl">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-foreground mb-2">🛡️ Super Admin Control Center</h1>
-          <p className="text-muted-foreground">Military-level control over all users and system operations</p>
+          <p className="text-muted-foreground">Real-time monitoring and control for POP IN</p>
           
           <div className="flex items-center gap-4 mt-4">
-            <Button onClick={syncUsersIfNeeded} disabled={syncing} variant="outline">
-              {syncing ? '🔄 Syncing...' : '🔄 Force Sync Users'}
+            <Button 
+              onClick={() => {
+                syncUsersIfNeeded();
+                fetchAllUsers();
+              }} 
+              disabled={syncing} 
+              variant="outline"
+            >
+              {syncing ? (
+                <>
+                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+                  Syncing...
+                </>
+              ) : (
+                <>
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Force Refresh
+                </>
+              )}
             </Button>
             <div className="text-sm text-muted-foreground">
-              Total Users: {users.length} • Online: {stats.onlineUsers}
+              📊 Live Data: {stats.totalUsers} total users • {stats.onlineUsers} online now
+            </div>
+            <div className="text-xs text-muted-foreground">
+              🔄 Last refresh: {lastRefresh.toLocaleTimeString()}
             </div>
           </div>
         </div>
 
-        {/* Stats Grid */}
+        {/* Enhanced Stats Grid */}
         <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mb-8">
           <Card className="bg-card border">
             <CardContent className="p-4 text-center">
               <div className="text-2xl font-bold text-primary">{stats.totalUsers}</div>
               <div className="text-sm text-muted-foreground">Total Users</div>
+              <div className="text-xs text-muted-foreground mt-1">All registered</div>
             </CardContent>
           </Card>
           
@@ -395,6 +477,7 @@ const SuperAdminDashboard = () => {
             <CardContent className="p-4 text-center">
               <div className="text-2xl font-bold text-green-500">{stats.onlineUsers}</div>
               <div className="text-sm text-muted-foreground">Online Now</div>
+              <div className="text-xs text-muted-foreground mt-1">Active in 10min</div>
             </CardContent>
           </Card>
           
@@ -402,6 +485,7 @@ const SuperAdminDashboard = () => {
             <CardContent className="p-4 text-center">
               <div className="text-2xl font-bold text-yellow-500">{stats.adminUsers}</div>
               <div className="text-sm text-muted-foreground">Admins</div>
+              <div className="text-xs text-muted-foreground mt-1">With control</div>
             </CardContent>
           </Card>
           
@@ -409,6 +493,7 @@ const SuperAdminDashboard = () => {
             <CardContent className="p-4 text-center">
               <div className="text-2xl font-bold text-purple-500">{stats.merchantUsers}</div>
               <div className="text-sm text-muted-foreground">Merchants</div>
+              <div className="text-xs text-muted-foreground mt-1">Business users</div>
             </CardContent>
           </Card>
 
@@ -416,6 +501,7 @@ const SuperAdminDashboard = () => {
             <CardContent className="p-4 text-center">
               <div className="text-2xl font-bold text-red-500">{stats.bannedUsers}</div>
               <div className="text-sm text-muted-foreground">Banned</div>
+              <div className="text-xs text-muted-foreground mt-1">Suspended</div>
             </CardContent>
           </Card>
 
@@ -423,6 +509,7 @@ const SuperAdminDashboard = () => {
             <CardContent className="p-4 text-center">
               <div className="text-2xl font-bold text-orange-500">{stats.mutedUsers}</div>
               <div className="text-sm text-muted-foreground">Muted</div>
+              <div className="text-xs text-muted-foreground mt-1">No chat</div>
             </CardContent>
           </Card>
         </div>
@@ -431,25 +518,25 @@ const SuperAdminDashboard = () => {
           <TabsList className="bg-muted">
             <TabsTrigger value="users">
               <Users className="w-4 h-4 mr-2" />
-              All Users ({filteredUsers.length})
+              👥 All Users ({filteredUsers.length})
             </TabsTrigger>
             <TabsTrigger value="surveillance">
               <Eye className="w-4 h-4 mr-2" />
-              Live Surveillance
+              🔍 Live Surveillance
             </TabsTrigger>
             <TabsTrigger value="logs">
               <Settings className="w-4 h-4 mr-2" />
-              Admin Logs ({adminLogs.length})
+              📊 Admin Logs ({adminLogs.length})
             </TabsTrigger>
           </TabsList>
 
           <TabsContent value="users">
             <Card className="bg-card border">
               <CardHeader>
-                <CardTitle className="text-foreground">Complete User Management & Control</CardTitle>
+                <CardTitle className="text-foreground">Complete User Management</CardTitle>
                 <div className="flex flex-col sm:flex-row gap-4">
                   <Input
-                    placeholder="Search users by name or email..."
+                    placeholder="Search by name or email..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="max-w-xs"
@@ -468,170 +555,212 @@ const SuperAdminDashboard = () => {
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4 max-h-[600px] overflow-y-auto">
-                  {filteredUsers.map((userData) => (
-                    <div key={userData.id} className="flex items-center justify-between p-4 bg-muted/30 rounded-lg border">
-                      <div className="flex items-center space-x-4">
-                        <div className={`w-3 h-3 rounded-full ${userData.is_online ? 'bg-green-500' : 'bg-gray-400'}`}></div>
-                        <div className="w-10 h-10 bg-primary rounded-full flex items-center justify-center">
-                          <Users className="w-5 h-5 text-primary-foreground" />
-                        </div>
-                        <div>
-                          <div className="text-foreground font-medium flex items-center space-x-2">
-                            <span>{userData.nickname}</span>
-                            {userData.role === 'admin' && <Crown className="w-4 h-4 text-yellow-400" />}
-                            {userData.role === 'merchant' && <Crown className="w-4 h-4 text-purple-400" />}
-                            {userData.is_banned && <Badge variant="destructive" className="text-xs">BANNED</Badge>}
-                            {userData.is_muted && <Badge variant="secondary" className="text-xs">MUTED</Badge>}
+                <Table>
+                  <TableHeader>
+                    <TableRow>
+                      <TableHead>Status</TableHead>
+                      <TableHead>User</TableHead>
+                      <TableHead>Role</TableHead>
+                      <TableHead>Email</TableHead>
+                      <TableHead>Joined</TableHead>
+                      <TableHead>Last Seen</TableHead>
+                      <TableHead>Actions</TableHead>
+                    </TableRow>
+                  </TableHeader>
+                  <TableBody>
+                    {filteredUsers.map((userData) => (
+                      <TableRow key={userData.id}>
+                        <TableCell>
+                          <div className="flex items-center space-x-2">
+                            <div className={`w-3 h-3 rounded-full ${
+                              userData.is_online ? 'bg-green-500 animate-pulse' : 'bg-gray-400'
+                            }`}></div>
+                            <span className={`text-xs font-medium ${
+                              userData.is_online ? 'text-green-600' : 'text-gray-500'
+                            }`}>
+                              {userData.is_online ? 'ONLINE' : 'OFFLINE'}
+                            </span>
                           </div>
-                          <div className="text-muted-foreground text-sm">
-                            ID: {userData.id.substring(0, 8)}... • Role: {userData.role} • 
-                            Joined: {new Date(userData.created_at).toLocaleDateString()}
-                            {userData.age && ` • Age: ${userData.age}`}
-                            {userData.gender && ` • ${userData.gender}`}
-                          </div>
-                          {userData.last_seen && (
-                            <div className="text-muted-foreground text-xs">
-                              Last seen: {new Date(userData.last_seen).toLocaleString()}
-                              {userData.location && ` • Location: ${userData.location.latitude.toFixed(4)}, ${userData.location.longitude.toFixed(4)}`}
+                        </TableCell>
+                        <TableCell>
+                          <div className="flex items-center space-x-3">
+                            <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
+                              <Users className="w-4 h-4 text-primary-foreground" />
                             </div>
-                          )}
-                        </div>
-                      </div>
-                      
-                      <div className="flex items-center space-x-2">
-                        <Dialog>
-                          <DialogTrigger asChild>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => setSelectedUser(userData)}
-                            >
-                              <Settings className="w-3 h-3 mr-1" />
-                              Control
-                            </Button>
-                          </DialogTrigger>
-                          <DialogContent className="bg-card border max-w-md">
-                            <DialogHeader>
-                              <DialogTitle className="text-foreground">Military Control: {userData.nickname}</DialogTitle>
-                            </DialogHeader>
-                            <div className="space-y-4">
-                              {/* Role Management */}
-                              <div className="space-y-2">
-                                <h4 className="font-medium text-foreground">Role Management</h4>
-                                <div className="grid grid-cols-2 gap-2">
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => promoteUser(userData.id, 'user')}
-                                    disabled={userData.role === 'user'}
-                                    className="text-xs"
-                                  >
-                                    → User
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => promoteUser(userData.id, 'merchant')}
-                                    disabled={userData.role === 'merchant'}
-                                    className="border-purple-600 text-purple-400 text-xs"
-                                  >
-                                    → Merchant
-                                  </Button>
-                                  <Button
-                                    size="sm"
-                                    variant="outline"
-                                    onClick={() => promoteUser(userData.id, 'admin')}
-                                    disabled={userData.role === 'admin'}
-                                    className="border-yellow-600 text-yellow-400 text-xs col-span-2"
-                                  >
-                                    <Crown className="w-3 h-3 mr-1" />
-                                    → Admin
-                                  </Button>
-                                </div>
+                            <div>
+                              <div className="font-medium text-foreground flex items-center space-x-2">
+                                <span>{userData.nickname}</span>
+                                {userData.role === 'admin' && <Crown className="w-3 h-3 text-yellow-400" />}
+                                {userData.role === 'merchant' && <Crown className="w-3 h-3 text-purple-400" />}
                               </div>
-
-                              {/* Moderation Actions */}
-                              <div className="space-y-2">
-                                <h4 className="font-medium text-foreground">Moderation</h4>
-                                <div className="grid grid-cols-2 gap-2">
-                                  {userData.is_muted ? (
+                              <div className="text-xs text-muted-foreground">
+                                ID: {userData.id.substring(0, 8)}...
+                              </div>
+                            </div>
+                          </div>
+                        </TableCell>
+                        <TableCell>
+                          <Badge variant="outline" className={`${
+                            userData.role === 'admin' ? 'border-yellow-400 text-yellow-600' :
+                            userData.role === 'merchant' ? 'border-purple-400 text-purple-600' : 
+                            'border-gray-400 text-gray-600'
+                          }`}>
+                            {userData.role}
+                          </Badge>
+                          {userData.is_banned && (
+                            <Badge variant="destructive" className="ml-2 text-xs">BANNED</Badge>
+                          )}
+                          {userData.is_muted && (
+                            <Badge variant="secondary" className="ml-2 text-xs">MUTED</Badge>
+                          )}
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {userData.email}
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {new Date(userData.created_at).toLocaleDateString()}
+                        </TableCell>
+                        <TableCell className="text-sm text-muted-foreground">
+                          {userData.is_online ? (
+                            <span className="text-green-600 font-medium">Online now</span>
+                          ) : (
+                            userData.last_seen ? new Date(userData.last_seen).toLocaleString() : 'Never'
+                          )}
+                        </TableCell>
+                        <TableCell>
+                          <Dialog>
+                            <DialogTrigger asChild>
+                              <Button
+                                size="sm"
+                                variant="outline"
+                                onClick={() => setSelectedUser(userData)}
+                              >
+                                <Settings className="w-3 h-3 mr-1" />
+                                Control
+                              </Button>
+                            </DialogTrigger>
+                            <DialogContent className="bg-card border max-w-md">
+                              <DialogHeader>
+                                <DialogTitle className="text-foreground">Control: {userData.nickname}</DialogTitle>
+                              </DialogHeader>
+                              <div className="space-y-4">
+                                {/* Role Management */}
+                                <div className="space-y-2">
+                                  <h4 className="font-medium text-foreground">Role Management</h4>
+                                  <div className="grid grid-cols-2 gap-2">
                                     <Button
                                       size="sm"
                                       variant="outline"
-                                      onClick={() => unmuteUser(userData.id)}
-                                      className="border-green-600 text-green-400 text-xs"
-                                    >
-                                      <Volume2 className="w-3 h-3 mr-1" />
-                                      Unmute
-                                    </Button>
-                                  ) : (
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      onClick={() => muteUser(userData.id)}
-                                      className="border-orange-600 text-orange-400 text-xs"
-                                    >
-                                      <VolumeX className="w-3 h-3 mr-1" />
-                                      Mute
-                                    </Button>
-                                  )}
-                                  
-                                  {userData.is_banned ? (
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      onClick={() => unbanUser(userData.id)}
-                                      className="border-green-600 text-green-400 text-xs"
-                                    >
-                                      <UserCheck className="w-3 h-3 mr-1" />
-                                      Unban
-                                    </Button>
-                                  ) : (
-                                    <Button
-                                      size="sm"
-                                      variant="destructive"
-                                      onClick={() => banUser(userData.id)}
-                                      disabled={userData.role === 'admin'}
+                                      onClick={() => promoteUser(userData.id, 'user')}
+                                      disabled={userData.role === 'user'}
                                       className="text-xs"
                                     >
-                                      <UserX className="w-3 h-3 mr-1" />
-                                      Ban
+                                      → User
                                     </Button>
-                                  )}
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => promoteUser(userData.id, 'merchant')}
+                                      disabled={userData.role === 'merchant'}
+                                      className="border-purple-600 text-purple-400 text-xs"
+                                    >
+                                      → Merchant
+                                    </Button>
+                                    <Button
+                                      size="sm"
+                                      variant="outline"
+                                      onClick={() => promoteUser(userData.id, 'admin')}
+                                      disabled={userData.role === 'admin'}
+                                      className="border-yellow-600 text-yellow-400 text-xs col-span-2"
+                                    >
+                                      <Crown className="w-3 h-3 mr-1" />
+                                      → Admin
+                                    </Button>
+                                  </div>
+                                </div>
+
+                                {/* Moderation Actions */}
+                                <div className="space-y-2">
+                                  <h4 className="font-medium text-foreground">Moderation</h4>
+                                  <div className="grid grid-cols-2 gap-2">
+                                    {userData.is_muted ? (
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => unmuteUser(userData.id)}
+                                        className="border-green-600 text-green-400 text-xs"
+                                      >
+                                        <Volume2 className="w-3 h-3 mr-1" />
+                                        Unmute
+                                      </Button>
+                                    ) : (
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => muteUser(userData.id)}
+                                        className="border-orange-600 text-orange-400 text-xs"
+                                      >
+                                        <VolumeX className="w-3 h-3 mr-1" />
+                                        Mute
+                                      </Button>
+                                    )}
+                                    
+                                    {userData.is_banned ? (
+                                      <Button
+                                        size="sm"
+                                        variant="outline"
+                                        onClick={() => unbanUser(userData.id)}
+                                        className="border-green-600 text-green-400 text-xs"
+                                      >
+                                        <UserCheck className="w-3 h-3 mr-1" />
+                                        Unban
+                                      </Button>
+                                    ) : (
+                                      <Button
+                                        size="sm"
+                                        variant="destructive"
+                                        onClick={() => banUser(userData.id)}
+                                        disabled={userData.role === 'admin'}
+                                        className="text-xs"
+                                      >
+                                        <UserX className="w-3 h-3 mr-1" />
+                                        Ban
+                                      </Button>
+                                    )}
+                                  </div>
+                                </div>
+
+                                {/* Destructive Actions */}
+                                <div className="space-y-2">
+                                  <h4 className="font-medium text-foreground">Destructive Actions</h4>
+                                  <Button
+                                    size="sm"
+                                    variant="destructive"
+                                    onClick={() => deleteUserMessages(userData.id)}
+                                    className="w-full text-xs"
+                                  >
+                                    <Trash2 className="w-3 h-3 mr-1" />
+                                    Delete All Messages
+                                  </Button>
                                 </div>
                               </div>
-
-                              {/* Destructive Actions */}
-                              <div className="space-y-2">
-                                <h4 className="font-medium text-foreground">Destructive Actions</h4>
-                                <Button
-                                  size="sm"
-                                  variant="destructive"
-                                  onClick={() => deleteUserMessages(userData.id)}
-                                  className="w-full text-xs"
-                                >
-                                  <Trash2 className="w-3 h-3 mr-1" />
-                                  Delete All Messages
-                                </Button>
-                              </div>
-                            </div>
-                          </DialogContent>
-                        </Dialog>
-                      </div>
-                    </div>
-                  ))}
-                  
-                  {filteredUsers.length === 0 && (
-                    <div className="text-center text-muted-foreground py-8">
-                      <Users className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                      <p>No users found matching your criteria</p>
-                      {users.length === 0 && (
-                        <p className="text-sm mt-2">Try syncing users or check database connection</p>
-                      )}
-                    </div>
-                  )}
-                </div>
+                            </DialogContent>
+                          </Dialog>
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </TableBody>
+                </Table>
+                
+                {filteredUsers.length === 0 && (
+                  <div className="text-center text-muted-foreground py-8">
+                    <Users className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                    <p>No users found matching your criteria</p>
+                    {users.length === 0 && (
+                      <p className="text-sm mt-2">Try syncing users or check database connection</p>
+                    )}
+                  </div>
+                )}
               </CardContent>
             </Card>
           </TabsContent>
@@ -640,7 +769,7 @@ const SuperAdminDashboard = () => {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
               <Card className="bg-card border">
                 <CardHeader>
-                  <CardTitle className="text-foreground">Live User Activity</CardTitle>
+                  <CardTitle className="text-foreground">🔍 Live User Activity</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="space-y-3 max-h-64 overflow-y-auto">
@@ -651,13 +780,13 @@ const SuperAdminDashboard = () => {
                           <div className="text-muted-foreground text-sm">{user.role}</div>
                           {user.location && (
                             <div className="text-muted-foreground text-xs">
-                              {user.location.latitude.toFixed(4)}, {user.location.longitude.toFixed(4)}
+                              📍 {user.location.latitude.toFixed(4)}, {user.location.longitude.toFixed(4)}
                             </div>
                           )}
                         </div>
                         <div className="flex items-center space-x-2">
-                          <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                          <span className="text-green-400 text-xs">ONLINE</span>
+                          <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                          <span className="text-green-400 text-xs font-medium">ONLINE</span>
                         </div>
                       </div>
                     ))}
@@ -673,7 +802,7 @@ const SuperAdminDashboard = () => {
 
               <Card className="bg-card border">
                 <CardHeader>
-                  <CardTitle className="text-foreground">System Statistics</CardTitle>
+                  <CardTitle className="text-foreground">📊 System Statistics</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="grid grid-cols-2 gap-4">
@@ -702,7 +831,7 @@ const SuperAdminDashboard = () => {
           <TabsContent value="logs">
             <Card className="bg-card border">
               <CardHeader>
-                <CardTitle className="text-foreground">Admin Action Logs</CardTitle>
+                <CardTitle className="text-foreground">📊 Admin Action Logs</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-3 max-h-96 overflow-y-auto">
