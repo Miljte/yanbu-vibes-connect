@@ -1,6 +1,6 @@
 
 import React, { useState, useEffect } from 'react';
-import { MapPin, Camera, Clock, BarChart3, MessageSquare, Plus, Edit, Save } from 'lucide-react';
+import { MapPin, Camera, Clock, BarChart3, MessageSquare, Plus, Edit, Save, ArrowLeft } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -31,22 +31,16 @@ interface Place {
   is_active: boolean;
 }
 
-interface PlaceAnalytics {
-  nearbyUsers: number;
-  messageCount: number;
-  promotionClicks: number;
-}
-
 const MerchantDashboard = () => {
   const [places, setPlaces] = useState<Place[]>([]);
   const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
-  const [analytics, setAnalytics] = useState<PlaceAnalytics>({
+  const [isEditing, setIsEditing] = useState(false);
+  const [loading, setLoading] = useState(true);
+  const [analytics, setAnalytics] = useState({
     nearbyUsers: 0,
     messageCount: 0,
     promotionClicks: 0
   });
-  const [isEditing, setIsEditing] = useState(false);
-  const [loading, setLoading] = useState(true);
   const { user } = useAuth();
 
   const [newPlace, setNewPlace] = useState<Partial<Place>>({
@@ -103,13 +97,11 @@ const MerchantDashboard = () => {
 
   const fetchAnalytics = async (placeId: string) => {
     try {
-      // Get message count for this place
       const { data: messages } = await supabase
         .from('chat_messages')
         .select('id')
         .eq('place_id', placeId);
 
-      // Get nearby users count (simplified - in real app you'd calculate distance)
       const { data: locations } = await supabase
         .from('user_locations')
         .select('id');
@@ -117,7 +109,7 @@ const MerchantDashboard = () => {
       setAnalytics({
         nearbyUsers: locations?.length || 0,
         messageCount: messages?.length || 0,
-        promotionClicks: Math.floor(Math.random() * 50) // Simulated data
+        promotionClicks: Math.floor(Math.random() * 50)
       });
     } catch (error) {
       console.error('Error fetching analytics:', error);
@@ -158,7 +150,6 @@ const MerchantDashboard = () => {
       toast.success('Place created successfully!');
       fetchMerchantPlaces();
       
-      // Reset form
       setNewPlace({
         name: '',
         type: 'cafe',
@@ -225,22 +216,33 @@ const MerchantDashboard = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-4 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-4 flex items-center justify-center pb-20">
         <div className="text-white">Loading merchant dashboard...</div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-4">
+    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-4 pb-20">
       <div className="container mx-auto max-w-6xl">
         <div className="mb-8">
+          <div className="flex items-center space-x-4 mb-4">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => window.history.back()}
+              className="text-slate-300 hover:text-white"
+            >
+              <ArrowLeft className="w-4 h-4 mr-2" />
+              Back
+            </Button>
+          </div>
           <h1 className="text-3xl font-bold text-white mb-2">Merchant Dashboard</h1>
           <p className="text-slate-300">Manage your places and connect with customers</p>
         </div>
 
         <Tabs defaultValue="places" className="space-y-6">
-          <TabsList className="bg-slate-800 border-slate-700">
+          <TabsList className="bg-slate-800 border-slate-700 grid w-full grid-cols-4">
             <TabsTrigger value="places" className="data-[state=active]:bg-cyan-600">
               <MapPin className="w-4 h-4 mr-2" />
               My Places
@@ -251,7 +253,7 @@ const MerchantDashboard = () => {
             </TabsTrigger>
             <TabsTrigger value="chat" className="data-[state=active]:bg-cyan-600">
               <MessageSquare className="w-4 h-4 mr-2" />
-              Chat Management
+              Chat
             </TabsTrigger>
             <TabsTrigger value="add-place" className="data-[state=active]:bg-cyan-600">
               <Plus className="w-4 h-4 mr-2" />
@@ -261,14 +263,13 @@ const MerchantDashboard = () => {
 
           <TabsContent value="places">
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-              {/* Places List */}
               <div className="lg:col-span-1">
                 <Card className="bg-slate-800/50 border-slate-700">
                   <CardHeader>
-                    <CardTitle className="text-white">Your Places</CardTitle>
+                    <CardTitle className="text-white">Your Places ({places.length})</CardTitle>
                   </CardHeader>
                   <CardContent>
-                    <div className="space-y-3">
+                    <div className="space-y-3 max-h-96 overflow-y-auto">
                       {places.map((place) => (
                         <div
                           key={place.id}
@@ -280,20 +281,23 @@ const MerchantDashboard = () => {
                           onClick={() => {
                             setSelectedPlace(place);
                             if (place.id) fetchAnalytics(place.id);
+                            setIsEditing(false);
                           }}
                         >
                           <div className="flex items-center justify-between mb-2">
-                            <h3 className="text-white font-medium">{place.name}</h3>
-                            <Badge variant={place.is_active ? "default" : "secondary"}>
+                            <h3 className="text-white font-medium text-sm">{place.name}</h3>
+                            <Badge variant={place.is_active ? "default" : "secondary"} className="text-xs">
                               {place.is_active ? 'Active' : 'Inactive'}
                             </Badge>
                           </div>
-                          <p className="text-slate-400 text-sm">{place.type}</p>
+                          <p className="text-slate-400 text-xs">{place.type} • {place.address}</p>
                         </div>
                       ))}
                       {places.length === 0 && (
                         <div className="text-center text-slate-400 py-8">
-                          No places yet. Add your first place!
+                          <MapPin className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                          <p className="text-sm">No places yet</p>
+                          <p className="text-xs mt-2">Add your first place to get started!</p>
                         </div>
                       )}
                     </div>
@@ -301,7 +305,6 @@ const MerchantDashboard = () => {
                 </Card>
               </div>
 
-              {/* Place Details */}
               <div className="lg:col-span-2">
                 {selectedPlace ? (
                   <Card className="bg-slate-800/50 border-slate-700">
@@ -333,17 +336,39 @@ const MerchantDashboard = () => {
                               className="bg-slate-700 border-slate-600 text-white"
                             />
                           </div>
+                          <div className="grid grid-cols-2 gap-4">
+                            <div>
+                              <label className="block text-sm font-medium text-slate-300 mb-2">Type</label>
+                              <select
+                                value={selectedPlace.type}
+                                onChange={(e) => setSelectedPlace({...selectedPlace, type: e.target.value as PlaceType})}
+                                className="w-full bg-slate-700 border-slate-600 text-white p-3 rounded-lg"
+                              >
+                                {placeTypes.map((type) => (
+                                  <option key={type.value} value={type.value}>{type.label}</option>
+                                ))}
+                              </select>
+                            </div>
+                            <div>
+                              <label className="block text-sm font-medium text-slate-300 mb-2">Crowd Level</label>
+                              <select
+                                value={selectedPlace.crowd_level}
+                                onChange={(e) => setSelectedPlace({...selectedPlace, crowd_level: e.target.value as CrowdLevel})}
+                                className="w-full bg-slate-700 border-slate-600 text-white p-3 rounded-lg"
+                              >
+                                <option value="low">Low</option>
+                                <option value="medium">Medium</option>
+                                <option value="high">High</option>
+                              </select>
+                            </div>
+                          </div>
                           <div>
-                            <label className="block text-sm font-medium text-slate-300 mb-2">Type</label>
-                            <select
-                              value={selectedPlace.type}
-                              onChange={(e) => setSelectedPlace({...selectedPlace, type: e.target.value as PlaceType})}
-                              className="w-full bg-slate-700 border-slate-600 text-white p-3 rounded-lg"
-                            >
-                              {placeTypes.map((type) => (
-                                <option key={type.value} value={type.value}>{type.label}</option>
-                              ))}
-                            </select>
+                            <label className="block text-sm font-medium text-slate-300 mb-2">Address</label>
+                            <Input
+                              value={selectedPlace.address}
+                              onChange={(e) => setSelectedPlace({...selectedPlace, address: e.target.value})}
+                              className="bg-slate-700 border-slate-600 text-white"
+                            />
                           </div>
                           <div>
                             <label className="block text-sm font-medium text-slate-300 mb-2">Description</label>
@@ -354,60 +379,40 @@ const MerchantDashboard = () => {
                               rows={3}
                             />
                           </div>
-                          <div className="grid grid-cols-2 gap-4">
-                            <div>
-                              <label className="block text-sm font-medium text-slate-300 mb-2">Male %</label>
-                              <Input
-                                type="number"
-                                min="0"
-                                max="100"
-                                value={selectedPlace.male_percentage}
-                                onChange={(e) => setSelectedPlace({
-                                  ...selectedPlace, 
-                                  male_percentage: parseInt(e.target.value),
-                                  female_percentage: 100 - parseInt(e.target.value)
-                                })}
-                                className="bg-slate-700 border-slate-600 text-white"
-                              />
-                            </div>
-                            <div>
-                              <label className="block text-sm font-medium text-slate-300 mb-2">Female %</label>
-                              <Input
-                                type="number"
-                                value={selectedPlace.female_percentage}
-                                disabled
-                                className="bg-slate-700 border-slate-600 text-white"
-                              />
-                            </div>
-                          </div>
                           <Button onClick={() => setIsEditing(false)} variant="outline" className="w-full border-slate-600 text-slate-300">
                             Cancel
                           </Button>
                         </div>
                       ) : (
                         <div className="space-y-4">
-                          <div>
-                            <span className="text-slate-400">Type:</span>
-                            <span className="text-white ml-2">{selectedPlace.type}</span>
-                          </div>
-                          <div>
-                            <span className="text-slate-400">Address:</span>
-                            <span className="text-white ml-2">{selectedPlace.address || 'Not set'}</span>
-                          </div>
-                          <div>
-                            <span className="text-slate-400">Description:</span>
-                            <p className="text-white mt-1">{selectedPlace.description || 'No description'}</p>
-                          </div>
                           <div className="grid grid-cols-2 gap-4">
                             <div>
-                              <span className="text-slate-400">Male/Female Ratio:</span>
-                              <p className="text-white">{selectedPlace.male_percentage}% / {selectedPlace.female_percentage}%</p>
+                              <span className="text-slate-400 text-sm">Type:</span>
+                              <p className="text-white">{selectedPlace.type}</p>
                             </div>
                             <div>
-                              <span className="text-slate-400">Crowd Level:</span>
+                              <span className="text-slate-400 text-sm">Crowd Level:</span>
                               <Badge variant="outline" className="ml-2 border-slate-600 text-slate-300">
                                 {selectedPlace.crowd_level}
                               </Badge>
+                            </div>
+                          </div>
+                          <div>
+                            <span className="text-slate-400 text-sm">Address:</span>
+                            <p className="text-white">{selectedPlace.address || 'Not set'}</p>
+                          </div>
+                          <div>
+                            <span className="text-slate-400 text-sm">Description:</span>
+                            <p className="text-white">{selectedPlace.description || 'No description'}</p>
+                          </div>
+                          <div className="grid grid-cols-2 gap-4 p-4 bg-slate-700/30 rounded-lg">
+                            <div className="text-center">
+                              <div className="text-2xl font-bold text-cyan-400">{selectedPlace.male_percentage}%</div>
+                              <div className="text-slate-400 text-sm">Male</div>
+                            </div>
+                            <div className="text-center">
+                              <div className="text-2xl font-bold text-pink-400">{selectedPlace.female_percentage}%</div>
+                              <div className="text-slate-400 text-sm">Female</div>
                             </div>
                           </div>
                         </div>
@@ -453,11 +458,11 @@ const MerchantDashboard = () => {
                 
                 <Card className="bg-slate-800/50 border-slate-700">
                   <CardHeader>
-                    <CardTitle className="text-white text-sm">Promotion Clicks</CardTitle>
+                    <CardTitle className="text-white text-sm">Engagement</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <div className="text-2xl font-bold text-purple-400">{analytics.promotionClicks}</div>
-                    <p className="text-slate-400 text-sm">This month</p>
+                    <p className="text-slate-400 text-sm">Interactions</p>
                   </CardContent>
                 </Card>
               </div>
@@ -480,8 +485,8 @@ const MerchantDashboard = () => {
               </CardHeader>
               <CardContent className="text-center py-12">
                 <MessageSquare className="w-12 h-12 mx-auto mb-4 text-slate-400 opacity-50" />
-                <p className="text-slate-400">Chat management features coming soon</p>
-                <p className="text-slate-500 text-sm mt-2">You'll be able to respond to customers and send promotions</p>
+                <p className="text-slate-400">Chat management features</p>
+                <p className="text-slate-500 text-sm mt-2">Send promotions and respond to customers</p>
               </CardContent>
             </Card>
           </TabsContent>
