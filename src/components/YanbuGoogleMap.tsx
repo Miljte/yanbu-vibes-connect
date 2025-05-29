@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Wrapper, Status } from '@googlemaps/react-wrapper';
 import { Card, CardContent } from '@/components/ui/card';
@@ -313,10 +312,12 @@ const render = (status: Status) => {
 };
 
 const YanbuGoogleMap = () => {
-  const [googleMapsApiKey, setGoogleMapsApiKey] = useState('');
   const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
   const { isDark, toggleTheme } = useTheme();
   const { location } = useLocation();
+
+  // Use the provided API key
+  const googleMapsApiKey = 'AIzaSyCnHJ_b9LBpxdSOdE8jmVMmJd6Vdmm5u8o';
 
   // Yanbu coordinates
   const yanbuCenter: google.maps.LatLngLiteral = { lat: 24.0892, lng: 38.0618 };
@@ -346,47 +347,6 @@ const YanbuGoogleMap = () => {
       default: return 'bg-gray-500';
     }
   };
-
-  if (!googleMapsApiKey) {
-    return (
-      <div className="min-h-screen bg-background p-4 pb-20">
-        <div className="container mx-auto max-w-2xl">
-          <Card className="bg-card border">
-            <CardContent className="p-6">
-              <h2 className="text-2xl font-bold text-foreground mb-4">Setup Google Maps</h2>
-              <p className="text-muted-foreground mb-4">
-                Please enter your Google Maps API key to view the interactive Yanbu map.
-              </p>
-              <p className="text-sm text-muted-foreground mb-4">
-                Get your API key from: <a href="https://console.cloud.google.com/google/maps-apis" target="_blank" rel="noopener noreferrer" className="text-blue-500 underline">Google Cloud Console</a>
-              </p>
-              <div className="space-y-4">
-                <input
-                  type="text"
-                  placeholder="AIzaSyC4R6AN7SmyTjK6ZJMOkdioADhVD..."
-                  value={googleMapsApiKey}
-                  onChange={(e) => setGoogleMapsApiKey(e.target.value)}
-                  className="w-full p-3 border rounded-lg bg-background text-foreground"
-                />
-                <Button 
-                  onClick={() => {
-                    if (googleMapsApiKey.startsWith('AIza')) {
-                      toast.success('Google Maps API key set successfully!');
-                    } else {
-                      toast.error('Please enter a valid Google Maps API key starting with "AIza"');
-                    }
-                  }}
-                  className="w-full"
-                >
-                  Initialize Map
-                </Button>
-              </div>
-            </CardContent>
-          </Card>
-        </div>
-      </div>
-    );
-  }
 
   return (
     <div className="min-h-screen bg-background pb-20">
