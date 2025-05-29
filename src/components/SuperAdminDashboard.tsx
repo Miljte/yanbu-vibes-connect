@@ -10,7 +10,6 @@ import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from 
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
-import { useChatValidation } from '@/hooks/useChatValidation';
 import { toast } from 'sonner';
 
 interface User {
@@ -21,6 +20,8 @@ interface User {
   role: string;
   is_online: boolean;
   last_seen?: string;
+  is_banned: boolean;
+  is_muted: boolean;
 }
 
 interface ChatMessage {
@@ -78,7 +79,6 @@ const SuperAdminDashboard = () => {
   const [refreshing, setRefreshing] = useState(false);
   
   const { user } = useAuth();
-  const { checkMuteStatus } = useChatValidation();
 
   useEffect(() => {
     fetchAllData();
@@ -105,12 +105,20 @@ const SuperAdminDashboard = () => {
 
   const fetchUsers = async () => {
     try {
-      // Fetch all profiles
+      console.log('🔍 Fetching all users...');
+      
+      // Fetch ALL profiles from the database
       const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
-        .select('id, nickname, created_at');
+        .select('id, nickname, created_at')
+        .order('created_at', { ascending: false });
 
-      if (profilesError) throw profilesError;
+      if (profilesError) {
+        console.error('❌ Error fetching profiles:', profilesError);
+        throw profilesError;
+      }
+
+      console.log('📋 Found profiles:', profilesData?.length || 0);
 
       // Fetch user roles
       const { data: rolesData } = await supabase
@@ -122,10 +130,24 @@ const SuperAdminDashboard = () => {
         .from('user_locations')
         .select('user_id, updated_at');
 
-      // Combine data
+      // Fetch active bans
+      const { data: bansData } = await supabase
+        .from('user_bans')
+        .select('user_id')
+        .eq('is_active', true);
+
+      // Fetch active mutes
+      const { data: mutesData } = await supabase
+        .from('user_mutes')
+        .select('user_id')
+        .eq('is_active', true);
+
+      // Combine all data
       const usersWithDetails = profilesData?.map(profile => {
         const userRole = rolesData?.find(role => role.user_id === profile.id);
         const location = locationsData?.find(loc => loc.user_id === profile.id);
+        const isBanned = bansData?.some(ban => ban.user_id === profile.id) || false;
+        const isMuted = mutesData?.some(mute => mute.user_id === profile.id) || false;
         
         // Check if user is online (activity within last 10 minutes)
         const lastSeen = location?.updated_at || profile.created_at;
@@ -137,26 +159,41 @@ const SuperAdminDashboard = () => {
           created_at: profile.created_at,
           role: userRole?.role || 'user',
           is_online: isOnline,
-          last_seen: lastSeen
+          last_seen: lastSeen,
+          is_banned: isBanned,
+          is_muted: isMuted
         };
       }) || [];
 
-      console.log('✅ Fetched users:', usersWithDetails.length);
+      console.log('✅ Processed users with details:', usersWithDetails.length);
+      console.log('👥 Users breakdown:', {
+        total: usersWithDetails.length,
+        online: usersWithDetails.filter(u => u.is_online).length,
+        banned: usersWithDetails.filter(u => u.is_banned).length,
+        muted: usersWithDetails.filter(u => u.is_muted).length
+      });
+
       setUsers(usersWithDetails);
     } catch (error) {
-      console.error('❌ Error fetching users:', error);
+      console.error('❌ Error in fetchUsers:', error);
+      toast.error('Failed to fetch users');
     }
   };
 
   const fetchMessages = async () => {
     try {
+      console.log('📬 Fetching all messages...');
+      
       const { data: messagesData, error } = await supabase
         .from('chat_messages')
         .select('*')
         .order('created_at', { ascending: false })
         .limit(200);
 
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Error fetching messages:', error);
+        throw error;
+      }
 
       // Get user nicknames
       const { data: profilesData } = await supabase
@@ -179,10 +216,10 @@ const SuperAdminDashboard = () => {
         };
       }) || [];
 
-      console.log('✅ Fetched messages:', messagesWithInfo.length);
+      console.log('✅ Fetched messages with info:', messagesWithInfo.length);
       setMessages(messagesWithInfo);
     } catch (error) {
-      console.error('❌ Error fetching messages:', error);
+      console.error('❌ Error in fetchMessages:', error);
     }
   };
 
@@ -278,31 +315,46 @@ const SuperAdminDashboard = () => {
   };
 
   const setupRealtimeSubscriptions = () => {
+    // Real-time updates for profiles
+    const profilesChannel = supabase
+      .channel('admin_profiles_realtime')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => {
+        console.log('🔄 Profile change detected');
+        fetchUsers();
+      })
+      .subscribe();
+
+    // Real-time updates for messages
     const messagesChannel = supabase
       .channel('admin_messages_realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'chat_messages' }, () => {
-        console.log('🔄 Real-time message update detected');
+        console.log('🔄 Message change detected');
         fetchMessages();
       })
       .subscribe();
 
+    // Real-time updates for mutes
     const mutesChannel = supabase
       .channel('admin_mutes_realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'user_mutes' }, () => {
-        console.log('🔄 Real-time mute update detected');
+        console.log('🔄 Mute change detected');
         fetchMutes();
+        fetchUsers(); // Refresh users to update mute status
       })
       .subscribe();
 
+    // Real-time updates for bans
     const bansChannel = supabase
       .channel('admin_bans_realtime')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'user_bans' }, () => {
-        console.log('🔄 Real-time ban update detected');
+        console.log('🔄 Ban change detected');
         fetchBans();
+        fetchUsers(); // Refresh users to update ban status
       })
       .subscribe();
 
     return () => {
+      supabase.removeChannel(profilesChannel);
       supabase.removeChannel(messagesChannel);
       supabase.removeChannel(mutesChannel);
       supabase.removeChannel(bansChannel);
@@ -311,23 +363,33 @@ const SuperAdminDashboard = () => {
 
   const deleteMessage = async (messageId: string) => {
     try {
+      console.log('🗑️ Deleting message:', messageId);
+      
       const { error } = await supabase
         .from('chat_messages')
         .update({ is_deleted: true })
         .eq('id', messageId);
 
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Error deleting message:', error);
+        throw error;
+      }
       
+      console.log('✅ Message deleted successfully');
       toast.success('Message deleted successfully');
+      
+      // Refresh messages immediately
       fetchMessages();
     } catch (error) {
-      console.error('❌ Error deleting message:', error);
-      toast.error('Failed to delete message');
+      console.error('❌ Error in deleteMessage:', error);
+      toast.error('Failed to delete message: ' + error.message);
     }
   };
 
   const banUser = async (userId: string, reason?: string) => {
     try {
+      console.log('🚫 Banning user:', userId);
+      
       const { error } = await supabase
         .from('user_bans')
         .insert({
@@ -337,19 +399,27 @@ const SuperAdminDashboard = () => {
           is_active: true
         });
 
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Error banning user:', error);
+        throw error;
+      }
       
+      console.log('✅ User banned successfully');
       toast.success('User banned successfully');
+      
+      // Refresh data
       fetchBans();
       fetchUsers();
     } catch (error) {
-      console.error('❌ Error banning user:', error);
-      toast.error('Failed to ban user');
+      console.error('❌ Error in banUser:', error);
+      toast.error('Failed to ban user: ' + error.message);
     }
   };
 
   const muteUser = async (userId: string, reason?: string, duration?: number) => {
     try {
+      console.log('🔇 Muting user:', userId, 'for', duration, 'minutes');
+      
       const expiresAt = duration ? new Date(Date.now() + duration * 60 * 1000).toISOString() : null;
       
       const { error } = await supabase
@@ -362,14 +432,20 @@ const SuperAdminDashboard = () => {
           is_active: true
         });
 
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Error muting user:', error);
+        throw error;
+      }
       
-      toast.success('User muted successfully');
+      console.log('✅ User muted successfully');
+      toast.success(`User muted successfully${duration ? ` for ${duration} minutes` : ''}`);
+      
+      // Refresh data
       fetchMutes();
       fetchUsers();
     } catch (error) {
-      console.error('❌ Error muting user:', error);
-      toast.error('Failed to mute user');
+      console.error('❌ Error in muteUser:', error);
+      toast.error('Failed to mute user: ' + error.message);
     }
   };
 
@@ -387,7 +463,7 @@ const SuperAdminDashboard = () => {
       fetchUsers();
     } catch (error) {
       console.error('❌ Error unbanning user:', error);
-      toast.error('Failed to unban user');
+      toast.error('Failed to unban user: ' + error.message);
     }
   };
 
@@ -405,7 +481,7 @@ const SuperAdminDashboard = () => {
       fetchUsers();
     } catch (error) {
       console.error('❌ Error unmuting user:', error);
-      toast.error('Failed to unmute user');
+      toast.error('Failed to unmute user: ' + error.message);
     }
   };
 
@@ -431,7 +507,7 @@ const SuperAdminDashboard = () => {
   const stats = {
     totalUsers: users.length,
     onlineUsers: users.filter(u => u.is_online).length,
-    totalMessages: messages.length,
+    totalMessages: messages.filter(m => !m.is_deleted).length,
     activeMutes: mutes.length,
     activeBans: bans.length,
     activePlaces: places.filter(p => p.is_active).length
@@ -596,7 +672,7 @@ const SuperAdminDashboard = () => {
                           <Button
                             size="sm"
                             variant="outline"
-                            onClick={() => muteUser(message.user_id, 'Inappropriate message')}
+                            onClick={() => muteUser(message.user_id, 'Inappropriate message', 60)}
                           >
                             <VolumeX className="w-3 h-3" />
                           </Button>
@@ -642,7 +718,11 @@ const SuperAdminDashboard = () => {
                       <div className="flex items-center space-x-3">
                         <div className={`w-3 h-3 rounded-full ${userData.is_online ? 'bg-green-500' : 'bg-gray-400'}`}></div>
                         <div>
-                          <div className="font-medium text-foreground">{userData.nickname}</div>
+                          <div className="font-medium text-foreground flex items-center space-x-2">
+                            <span>{userData.nickname}</span>
+                            {userData.is_banned && <Badge variant="destructive" className="text-xs">Banned</Badge>}
+                            {userData.is_muted && <Badge variant="secondary" className="text-xs">Muted</Badge>}
+                          </div>
                           <div className="text-muted-foreground text-sm">
                             {userData.role} • Joined {new Date(userData.created_at).toLocaleDateString()}
                             {userData.last_seen && (
@@ -670,6 +750,7 @@ const SuperAdminDashboard = () => {
                                 <Button
                                   variant="outline"
                                   onClick={() => muteUser(userData.id, 'Admin action', 60)}
+                                  disabled={userData.is_muted}
                                   className="border-orange-600 text-orange-400"
                                 >
                                   <VolumeX className="w-3 h-3 mr-1" />
@@ -678,6 +759,7 @@ const SuperAdminDashboard = () => {
                                 <Button
                                   variant="outline"
                                   onClick={() => muteUser(userData.id, 'Admin action', 1440)}
+                                  disabled={userData.is_muted}
                                   className="border-orange-600 text-orange-400"
                                 >
                                   <VolumeX className="w-3 h-3 mr-1" />
@@ -687,6 +769,7 @@ const SuperAdminDashboard = () => {
                               <Button
                                 variant="destructive"
                                 onClick={() => banUser(userData.id, 'Admin action')}
+                                disabled={userData.is_banned}
                                 className="w-full"
                               >
                                 <Ban className="w-3 h-3 mr-1" />

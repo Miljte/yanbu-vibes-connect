@@ -48,7 +48,7 @@ export const useChatValidation = () => {
       setLoading(true);
       console.log('🔍 Checking mute and ban status for user:', user.id);
       
-      // Check mute status
+      // Check mute status - get most recent active mute
       const { data: muteData, error: muteError } = await supabase
         .from('user_mutes')
         .select('*')
@@ -79,7 +79,7 @@ export const useChatValidation = () => {
       }
       setIsMuted(userIsMuted);
 
-      // Check ban status
+      // Check ban status - get most recent active ban
       const { data: banData, error: banError } = await supabase
         .from('user_bans')
         .select('*')

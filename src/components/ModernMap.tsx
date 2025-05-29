@@ -2,17 +2,12 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Wrapper, Status } from '@googlemaps/react-wrapper';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { MapPin, Lock, MessageSquare, Navigation, Languages } from 'lucide-react';
+import { MapPin, Navigation, Users, MessageSquare } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
-import { useLocation } from '@/hooks/useLocation';
-import { useYanbuLocationCheck } from '@/hooks/useYanbuLocationCheck';
-import { useAuth } from '@/hooks/useAuth';
-import { useLocalization } from '@/contexts/LocalizationContext';
-import { supabase } from '@/integrations/supabase/client';
-import { toast } from 'sonner';
-import CategoryFilter from './CategoryFilter';
-import LocationRestriction from './LocationRestriction';
 import RealTimeProximityChat from './RealTimeProximityChat';
+import { supabase } from '@/integrations/supabase/client';
+import { useAuth } from '@/hooks/useAuth';
+import { useRealtimeLocation } from '@/hooks/useRealtimeLocation';
 
 interface Place {
   id: string;
@@ -308,7 +303,15 @@ const ModernMap = () => {
   };
 
   // Calculate nearby places and chat unlocked places
-  const nearbyPlaces = places.filter(place => place.distance !== null && place.distance <= 5000);
+  const nearbyPlacesForChat = places
+    .filter(place => place.distance !== null && place.distance <= 5000)
+    .map(place => ({
+      id: place.id,
+      name: place.name,
+      distance: place.distance || 0,
+      type: place.type
+    }));
+    
   const chatUnlockedPlaces = new Set(
     places.filter(place => place.distance !== null && place.distance <= 1000).map(p => p.id)
   );
@@ -329,15 +332,16 @@ const ModernMap = () => {
   // Show chat interface when requested
   if (showChat) {
     return (
-      <div className="relative">
+      <div className="min-h-screen bg-background p-4">
         <Button
+          variant="outline"
           onClick={() => setShowChat(false)}
-          className="absolute top-4 left-4 z-50 bg-background hover:bg-muted text-foreground shadow-lg border"
+          className="mb-4"
         >
           ← Back to Map
         </Button>
         <RealTimeProximityChat 
-          nearbyPlaces={nearbyPlaces}
+          nearbyPlaces={nearbyPlacesForChat}
           chatUnlockedPlaces={chatUnlockedPlaces}
           userLocation={location}
         />

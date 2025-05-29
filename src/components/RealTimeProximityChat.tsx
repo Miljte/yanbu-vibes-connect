@@ -166,6 +166,9 @@ const RealTimeProximityChat: React.FC<RealTimeProximityChatProps> = ({
 
   const sendMessage = async () => {
     if (!newMessage.trim() || !selectedPlace || !user || !canSendMessage() || sendingMessage) {
+      if (!canSendMessage()) {
+        toast.error(getMuteMessage() || 'You cannot send messages');
+      }
       return;
     }
 
@@ -185,7 +188,7 @@ const RealTimeProximityChat: React.FC<RealTimeProximityChatProps> = ({
 
       if (error) {
         console.error('❌ Error sending message:', error);
-        toast.error('Failed to send message');
+        toast.error('Failed to send message: ' + error.message);
         return;
       }
 
