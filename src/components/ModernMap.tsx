@@ -46,6 +46,12 @@ const MapComponent: React.FC<MapComponentProps> = ({
   const [map, setMap] = useState<google.maps.Map>();
   const [markers, setMarkers] = useState<google.maps.Marker[]>([]);
 
+  // Yanbu city bounds - restricting map movement to Yanbu area only
+  const yanbuBounds = new google.maps.LatLngBounds(
+    new google.maps.LatLng(23.9500, 37.9500), // Southwest corner
+    new google.maps.LatLng(24.2500, 38.3000)  // Northeast corner
+  );
+
   // Ultra-clean map style - removes everything except roads
   const ultraCleanMapStyle = [
     {
@@ -93,7 +99,7 @@ const MapComponent: React.FC<MapComponentProps> = ({
       fillOpacity: 1,
       strokeColor: '#ffffff',
       strokeWeight: 3,
-      scale: 18, // Fixed size regardless of zoom
+      scale: 16, // Fixed size - won't scale with zoom
     };
   };
 
@@ -102,6 +108,12 @@ const MapComponent: React.FC<MapComponentProps> = ({
       const newMap = new google.maps.Map(ref.current, {
         center,
         zoom,
+        minZoom: 12, // Prevent zooming too far out
+        maxZoom: 18, // Prevent zooming too close
+        restriction: {
+          latLngBounds: yanbuBounds,
+          strictBounds: true, // Prevent panning outside bounds
+        },
         styles: ultraCleanMapStyle,
         disableDefaultUI: true,
         zoomControl: true,
@@ -132,7 +144,7 @@ const MapComponent: React.FC<MapComponentProps> = ({
           fillOpacity: 1,
           strokeColor: '#ffffff',
           strokeWeight: 4,
-          scale: 15,
+          scale: 12, // Fixed size
         },
         zIndex: 1000,
         animation: google.maps.Animation.BOUNCE,
@@ -348,7 +360,7 @@ const ModernMap = () => {
                     <p className="text-muted-foreground text-sm mb-3">{selectedPlace.description}</p>
                   )}
                   
-                  <div className="flex items-center space-x-4 text-sm text-muted-foreground">
+                  <div className="flex items-center space-x-4 text-sm text-muted-foreground mb-3">
                     <div className="flex items-center">
                       <MapPin className="w-4 h-4 mr-1" />
                       <span>
@@ -365,6 +377,19 @@ const ModernMap = () => {
                       {isNearby(selectedPlace) ? 'In Range' : 'Out of Range'}
                     </Badge>
                   </div>
+
+                  {/* Store Category with emoji */}
+                  <div className="flex items-center space-x-2 mb-3">
+                    <span className="text-lg">
+                      {selectedPlace.type === 'cafe' && '☕'}
+                      {selectedPlace.type === 'restaurant' && '🍽️'}
+                      {selectedPlace.type === 'shop' && '🛍️'}
+                      {selectedPlace.type === 'event' && '🎉'}
+                    </span>
+                    <span className="text-sm font-medium text-foreground capitalize">
+                      {selectedPlace.type}
+                    </span>
+                  </div>
                 </div>
                 
                 {selectedPlace.images && selectedPlace.images.length > 0 && (
@@ -372,36 +397,47 @@ const ModernMap = () => {
                     <img 
                       src={selectedPlace.images[0]} 
                       alt={selectedPlace.name}
-                      className="w-16 h-16 rounded-lg object-cover"
+                      className="w-20 h-20 rounded-lg object-cover border"
                     />
                   </div>
                 )}
                 
                 <button
                   onClick={() => setSelectedPlace(null)}
-                  className="text-muted-foreground hover:text-foreground text-2xl font-light ml-2"
+                  className="text-muted-foreground hover:text-foreground text-2xl font-light ml-2 absolute top-2 right-2"
                 >
                   ×
                 </button>
               </div>
               
-              {isNearby(selectedPlace) ? (
-                <Button 
-                  onClick={() => handleJoinChat(selectedPlace)}
-                  className="w-full bg-green-600 hover:bg-green-700 text-white rounded-xl py-3"
-                >
-                  <MessageSquare className="w-5 h-5 mr-2" />
-                  {t('map.joinChat')}
-                </Button>
-              ) : (
-                <Button 
-                  disabled
-                  className="w-full bg-muted cursor-not-allowed text-muted-foreground rounded-xl py-3"
-                >
-                  <Lock className="w-5 h-5 mr-2" />
-                  {t('map.moveCloser')}
-                </Button>
-              )}
+              <div className="space-y-3">
+                {isNearby(selectedPlace) ? (
+                  <Button 
+                    onClick={() => handleJoinChat(selectedPlace)}
+                    className="w-full bg-green-600 hover:bg-green-700 text-white rounded-xl py-3"
+                  >
+                    <MessageSquare className="w-5 h-5 mr-2" />
+                    {t('map.joinChat')}
+                  </Button>
+                ) : (
+                  <Button 
+                    disabled
+                    className="w-full bg-muted cursor-not-allowed text-muted-foreground rounded-xl py-3"
+                  >
+                    <Lock className="w-5 h-5 mr-2" />
+                    {t('map.moveCloser')}
+                  </Button>
+                )}
+
+                <div className="flex space-x-2">
+                  <Button variant="outline" size="sm" className="flex-1">
+                    📍 Directions
+                  </Button>
+                  <Button variant="outline" size="sm" className="flex-1">
+                    📞 Call
+                  </Button>
+                </div>
+              </div>
             </CardContent>
           </Card>
         </div>

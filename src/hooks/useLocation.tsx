@@ -15,23 +15,31 @@ export const useLocation = () => {
   const [loading, setLoading] = useState(true);
   const { user } = useAuth();
 
+  // Yanbu city center as fallback
+  const yanbuCenter = {
+    latitude: 24.0892,
+    longitude: 38.0618,
+    accuracy: 1000
+  };
+
   useEffect(() => {
     if (!navigator.geolocation) {
       setError('Geolocation is not supported by this browser');
+      setLocation(yanbuCenter);
       setLoading(false);
       return;
     }
 
-    // Maximum accuracy GPS options for real-time tracking
+    // High accuracy GPS options for Yanbu area
     const highAccuracyOptions = {
       enableHighAccuracy: true,
-      timeout: 10000,
-      maximumAge: 0, // Always get fresh location
+      timeout: 15000,
+      maximumAge: 5000, // Cache for 5 seconds for better performance
     };
 
-    console.log('Initializing high-accuracy GPS tracking...');
+    console.log('Initializing GPS tracking for Yanbu area...');
 
-    // Get initial position with maximum accuracy
+    // Get initial position
     navigator.geolocation.getCurrentPosition(
       async (position) => {
         const newLocation = {
@@ -40,12 +48,23 @@ export const useLocation = () => {
           accuracy: position.coords.accuracy,
         };
         
-        console.log('High-accuracy GPS location:', newLocation);
-        setLocation(newLocation);
+        // Verify location is within reasonable Yanbu bounds
+        const isInYanbu = 
+          newLocation.latitude >= 23.9 && newLocation.latitude <= 24.3 &&
+          newLocation.longitude >= 37.9 && newLocation.longitude <= 38.4;
+
+        if (!isInYanbu) {
+          console.log('Location outside Yanbu, using Yanbu center');
+          setLocation(yanbuCenter);
+        } else {
+          console.log('GPS location in Yanbu:', newLocation);
+          setLocation(newLocation);
+        }
+        
         setError(null);
         setLoading(false);
 
-        // Update location in database for real-time tracking
+        // Update location in database
         if (user) {
           try {
             await supabase
@@ -64,21 +83,15 @@ export const useLocation = () => {
         }
       },
       (error) => {
-        console.error('High-accuracy geolocation error:', error);
-        setError(`GPS access required for proximity features: ${error.message}`);
+        console.error('GPS error, using Yanbu center:', error);
+        setError(`Using default Yanbu location: ${error.message}`);
+        setLocation(yanbuCenter);
         setLoading(false);
-        
-        // Set default Yanbu location if GPS fails
-        setLocation({
-          latitude: 24.0892,
-          longitude: 38.0618,
-          accuracy: 1000
-        });
       },
       highAccuracyOptions
     );
 
-    // Set up continuous real-time tracking with maximum accuracy
+    // Set up continuous tracking for better accuracy
     const watchId = navigator.geolocation.watchPosition(
       async (position) => {
         const newLocation = {
@@ -87,24 +100,30 @@ export const useLocation = () => {
           accuracy: position.coords.accuracy,
         };
         
-        console.log('Real-time GPS update:', newLocation);
-        setLocation(newLocation);
-        setError(null);
+        // Verify location is within Yanbu bounds
+        const isInYanbu = 
+          newLocation.latitude >= 23.9 && newLocation.latitude <= 24.3 &&
+          newLocation.longitude >= 37.9 && newLocation.longitude <= 38.4;
 
-        // Update location in database for live tracking
-        if (user) {
-          try {
-            await supabase
-              .from('user_locations')
-              .upsert({
-                user_id: user.id,
-                latitude: newLocation.latitude,
-                longitude: newLocation.longitude,
-                accuracy: newLocation.accuracy,
-                updated_at: new Date().toISOString(),
-              });
-          } catch (error) {
-            console.error('Error updating real-time location:', error);
+        if (isInYanbu && newLocation.accuracy < 100) { // Only update if accurate and in Yanbu
+          setLocation(newLocation);
+          setError(null);
+
+          // Update database with real location
+          if (user) {
+            try {
+              await supabase
+                .from('user_locations')
+                .upsert({
+                  user_id: user.id,
+                  latitude: newLocation.latitude,
+                  longitude: newLocation.longitude,
+                  accuracy: newLocation.accuracy,
+                  updated_at: new Date().toISOString(),
+                });
+            } catch (error) {
+              console.error('Error updating real-time location:', error);
+            }
           }
         }
       },
@@ -114,12 +133,12 @@ export const useLocation = () => {
       },
       {
         enableHighAccuracy: true,
-        timeout: 15000,
-        maximumAge: 2000, // Fresh location every 2 seconds for maximum accuracy
+        timeout: 20000,
+        maximumAge: 10000, // Allow 10 second old positions for stability
       }
     );
 
-    console.log('GPS watch started with ID:', watchId);
+    console.log('GPS watch started for Yanbu area with ID:', watchId);
 
     // Cleanup function
     return () => {
@@ -140,7 +159,7 @@ export const useLocation = () => {
       Math.sin(dLon/2) * Math.sin(dLon/2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
     const distance = R * c * 1000; // Distance in meters
-    return Math.round(distance); // Round to nearest meter for accuracy
+    return Math.round(distance);
   };
 
   return {

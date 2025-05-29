@@ -27,9 +27,7 @@ interface Event {
     latitude: number;
     longitude: number;
   } | null;
-  organizer?: {
-    nickname: string;
-  } | null;
+  organizer_name?: string;
   user_attending?: boolean;
 }
 
@@ -62,12 +60,12 @@ const ModernEvents = () => {
 
   const fetchEvents = async () => {
     try {
+      // Fetch events with place information
       let query = supabase
         .from('events')
         .select(`
           *,
-          place:places(name, latitude, longitude),
-          organizer:profiles!events_organizer_id_fkey(nickname)
+          place:places(name, latitude, longitude)
         `)
         .eq('is_active', true)
         .gte('start_time', new Date().toISOString())
@@ -75,39 +73,51 @@ const ModernEvents = () => {
 
       const { data: eventsData, error: eventsError } = await query;
 
-      if (eventsError) throw eventsError;
+      if (eventsError) {
+        console.error('Events query error:', eventsError);
+        throw eventsError;
+      }
 
-      // Check if user is attending each event
-      if (user && eventsData) {
-        const eventIds = eventsData.map(event => event.id);
-        const { data: attendeeData } = await supabase
-          .from('event_attendees')
-          .select('event_id')
-          .eq('user_id', user.id)
-          .in('event_id', eventIds);
+      // Get organizer profiles separately
+      if (eventsData && eventsData.length > 0) {
+        const organizerIds = eventsData.map(event => event.organizer_id);
+        const { data: profilesData } = await supabase
+          .from('profiles')
+          .select('id, nickname')
+          .in('id', organizerIds);
+
+        // Check if user is attending each event
+        let attendeeData = null;
+        if (user) {
+          const eventIds = eventsData.map(event => event.id);
+          const { data: attendeeResult } = await supabase
+            .from('event_attendees')
+            .select('event_id')
+            .eq('user_id', user.id)
+            .in('event_id', eventIds);
+          attendeeData = attendeeResult;
+        }
 
         const attendingEventIds = new Set(attendeeData?.map(a => a.event_id) || []);
         
-        const eventsWithAttendance = eventsData.map(event => ({
-          ...event,
-          current_attendees: event.current_attendees || 0,
-          organizer: Array.isArray(event.organizer) ? event.organizer[0] : event.organizer,
-          user_attending: attendingEventIds.has(event.id)
-        })) as Event[];
+        const eventsWithDetails = eventsData.map(event => {
+          const organizer = profilesData?.find(p => p.id === event.organizer_id);
+          return {
+            ...event,
+            current_attendees: event.current_attendees || 0,
+            organizer_name: organizer?.nickname || 'Unknown',
+            user_attending: attendingEventIds.has(event.id)
+          };
+        }) as Event[];
 
-        setEvents(eventsWithAttendance);
-      } else if (eventsData) {
-        const processedEvents = eventsData.map(event => ({
-          ...event,
-          current_attendees: event.current_attendees || 0,
-          organizer: Array.isArray(event.organizer) ? event.organizer[0] : event.organizer,
-        })) as Event[];
-
-        setEvents(processedEvents);
+        setEvents(eventsWithDetails);
+      } else {
+        setEvents([]);
       }
     } catch (error) {
       console.error('Error fetching events:', error);
       toast.error('Failed to load events');
+      setEvents([]);
     } finally {
       setLoading(false);
     }
@@ -248,9 +258,9 @@ const ModernEvents = () => {
                           )}
                         </div>
                         
-                        {event.organizer && (
+                        {event.organizer_name && (
                           <div className="text-sm text-muted-foreground">
-                            by {event.organizer.nickname}
+                            by {event.organizer_name}
                           </div>
                         )}
                       </div>
@@ -346,9 +356,9 @@ const ModernEvents = () => {
                   </span>
                 </div>
                 
-                {selectedEvent.organizer && (
+                {selectedEvent.organizer_name && (
                   <div className="text-muted-foreground">
-                    Organized by {selectedEvent.organizer.nickname}
+                    Organized by {selectedEvent.organizer_name}
                   </div>
                 )}
               </div>
