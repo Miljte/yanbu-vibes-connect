@@ -22,30 +22,67 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Get initial session
-    supabase.auth.getSession().then(({ data: { session } }) => {
-      setSession(session);
-      setUser(session?.user || null);
-      if (session?.user) {
-        fetchUserRole(session.user.id);
+    let isMounted = true;
+
+    const initializeAuth = async () => {
+      try {
+        console.log('Initializing auth...');
+        
+        // Get initial session
+        const { data: { session: initialSession }, error } = await supabase.auth.getSession();
+        
+        if (error) {
+          console.error('Error getting session:', error);
+          if (isMounted) {
+            setLoading(false);
+          }
+          return;
+        }
+
+        if (isMounted) {
+          setSession(initialSession);
+          setUser(initialSession?.user || null);
+          
+          if (initialSession?.user) {
+            await fetchUserRole(initialSession.user.id);
+          } else {
+            setUserRole(null);
+          }
+          
+          setLoading(false);
+        }
+      } catch (error) {
+        console.error('Auth initialization error:', error);
+        if (isMounted) {
+          setLoading(false);
+        }
       }
-      setLoading(false);
-    });
+    };
+
+    initializeAuth();
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-      setSession(session);
-      setUser(session?.user || null);
+      console.log('Auth state changed:', event, session?.user?.id);
       
-      if (session?.user) {
-        await fetchUserRole(session.user.id);
-      } else {
-        setUserRole(null);
+      if (isMounted) {
+        setSession(session);
+        setUser(session?.user || null);
+        
+        if (session?.user) {
+          await fetchUserRole(session.user.id);
+        } else {
+          setUserRole(null);
+        }
+        
+        setLoading(false);
       }
-      setLoading(false);
     });
 
-    return () => subscription.unsubscribe();
+    return () => {
+      isMounted = false;
+      subscription.unsubscribe();
+    };
   }, []);
 
   const fetchUserRole = async (userId: string) => {
@@ -56,8 +93,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       const { data, error } = await supabase
         .from('user_roles')
         .select('role')
-        .eq('user_id', userId)
-        .order('role', { ascending: false }); // This will put 'user' before 'admin' alphabetically
+        .eq('user_id', userId);
       
       if (error) {
         console.error('Error fetching user role:', error);
@@ -76,7 +112,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
       // Prioritize roles: admin > merchant > user
       const rolePriority = { 'admin': 3, 'merchant': 2, 'user': 1 };
       const highestRole = data.reduce((highest, current) => {
-        return (rolePriority[current.role] || 0) > (rolePriority[highest.role] || 0) ? current : highest;
+        return (rolePriority[current.role as keyof typeof rolePriority] || 0) > (rolePriority[highest.role as keyof typeof rolePriority] || 0) ? current : highest;
       });
       
       console.log('Setting user role to:', highestRole.role);
