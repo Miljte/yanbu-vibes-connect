@@ -153,11 +153,17 @@ export const useRealtimeLocation = () => {
       console.log('🌍 Starting HIGH-ACCURACY GPS tracking for user:', user.id);
       setIsTracking(true);
 
-      // High accuracy options - prioritize accuracy over speed
-      const options = {
-        enableHighAccuracy: true, // Force GPS usage
-        timeout: 15000, // Longer timeout for GPS lock
-        maximumAge: 0, // Don't accept cached positions
+      // Progressive accuracy strategy
+      const highAccuracyOptions = {
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 0,
+      };
+
+      const lowAccuracyOptions = {
+        enableHighAccuracy: false,
+        timeout: 8000,
+        maximumAge: 60000, // Accept 1-minute old positions
       };
 
       const updateLocation = async (position: GeolocationPosition) => {
@@ -221,7 +227,7 @@ export const useRealtimeLocation = () => {
       };
 
       const handleError = (error: GeolocationPositionError) => {
-        console.error('❌ HIGH-ACCURACY GPS error:', error.message);
+        console.error('❌ GPS error:', error.message);
         
         let errorMessage = 'GPS error: ';
         switch (error.code) {
@@ -232,8 +238,17 @@ export const useRealtimeLocation = () => {
             errorMessage += 'GPS signal unavailable. Move to open area.';
             break;
           case error.TIMEOUT:
-            errorMessage += 'GPS timeout. Trying again...';
-            break;
+            errorMessage += 'GPS timeout. Trying fallback method...';
+            // Try low accuracy fallback
+            navigator.geolocation.getCurrentPosition(
+              updateLocation,
+              (fallbackError) => {
+                console.error('❌ Fallback also failed:', fallbackError);
+                setError('Location unavailable. Please check GPS and try again.');
+              },
+              lowAccuracyOptions
+            );
+            return;
           default:
             errorMessage += 'Location error occurred.';
             break;
@@ -241,18 +256,18 @@ export const useRealtimeLocation = () => {
         setError(errorMessage);
       };
 
-      // Get immediate high-accuracy position
+      // Get immediate high-accuracy position with fallback
       navigator.geolocation.getCurrentPosition(
         updateLocation,
         handleError,
-        options
+        highAccuracyOptions
       );
 
       // Start continuous high-accuracy tracking
       watchId = navigator.geolocation.watchPosition(
         updateLocation,
         handleError,
-        options
+        highAccuracyOptions
       );
 
       // Reduced update frequency to every 60 seconds for battery optimization

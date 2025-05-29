@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Wrapper, Status } from '@googlemaps/react-wrapper';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { MapPin, Lock, MessageSquare, Navigation, Languages, AlertTriangle } from 'lucide-react';
+import { MapPin, Lock, MessageSquare, Navigation, Languages, AlertTriangle, Trash2 } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { useLocation } from '@/hooks/useLocation';
 import { useYanbuLocationCheck } from '@/hooks/useYanbuLocationCheck';
@@ -14,6 +14,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import CategoryFilter from './CategoryFilter';
 import LocationRestriction from './LocationRestriction';
+import { cleanupMapData, verifyMerchantPlaces } from '@/utils/mapCleanup';
 
 interface Place {
   id: string;
@@ -239,12 +240,13 @@ const ModernMap = () => {
   const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
   const [places, setPlaces] = useState<Place[]>([]);
   const [selectedCategory, setSelectedCategory] = useState('all');
+  const [isCleaningUp, setIsCleaningUp] = useState(false);
   
   // Call ALL hooks first, before any conditional logic
   const { location, calculateDistance } = useLocation();
   const { isInYanbu, isChecking, recheckLocation } = useYanbuLocationCheck();
   const { user } = useAuth();
-  const { userRole } = useRoles();
+  const { userRole, isAdmin } = useRoles();
   const { t, language, setLanguage, isRTL } = useLocalization();
 
   const googleMapsApiKey = 'AIzaSyCnHJ_b9LBpxdSOdE8jmVMmJd6Vdmm5u8o';
@@ -310,6 +312,31 @@ const ModernMap = () => {
     } catch (error) {
       console.error('❌ Error fetching verified merchant places:', error);
       toast.error('Failed to load merchant stores');
+    }
+  };
+
+  const handleMapCleanup = async () => {
+    if (!isAdmin) {
+      toast.error('Only admins can perform map cleanup');
+      return;
+    }
+
+    setIsCleaningUp(true);
+    try {
+      const result = await cleanupMapData();
+      
+      if (result.success) {
+        toast.success(`✅ Map cleanup complete! Removed ${result.removed} invalid places, ${result.remaining} merchant places remaining`);
+        // Refresh the map data
+        await fetchVerifiedMerchantPlaces();
+      } else {
+        toast.error(`❌ Cleanup failed: ${result.error}`);
+      }
+    } catch (error) {
+      console.error('❌ Cleanup error:', error);
+      toast.error('Map cleanup failed');
+    } finally {
+      setIsCleaningUp(false);
     }
   };
 
@@ -391,6 +418,17 @@ const ModernMap = () => {
           <Languages className="w-4 h-4" />
           <span className="ml-1 text-xs">{language.toUpperCase()}</span>
         </Button>
+        {isAdmin && (
+          <Button
+            onClick={handleMapCleanup}
+            disabled={isCleaningUp}
+            size="sm"
+            className="bg-red-600 hover:bg-red-700 text-white shadow-lg border"
+          >
+            <Trash2 className="w-4 h-4" />
+            {isCleaningUp ? '...' : 'Clean'}
+          </Button>
+        )}
       </div>
 
       <Wrapper apiKey={googleMapsApiKey} render={render} libraries={['places']}>
