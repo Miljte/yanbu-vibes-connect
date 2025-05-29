@@ -70,10 +70,10 @@ const SuperAdminDashboard = () => {
     try {
       console.log('📊 Fetching ALL user data from database...');
       
-      // Fetch ALL profiles from the database - NO FILTERS
+      // Fetch ALL profiles from the database - NO FILTERS AT ALL
       const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
-        .select('id, nickname, created_at')
+        .select('*')
         .order('created_at', { ascending: false });
 
       if (profilesError) {
@@ -82,44 +82,51 @@ const SuperAdminDashboard = () => {
       }
 
       console.log(`✅ PROFILES FOUND: ${profilesData?.length || 0} total users in database`);
+      console.log('📋 Profile data sample:', profilesData?.slice(0, 3));
 
-      // Fetch user roles
+      // Fetch ALL user roles - NO FILTERS
       const { data: rolesData, error: rolesError } = await supabase
         .from('user_roles')
-        .select('user_id, role');
+        .select('*');
 
       if (rolesError) {
         console.error('❌ Error fetching roles:', rolesError);
       }
 
       console.log(`✅ ROLES FOUND: ${rolesData?.length || 0} role assignments`);
+      console.log('📋 Roles data sample:', rolesData?.slice(0, 3));
 
-      // Fetch user locations for online status (last 10 minutes = online)
+      // Fetch ALL user locations for online status (last 10 minutes = online)
       const { data: locationsData, error: locationsError } = await supabase
         .from('user_locations')
-        .select('user_id, latitude, longitude, updated_at');
+        .select('*');
 
       if (locationsError) {
         console.error('❌ Error fetching locations:', locationsError);
       }
 
       console.log(`✅ LOCATIONS FOUND: ${locationsData?.length || 0} location records`);
+      console.log('📋 Location data sample:', locationsData?.slice(0, 3));
 
-      // Fetch ban status
+      // Fetch ban status for all users
       const { data: bansData } = await supabase
         .from('user_bans')
         .select('user_id')
         .eq('is_active', true);
 
-      // Fetch mute status
+      // Fetch mute status for all users
       const { data: mutesData } = await supabase
         .from('user_mutes')
         .select('user_id')
         .eq('is_active', true);
 
+      console.log(`✅ BANS FOUND: ${bansData?.length || 0} banned users`);
+      console.log(`✅ MUTES FOUND: ${mutesData?.length || 0} muted users`);
+
       // Get auth users to get email addresses (for admin viewing)
       let authUsers: any[] = [];
       try {
+        // Try to get auth users - this might not work if not admin
         const { data: authData } = await supabase.auth.admin.listUsers();
         authUsers = authData?.users || [];
         console.log(`✅ AUTH USERS FOUND: ${authUsers.length} auth records`);
@@ -128,7 +135,7 @@ const SuperAdminDashboard = () => {
       }
 
       // Combine all user data with DETAILED LOGGING
-      const usersWithStatus: LiveUser[] = profilesData?.map(profile => {
+      const usersWithStatus: LiveUser[] = (profilesData || []).map(profile => {
         const userRole = rolesData?.find(role => role.user_id === profile.id);
         const location = locationsData?.find(loc => loc.user_id === profile.id);
         const authUser = authUsers.find(au => au.id === profile.id);
@@ -139,7 +146,14 @@ const SuperAdminDashboard = () => {
         const lastSeen = location?.updated_at || profile.created_at;
         const isOnline = lastSeen ? new Date(lastSeen) > new Date(Date.now() - 10 * 60 * 1000) : false;
 
-        console.log(`👤 User ${profile.nickname}: role=${userRole?.role || 'user'}, online=${isOnline}, lastSeen=${lastSeen}`);
+        console.log(`👤 Processing User ${profile.nickname}:`);
+        console.log(`  - ID: ${profile.id}`);
+        console.log(`  - Role: ${userRole?.role || 'user'}`);
+        console.log(`  - Online: ${isOnline}`);
+        console.log(`  - Last Seen: ${lastSeen}`);
+        console.log(`  - Email: ${authUser?.email || 'N/A'}`);
+        console.log(`  - Banned: ${isBanned}`);
+        console.log(`  - Muted: ${isMuted}`);
 
         return {
           id: profile.id,
@@ -154,7 +168,7 @@ const SuperAdminDashboard = () => {
           is_banned: isBanned,
           is_muted: isMuted
         };
-      }) || [];
+      });
 
       console.log(`📊 FINAL PROCESSING RESULT:`);
       console.log(`- Total users processed: ${usersWithStatus.length}`);
@@ -164,7 +178,9 @@ const SuperAdminDashboard = () => {
       console.log(`- Merchants: ${usersWithStatus.filter(u => u.role === 'merchant').length}`);
       console.log(`- Regular users: ${usersWithStatus.filter(u => u.role === 'user').length}`);
       
+      // CRITICAL: Ensure we're setting the state with ALL users
       setLiveUsers(usersWithStatus);
+      console.log(`✅ STATE UPDATED: Set ${usersWithStatus.length} users in component state`);
 
       // Fetch recent messages with user and place info
       const { data: messagesData } = await supabase
@@ -390,6 +406,26 @@ const SuperAdminDashboard = () => {
     msg.place_name.toLowerCase().includes(searchFilter.toLowerCase())
   );
 
+  // Helper function to check if current user can promote another user
+  const canPromoteUser = (targetUser: LiveUser, targetRole: string) => {
+    // Don't show promotion buttons for the current admin user
+    if (targetUser.id === user?.id) {
+      return false;
+    }
+    
+    // Don't promote someone who already has that role
+    if (targetUser.role === targetRole) {
+      return false;
+    }
+    
+    // Don't allow promoting existing admins
+    if (targetUser.role === 'admin') {
+      return false;
+    }
+    
+    return true;
+  };
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -409,6 +445,9 @@ const SuperAdminDashboard = () => {
           </p>
           <p className="text-xs text-blue-600 mt-1">
             🔄 Auto-refresh: Every 30s • Real-time subscriptions active
+          </p>
+          <p className="text-xs text-purple-600 mt-1">
+            📊 Showing {filteredUsers.length} of {liveUsers.length} users in list
           </p>
         </div>
 
@@ -575,6 +614,7 @@ const SuperAdminDashboard = () => {
                             <Badge variant="outline">{userData.role}</Badge>
                             {userData.is_banned && <Badge variant="destructive" className="text-xs">Banned</Badge>}
                             {userData.is_muted && <Badge variant="secondary" className="text-xs">Muted</Badge>}
+                            {userData.id === user?.id && <Badge variant="default" className="text-xs bg-yellow-600">You</Badge>}
                           </div>
                           <div className="text-muted-foreground text-sm">
                             {userData.email && <span>{userData.email} • </span>}
@@ -590,36 +630,39 @@ const SuperAdminDashboard = () => {
                         </div>
                       </div>
                       <div className="flex items-center space-x-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => promoteUser(userData.id, 'merchant')}
-                          disabled={userData.role === 'admin'}
-                          className="text-xs"
-                        >
-                          <UserCheck className="w-3 h-3 mr-1" />
-                          Merchant
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          onClick={() => promoteUser(userData.id, 'admin')}
-                          disabled={userData.role === 'admin'}
-                          className="text-xs"
-                        >
-                          <Shield className="w-3 h-3 mr-1" />
-                          Admin
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="destructive"
-                          onClick={() => banUser(userData.id)}
-                          disabled={userData.is_banned || userData.role === 'admin'}
-                          className="text-xs"
-                        >
-                          <Ban className="w-3 h-3 mr-1" />
-                          Ban
-                        </Button>
+                        {canPromoteUser(userData, 'merchant') && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => promoteUser(userData.id, 'merchant')}
+                            className="text-xs"
+                          >
+                            <UserCheck className="w-3 h-3 mr-1" />
+                            Merchant
+                          </Button>
+                        )}
+                        {canPromoteUser(userData, 'admin') && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            onClick={() => promoteUser(userData.id, 'admin')}
+                            className="text-xs"
+                          >
+                            <Shield className="w-3 h-3 mr-1" />
+                            Admin
+                          </Button>
+                        )}
+                        {userData.id !== user?.id && !userData.is_banned && userData.role !== 'admin' && (
+                          <Button
+                            size="sm"
+                            variant="destructive"
+                            onClick={() => banUser(userData.id)}
+                            className="text-xs"
+                          >
+                            <Ban className="w-3 h-3 mr-1" />
+                            Ban
+                          </Button>
+                        )}
                       </div>
                     </div>
                   ))}
