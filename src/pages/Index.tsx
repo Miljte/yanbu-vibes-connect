@@ -30,10 +30,6 @@ const Index = () => {
     return <AuthModal isOpen={true} onClose={() => {}} />;
   }
 
-  const handleNavigate = (section: string) => {
-    setCurrentView(section);
-  };
-
   const renderCurrentView = () => {
     switch (currentView) {
       case 'map':
@@ -41,7 +37,7 @@ const Index = () => {
       case 'events':
         return <ModernEvents />;
       case 'profile':
-        return <ModernProfile onNavigate={handleNavigate} />;
+        return <ModernProfile />;
       case 'settings':
         return <ModernSettings />;
       case 'merchant':
