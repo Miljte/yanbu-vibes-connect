@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Wrapper, Status } from '@googlemaps/react-wrapper';
 import { Card, CardContent } from '@/components/ui/card';
@@ -41,103 +42,116 @@ const MapComponent: React.FC<MapComponentProps> = ({
   const [map, setMap] = useState<google.maps.Map>();
   const [markers, setMarkers] = useState<google.maps.Marker[]>([]);
 
+  console.log('MapComponent rendering - center:', center, 'zoom:', zoom);
+
   useEffect(() => {
+    console.log('MapComponent useEffect - ref.current:', !!ref.current, 'map:', !!map);
+    
     if (ref.current && !map) {
-      const newMap = new google.maps.Map(ref.current, {
-        center,
-        zoom,
-        styles: isDark ? [
-          { elementType: "geometry", stylers: [{ color: "#242f3e" }] },
-          { elementType: "labels.text.stroke", stylers: [{ color: "#242f3e" }] },
-          { elementType: "labels.text.fill", stylers: [{ color: "#746855" }] },
-          {
-            featureType: "administrative.locality",
-            elementType: "labels.text.fill",
-            stylers: [{ color: "#d59563" }],
-          },
-          {
-            featureType: "poi",
-            elementType: "labels.text.fill",
-            stylers: [{ color: "#d59563" }],
-          },
-          {
-            featureType: "poi.park",
-            elementType: "geometry",
-            stylers: [{ color: "#263c3f" }],
-          },
-          {
-            featureType: "poi.park",
-            elementType: "labels.text.fill",
-            stylers: [{ color: "#6b9a76" }],
-          },
-          {
-            featureType: "road",
-            elementType: "geometry",
-            stylers: [{ color: "#38414e" }],
-          },
-          {
-            featureType: "road",
-            elementType: "geometry.stroke",
-            stylers: [{ color: "#212a37" }],
-          },
-          {
-            featureType: "road",
-            elementType: "labels.text.fill",
-            stylers: [{ color: "#9ca5b3" }],
-          },
-          {
-            featureType: "road.highway",
-            elementType: "geometry",
-            stylers: [{ color: "#746855" }],
-          },
-          {
-            featureType: "road.highway",
-            elementType: "geometry.stroke",
-            stylers: [{ color: "#1f2835" }],
-          },
-          {
-            featureType: "road.highway",
-            elementType: "labels.text.fill",
-            stylers: [{ color: "#f3d19c" }],
-          },
-          {
-            featureType: "transit",
-            elementType: "geometry",
-            stylers: [{ color: "#2f3948" }],
-          },
-          {
-            featureType: "transit.station",
-            elementType: "labels.text.fill",
-            stylers: [{ color: "#d59563" }],
-          },
-          {
-            featureType: "water",
-            elementType: "geometry",
-            stylers: [{ color: "#17263c" }],
-          },
-          {
-            featureType: "water",
-            elementType: "labels.text.fill",
-            stylers: [{ color: "#515c6d" }],
-          },
-          {
-            featureType: "water",
-            elementType: "labels.text.stroke",
-            stylers: [{ color: "#17263c" }],
-          },
-        ] : [],
-        disableDefaultUI: false,
-        zoomControl: true,
-        streetViewControl: false,
-        fullscreenControl: false,
-      });
-      setMap(newMap);
+      console.log('Creating new Google Map instance');
+      try {
+        const newMap = new google.maps.Map(ref.current, {
+          center,
+          zoom,
+          styles: isDark ? [
+            { elementType: "geometry", stylers: [{ color: "#242f3e" }] },
+            { elementType: "labels.text.stroke", stylers: [{ color: "#242f3e" }] },
+            { elementType: "labels.text.fill", stylers: [{ color: "#746855" }] },
+            {
+              featureType: "administrative.locality",
+              elementType: "labels.text.fill",
+              stylers: [{ color: "#d59563" }],
+            },
+            {
+              featureType: "poi",
+              elementType: "labels.text.fill",
+              stylers: [{ color: "#d59563" }],
+            },
+            {
+              featureType: "poi.park",
+              elementType: "geometry",
+              stylers: [{ color: "#263c3f" }],
+            },
+            {
+              featureType: "poi.park",
+              elementType: "labels.text.fill",
+              stylers: [{ color: "#6b9a76" }],
+            },
+            {
+              featureType: "road",
+              elementType: "geometry",
+              stylers: [{ color: "#38414e" }],
+            },
+            {
+              featureType: "road",
+              elementType: "geometry.stroke",
+              stylers: [{ color: "#212a37" }],
+            },
+            {
+              featureType: "road",
+              elementType: "labels.text.fill",
+              stylers: [{ color: "#9ca5b3" }],
+            },
+            {
+              featureType: "road.highway",
+              elementType: "geometry",
+              stylers: [{ color: "#746855" }],
+            },
+            {
+              featureType: "road.highway",
+              elementType: "geometry.stroke",
+              stylers: [{ color: "#1f2835" }],
+            },
+            {
+              featureType: "road.highway",
+              elementType: "labels.text.fill",
+              stylers: [{ color: "#f3d19c" }],
+            },
+            {
+              featureType: "transit",
+              elementType: "geometry",
+              stylers: [{ color: "#2f3948" }],
+            },
+            {
+              featureType: "transit.station",
+              elementType: "labels.text.fill",
+              stylers: [{ color: "#d59563" }],
+            },
+            {
+              featureType: "water",
+              elementType: "geometry",
+              stylers: [{ color: "#17263c" }],
+            },
+            {
+              featureType: "water",
+              elementType: "labels.text.fill",
+              stylers: [{ color: "#515c6d" }],
+            },
+            {
+              featureType: "water",
+              elementType: "labels.text.stroke",
+              stylers: [{ color: "#17263c" }],
+            },
+          ] : [],
+          disableDefaultUI: false,
+          zoomControl: true,
+          streetViewControl: false,
+          fullscreenControl: false,
+        });
+        
+        console.log('Google Map created successfully');
+        setMap(newMap);
+      } catch (error) {
+        console.error('Error creating Google Map:', error);
+        toast.error('Failed to initialize Google Maps');
+      }
     }
   }, [ref, map, center, zoom, isDark]);
 
   // Update map style when theme changes
   useEffect(() => {
     if (map) {
+      console.log('Updating map style for theme:', isDark ? 'dark' : 'light');
       map.setOptions({
         styles: isDark ? [
           { elementType: "geometry", stylers: [{ color: "#242f3e" }] },
@@ -225,7 +239,12 @@ const MapComponent: React.FC<MapComponentProps> = ({
 
   // Add place markers
   useEffect(() => {
-    if (!map) return;
+    if (!map) {
+      console.log('Map not ready for markers');
+      return;
+    }
+
+    console.log('Adding markers for', places.length, 'places');
 
     // Clear existing markers
     markers.forEach(marker => marker.setMap(null));
@@ -234,6 +253,7 @@ const MapComponent: React.FC<MapComponentProps> = ({
 
     // Add user location marker
     if (userLocation) {
+      console.log('Adding user location marker');
       const userMarker = new google.maps.Marker({
         position: { lat: userLocation.latitude, lng: userLocation.longitude },
         map,
@@ -255,6 +275,8 @@ const MapComponent: React.FC<MapComponentProps> = ({
       const color = place.crowd_level === 'low' ? '#10b981' : 
                    place.crowd_level === 'medium' ? '#f59e0b' : '#ef4444';
       
+      console.log('Adding marker for place:', place.name);
+      
       const marker = new google.maps.Marker({
         position: { lat: place.latitude, lng: place.longitude },
         map,
@@ -270,6 +292,7 @@ const MapComponent: React.FC<MapComponentProps> = ({
       });
 
       marker.addListener('click', () => {
+        console.log('Marker clicked:', place.name);
         onPlaceClick(place);
         map.panTo({ lat: place.latitude, lng: place.longitude });
       });
@@ -278,12 +301,15 @@ const MapComponent: React.FC<MapComponentProps> = ({
     });
 
     setMarkers(newMarkers);
+    console.log('Added', newMarkers.length, 'markers to map');
   }, [map, places, userLocation, onPlaceClick]);
 
-  return <div ref={ref} className="w-full h-full" />;
+  return <div ref={ref} className="w-full h-full" style={{ minHeight: '400px' }} />;
 };
 
 const render = (status: Status) => {
+  console.log('Google Maps wrapper status:', status);
+  
   switch (status) {
     case Status.LOADING:
       return (
@@ -300,6 +326,9 @@ const render = (status: Status) => {
                 <h2 className="text-2xl font-bold text-foreground mb-4">Google Maps Error</h2>
                 <p className="text-muted-foreground mb-4">
                   Failed to load Google Maps. Please check your API key and try again.
+                </p>
+                <p className="text-sm text-muted-foreground">
+                  Check the browser console for more details about the error.
                 </p>
               </CardContent>
             </Card>
@@ -319,6 +348,9 @@ const YanbuGoogleMap = () => {
   // Use the provided API key
   const googleMapsApiKey = 'AIzaSyCnHJ_b9LBpxdSOdE8jmVMmJd6Vdmm5u8o';
 
+  console.log('YanbuGoogleMap rendering - API key:', googleMapsApiKey ? 'present' : 'missing');
+  console.log('User location:', location);
+
   // Yanbu coordinates
   const yanbuCenter: google.maps.LatLngLiteral = { lat: 24.0892, lng: 38.0618 };
 
@@ -332,6 +364,7 @@ const YanbuGoogleMap = () => {
   ];
 
   const handleFindMe = () => {
+    console.log('Find me clicked - location:', location);
     if (location) {
       toast.success('Centered on your location');
     } else {
@@ -347,6 +380,24 @@ const YanbuGoogleMap = () => {
       default: return 'bg-gray-500';
     }
   };
+
+  if (!googleMapsApiKey) {
+    console.error('Google Maps API key is missing');
+    return (
+      <div className="min-h-screen bg-background p-4 pb-20">
+        <div className="container mx-auto max-w-2xl">
+          <Card className="bg-card border">
+            <CardContent className="p-6">
+              <h2 className="text-2xl font-bold text-foreground mb-4">Google Maps API Key Missing</h2>
+              <p className="text-muted-foreground mb-4">
+                Google Maps API key is not configured. Please contact support.
+              </p>
+            </CardContent>
+          </Card>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-background pb-20">
@@ -371,16 +422,18 @@ const YanbuGoogleMap = () => {
       </div>
 
       {/* Map Container */}
-      <Wrapper apiKey={googleMapsApiKey} render={render} libraries={['places']}>
-        <MapComponent
-          center={location ? { lat: location.latitude, lng: location.longitude } : yanbuCenter}
-          zoom={13}
-          places={places}
-          isDark={isDark}
-          userLocation={location}
-          onPlaceClick={setSelectedPlace}
-        />
-      </Wrapper>
+      <div className="h-screen">
+        <Wrapper apiKey={googleMapsApiKey} render={render} libraries={['places']}>
+          <MapComponent
+            center={location ? { lat: location.latitude, lng: location.longitude } : yanbuCenter}
+            zoom={13}
+            places={places}
+            isDark={isDark}
+            userLocation={location}
+            onPlaceClick={setSelectedPlace}
+          />
+        </Wrapper>
+      </div>
 
       {/* Selected Place Info */}
       {selectedPlace && (
