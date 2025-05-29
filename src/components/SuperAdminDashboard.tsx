@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Eye, Shield, Users, MapPin, MessageSquare, BarChart3, Ban, UserCheck, AlertTriangle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -68,9 +67,29 @@ const SuperAdminDashboard = () => {
 
   const fetchLiveData = async () => {
     try {
-      console.log('📊 Fetching ALL user data from database...');
+      console.log('📊 🚨 CRITICAL: Fetching ALL user data - checking multiple sources...');
       
-      // Fetch ALL profiles from the database - NO FILTERS AT ALL
+      // 🚨 STEP 1: Fetch ALL auth users using service role (admin function)
+      let authUsers: any[] = [];
+      try {
+        console.log('🔍 Attempting to fetch auth users via admin API...');
+        const { data: authResponse, error: authError } = await supabase.auth.admin.listUsers();
+        
+        if (authError) {
+          console.error('❌ Auth admin error:', authError);
+          console.log('⚠️ Trying alternative method - will use profiles only');
+        } else {
+          authUsers = authResponse?.users || [];
+          console.log(`✅ AUTH USERS FOUND VIA ADMIN API: ${authUsers.length}`);
+          console.log('📧 Auth user emails:', authUsers.map(u => u.email));
+        }
+      } catch (error) {
+        console.error('❌ Auth admin call failed:', error);
+        console.log('⚠️ Continuing with profiles-only approach');
+      }
+
+      // 🚨 STEP 2: Fetch ALL profiles from database - EXPANDED QUERY
+      console.log('📊 Fetching ALL profiles from database...');
       const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
         .select('*')
@@ -82,7 +101,55 @@ const SuperAdminDashboard = () => {
       }
 
       console.log(`✅ PROFILES FOUND: ${profilesData?.length || 0} total users in database`);
-      console.log('📋 Profile data sample:', profilesData?.slice(0, 3));
+      console.log('👤 Profile nicknames:', profilesData?.map(p => ({ id: p.id, nickname: p.nickname })));
+
+      // 🚨 STEP 3: Cross-reference auth users with profiles
+      console.log('🔄 Cross-referencing auth users with profiles...');
+      
+      // Create a comprehensive user list
+      const allUserIds = new Set([
+        ...authUsers.map(u => u.id),
+        ...(profilesData || []).map(p => p.id)
+      ]);
+      
+      console.log(`🔍 TOTAL UNIQUE USER IDs FOUND: ${allUserIds.size}`);
+      console.log('📝 All User IDs:', Array.from(allUserIds));
+
+      // 🚨 STEP 4: For any auth users without profiles, create missing profile data
+      for (const authUser of authUsers) {
+        const hasProfile = profilesData?.some(p => p.id === authUser.id);
+        if (!hasProfile) {
+          console.log(`⚠️ Missing profile for auth user: ${authUser.email} (${authUser.id})`);
+          console.log('🔧 Creating missing profile...');
+          
+          try {
+            const { error: insertError } = await supabase
+              .from('profiles')
+              .insert({
+                id: authUser.id,
+                nickname: authUser.email?.split('@')[0] || `User_${authUser.id.substring(0, 8)}`,
+                created_at: authUser.created_at
+              });
+            
+            if (insertError) {
+              console.error('❌ Error creating missing profile:', insertError);
+            } else {
+              console.log('✅ Created missing profile');
+              // Refresh profiles data
+              const { data: updatedProfiles } = await supabase
+                .from('profiles')
+                .select('*')
+                .order('created_at', { ascending: false });
+              if (updatedProfiles) {
+                profilesData.length = 0;
+                profilesData.push(...updatedProfiles);
+              }
+            }
+          } catch (error) {
+            console.error('❌ Failed to create missing profile:', error);
+          }
+        }
+      }
 
       // Fetch ALL user roles - NO FILTERS
       const { data: rolesData, error: rolesError } = await supabase
@@ -94,7 +161,6 @@ const SuperAdminDashboard = () => {
       }
 
       console.log(`✅ ROLES FOUND: ${rolesData?.length || 0} role assignments`);
-      console.log('📋 Roles data sample:', rolesData?.slice(0, 3));
 
       // Fetch ALL user locations for online status (last 10 minutes = online)
       const { data: locationsData, error: locationsError } = await supabase
@@ -106,7 +172,6 @@ const SuperAdminDashboard = () => {
       }
 
       console.log(`✅ LOCATIONS FOUND: ${locationsData?.length || 0} location records`);
-      console.log('📋 Location data sample:', locationsData?.slice(0, 3));
 
       // Fetch ban status for all users
       const { data: bansData } = await supabase
@@ -123,18 +188,7 @@ const SuperAdminDashboard = () => {
       console.log(`✅ BANS FOUND: ${bansData?.length || 0} banned users`);
       console.log(`✅ MUTES FOUND: ${mutesData?.length || 0} muted users`);
 
-      // Get auth users to get email addresses (for admin viewing)
-      let authUsers: any[] = [];
-      try {
-        // Try to get auth users - this might not work if not admin
-        const { data: authData } = await supabase.auth.admin.listUsers();
-        authUsers = authData?.users || [];
-        console.log(`✅ AUTH USERS FOUND: ${authUsers.length} auth records`);
-      } catch (error) {
-        console.warn('⚠️ Could not fetch auth users (admin only feature):', error);
-      }
-
-      // Combine all user data with DETAILED LOGGING
+      // 🚨 STEP 5: Combine ALL user data with DETAILED LOGGING
       const usersWithStatus: LiveUser[] = (profilesData || []).map(profile => {
         const userRole = rolesData?.find(role => role.user_id === profile.id);
         const location = locationsData?.find(loc => loc.user_id === profile.id);
@@ -170,13 +224,35 @@ const SuperAdminDashboard = () => {
         };
       });
 
-      console.log(`📊 FINAL PROCESSING RESULT:`);
+      // 🚨 STEP 6: Add any auth users that don't have profiles yet
+      for (const authUser of authUsers) {
+        const hasProfile = usersWithStatus.some(u => u.id === authUser.id);
+        if (!hasProfile) {
+          console.log(`⚠️ Adding auth user without profile: ${authUser.email}`);
+          usersWithStatus.push({
+            id: authUser.id,
+            nickname: authUser.email?.split('@')[0] || `User_${authUser.id.substring(0, 8)}`,
+            email: authUser.email,
+            latitude: undefined,
+            longitude: undefined,
+            last_seen: authUser.created_at,
+            role: 'user',
+            is_online: false,
+            created_at: authUser.created_at,
+            is_banned: false,
+            is_muted: false
+          });
+        }
+      }
+
+      console.log(`📊 🚨 FINAL PROCESSING RESULT:`);
       console.log(`- Total users processed: ${usersWithStatus.length}`);
       console.log(`- Online users: ${usersWithStatus.filter(u => u.is_online).length}`);
       console.log(`- Offline users: ${usersWithStatus.filter(u => !u.is_online).length}`);
       console.log(`- Admins: ${usersWithStatus.filter(u => u.role === 'admin').length}`);
       console.log(`- Merchants: ${usersWithStatus.filter(u => u.role === 'merchant').length}`);
       console.log(`- Regular users: ${usersWithStatus.filter(u => u.role === 'user').length}`);
+      console.log('📧 All user emails:', usersWithStatus.map(u => u.email).filter(Boolean));
       
       // CRITICAL: Ensure we're setting the state with ALL users
       setLiveUsers(usersWithStatus);
@@ -245,6 +321,18 @@ const SuperAdminDashboard = () => {
   const setupRealtimeSubscriptions = () => {
     console.log('🔗 Setting up real-time subscriptions...');
     
+    // Subscribe to auth schema changes (if possible)
+    const authChannel = supabase
+      .channel('admin-auth')
+      .on('postgres_changes', 
+        { event: '*', schema: 'auth', table: 'users' },
+        (payload) => {
+          console.log('🔐 Auth user change detected:', payload);
+          fetchLiveData();
+        }
+      )
+      .subscribe();
+
     // Subscribe to profile changes
     const profilesChannel = supabase
       .channel('admin-profiles')
@@ -318,6 +406,7 @@ const SuperAdminDashboard = () => {
 
     return () => {
       console.log('🛑 Cleaning up real-time subscriptions');
+      supabase.removeChannel(authChannel);
       supabase.removeChannel(profilesChannel);
       supabase.removeChannel(rolesChannel);
       supabase.removeChannel(locationsChannel);
