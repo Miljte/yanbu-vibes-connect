@@ -86,19 +86,23 @@ const MerchantEngagementPanel = () => {
       // Get all users with recent locations
       const { data: userLocations, error } = await supabase
         .from('user_locations')
-        .select(`
-          user_id,
-          latitude,
-          longitude,
-          updated_at,
-          profiles(nickname)
-        `)
+        .select('user_id, latitude, longitude, updated_at')
         .gte('updated_at', new Date(Date.now() - 30 * 60 * 1000).toISOString()); // Last 30 minutes
 
       if (error) throw error;
 
+      // Get user profiles for the location users
+      const userIds = userLocations?.map(loc => loc.user_id) || [];
+      const { data: profiles, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, nickname')
+        .in('id', userIds);
+
+      if (profilesError) throw profilesError;
+
       // Calculate distances and filter users within 2km
       const usersWithDistance = userLocations?.map(userLoc => {
+        const userProfile = profiles?.find(p => p.id === userLoc.user_id);
         const distance = calculateDistance(
           selectedStoreData.latitude,
           selectedStoreData.longitude,
@@ -108,7 +112,7 @@ const MerchantEngagementPanel = () => {
 
         return {
           id: userLoc.user_id,
-          nickname: userLoc.profiles?.nickname || 'Anonymous',
+          nickname: userProfile?.nickname || 'Anonymous',
           distance: Math.round(distance),
           last_seen: userLoc.updated_at
         };
@@ -189,17 +193,6 @@ const MerchantEngagementPanel = () => {
         });
 
       if (error) throw error;
-
-      // Log the promotion activity
-      await supabase
-        .from('merchant_promotions')
-        .insert({
-          merchant_id: user?.id,
-          place_id: selectedStore,
-          promotion_text: promotionText,
-          target_users: nearbyUsers.length,
-          sent_at: new Date().toISOString()
-        });
 
       toast.success(`🎉 Promotion sent to ${nearbyUsers.length} nearby users!`);
       setPromotionText('');
