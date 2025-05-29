@@ -93,14 +93,7 @@ const Index = () => {
         </div>
       )}
       
-      {/* Location tracking status for debugging */}
-      {process.env.NODE_ENV === 'development' && (
-        <div className="fixed top-16 left-4 bg-blue-100 border border-blue-400 text-blue-700 px-2 py-1 rounded text-xs z-40">
-          {isTracking ? '🟢 Tracking ON' : '🔴 Tracking OFF'}
-          {location && ` • ${location.latitude.toFixed(4)}, ${location.longitude.toFixed(4)}`}
-          {isInYanbu !== null && ` • ${isInYanbu ? '✅ In Yanbu' : '❌ Outside Yanbu'}`}
-        </div>
-      )}
+      {/* Removed the debug tracking status display */}
       
       {renderCurrentView()}
       <ModernBottomNavigation 

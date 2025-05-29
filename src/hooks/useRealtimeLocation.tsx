@@ -55,16 +55,34 @@ export const useRealtimeLocation = () => {
     );
   };
 
+  // Validate if new location is reasonable (prevent huge jumps)
+  const isLocationReasonable = (newLoc: LocationData, prevLoc: LocationData | null): boolean => {
+    if (!prevLoc) return true;
+    
+    const distance = calculateDistance(
+      prevLoc.latitude, prevLoc.longitude,
+      newLoc.latitude, newLoc.longitude
+    );
+    
+    // Reject locations that are more than 5km away from previous location
+    // (unless it's the first location or accuracy is very poor)
+    if (distance > 5000 && newLoc.accuracy && newLoc.accuracy < 100) {
+      console.warn('🚫 Location jump detected:', distance + 'm - rejecting');
+      return false;
+    }
+    
+    return true;
+  };
+
   const fetchNearbyPlaces = async (currentLocation: LocationData) => {
     try {
       console.log('🏪 Fetching nearby places for location:', currentLocation);
       
-      // Only fetch places that have a valid merchant_id (merchant-added stores only)
       const { data: places, error: placesError } = await supabase
         .from('places')
         .select('*')
         .eq('is_active', true)
-        .not('merchant_id', 'is', null); // Only merchant-added places
+        .not('merchant_id', 'is', null);
 
       if (placesError) {
         console.error('❌ Error fetching places:', placesError);
@@ -86,13 +104,12 @@ export const useRealtimeLocation = () => {
           distance,
           type: place.type
         };
-      }).filter(place => place.distance <= 2000) // Show places within 2km
+      }).filter(place => place.distance <= 2000)
       .sort((a, b) => a.distance - b.distance) || [];
 
       console.log(`✅ Found ${placesWithDistance.length} nearby merchant places`);
       setNearbyPlaces(placesWithDistance);
 
-      // CRITICAL: Update chat unlocked places (within 500m for chat access)
       const unlockedPlaceIds = new Set(
         placesWithDistance
           .filter(place => place.distance <= 500)
@@ -100,31 +117,24 @@ export const useRealtimeLocation = () => {
       );
       setChatUnlockedPlaces(unlockedPlaceIds);
       
-      console.log(`🔓 Chat auto-unlocked for ${unlockedPlaceIds.size} places within 500m:`, Array.from(unlockedPlaceIds));
+      console.log(`🔓 Chat auto-unlocked for ${unlockedPlaceIds.size} places within 500m`);
     } catch (error) {
       console.error('❌ Error in fetchNearbyPlaces:', error);
     }
   };
 
-  // Update user online status
   const updateOnlineStatus = async (isOnline: boolean) => {
     if (!user) return;
     
     try {
-      if (isOnline) {
-        console.log('🟢 Marking user as ONLINE');
-      } else {
+      if (!isOnline) {
         console.log('🔴 Marking user as OFFLINE');
-        const { error } = await supabase
+        await supabase
           .from('user_locations')
           .update({ 
             updated_at: new Date(Date.now() - 11 * 60 * 1000).toISOString() 
           })
           .eq('user_id', user.id);
-        
-        if (error) {
-          console.error('❌ Error marking user offline:', error);
-        }
       }
     } catch (error) {
       console.error('❌ Error updating online status:', error);
@@ -148,13 +158,13 @@ export const useRealtimeLocation = () => {
         return;
       }
 
-      console.log('🌍 Starting real-time GPS tracking for user:', user.id);
+      console.log('🌍 Starting GPS tracking for user:', user.id);
       setIsTracking(true);
 
       const options = {
         enableHighAccuracy: true,
-        timeout: 8000,
-        maximumAge: 10000,
+        timeout: 15000, // Increased timeout for better accuracy
+        maximumAge: 30000, // Allow slightly older positions for smoother updates
       };
 
       const updateLocation = async (position: GeolocationPosition) => {
@@ -164,9 +174,18 @@ export const useRealtimeLocation = () => {
           accuracy: position.coords.accuracy,
         };
 
+        // Validate location accuracy and reasonableness
+        if (newLocation.accuracy && newLocation.accuracy > 100) {
+          console.warn('⚠️ Poor GPS accuracy:', newLocation.accuracy + 'm - skipping update');
+          return;
+        }
+
+        if (!isLocationReasonable(newLocation, location)) {
+          return;
+        }
+
         console.log('📍 GPS update:', newLocation, 'accuracy:', newLocation.accuracy + 'm');
 
-        // STRICT Yanbu boundary check
         const withinYanbu = isWithinYanbu(newLocation.latitude, newLocation.longitude);
         setIsInYanbu(withinYanbu);
 
@@ -182,7 +201,6 @@ export const useRealtimeLocation = () => {
         setLocation(newLocation);
         setError(null);
 
-        // Fetch nearby places and auto-unlock chats based on distance
         try {
           await fetchNearbyPlaces(newLocation);
         } catch (error) {
@@ -190,31 +208,26 @@ export const useRealtimeLocation = () => {
         }
 
         try {
-          // Update/insert user location in database using UPSERT (marks as online)
-          const { error: locationError } = await supabase
+          await supabase
             .from('user_locations')
             .upsert({
               user_id: user.id,
               latitude: newLocation.latitude,
               longitude: newLocation.longitude,
               accuracy: newLocation.accuracy,
-              updated_at: new Date().toISOString() // Current timestamp = online
+              updated_at: new Date().toISOString()
             }, {
               onConflict: 'user_id'
             });
 
-          if (locationError) {
-            console.error('❌ Error updating location in DB:', locationError);
-          } else {
-            console.log('✅ Location updated in DB - user marked as ONLINE');
-          }
+          console.log('✅ Location updated in DB - user marked as ONLINE');
         } catch (error) {
           console.error('❌ Failed to update location in DB:', error);
         }
       };
 
       const handleError = (error: GeolocationPositionError) => {
-        console.warn('⚠️ GPS error (continuing with last known location):', error.message);
+        console.warn('⚠️ GPS error:', error.message);
         
         setTimeout(() => {
           if (!location) {
@@ -241,21 +254,18 @@ export const useRealtimeLocation = () => {
       // Get immediate position
       navigator.geolocation.getCurrentPosition(
         updateLocation,
-        (error) => {
-          console.log('🔄 Initial GPS failed, starting watch anyway...');
-          handleError(error);
-        },
+        handleError,
         options
       );
 
-      // Start continuous tracking
+      // Start continuous tracking with reduced frequency for smoother updates
       watchId = navigator.geolocation.watchPosition(
         updateLocation,
         handleError,
         options
       );
 
-      // Update every 45 seconds to maintain online status
+      // Update every 60 seconds to maintain online status (less frequent)
       updateInterval = setInterval(async () => {
         if (location) {
           try {
@@ -269,7 +279,7 @@ export const useRealtimeLocation = () => {
             console.error('❌ Online status update failed:', err);
           }
         }
-      }, 45000);
+      }, 60000);
     };
 
     const stopTracking = () => {
@@ -286,11 +296,9 @@ export const useRealtimeLocation = () => {
         updateInterval = null;
       }
 
-      // Mark user as offline when stopping tracking
       updateOnlineStatus(false);
     };
 
-    // Handle app visibility changes
     const handleVisibilityChange = () => {
       if (document.hidden) {
         console.log('📱 App hidden - stopping location tracking');
@@ -301,19 +309,16 @@ export const useRealtimeLocation = () => {
       }
     };
 
-    // Handle page unload (user closes app)
     const handleBeforeUnload = () => {
       console.log('👋 User leaving app - marking offline');
       updateOnlineStatus(false);
     };
 
-    // Start tracking when component mounts
     startTracking();
 
     document.addEventListener('visibilitychange', handleVisibilityChange);
     window.addEventListener('beforeunload', handleBeforeUnload);
 
-    // Cleanup function
     return () => {
       stopTracking();
       document.removeEventListener('visibilitychange', handleVisibilityChange);

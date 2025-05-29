@@ -51,7 +51,6 @@ const SuperAdminDashboard = () => {
     initializeDashboard();
     setupRealtimeSubscriptions();
     
-    // Auto-refresh every 30 seconds for real-time updates
     const refreshInterval = setInterval(() => {
       fetchAllUsers();
       setLastRefresh(new Date());
@@ -100,7 +99,6 @@ const SuperAdminDashboard = () => {
     try {
       console.log('👥 Fetching ALL users from database...');
       
-      // Step 1: Get ALL auth users (this requires admin privileges)
       console.log('🔓 Attempting to fetch auth users with admin privileges...');
       const { data: authData, error: authError } = await supabase.auth.admin.listUsers();
       
@@ -113,7 +111,6 @@ const SuperAdminDashboard = () => {
         console.log(`✅ Found ${allAuthUsers.length} auth users via admin API`);
       }
 
-      // Step 2: Get ALL profiles
       const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
         .select('*')
@@ -126,7 +123,6 @@ const SuperAdminDashboard = () => {
 
       console.log(`✅ Found ${profilesData?.length || 0} profiles`);
 
-      // Step 3: Get supporting data
       const [rolesData, locationsData, allLocationsData, bansData, mutesData] = await Promise.all([
         supabase.from('user_roles').select('user_id, role'),
         supabase.from('user_locations').select('user_id, latitude, longitude, updated_at').gte('updated_at', new Date(Date.now() - 10 * 60 * 1000).toISOString()),
@@ -137,10 +133,8 @@ const SuperAdminDashboard = () => {
 
       console.log('✅ Supporting data fetched');
 
-      // Step 4: Create a comprehensive user list from both auth users and profiles
       const userMap = new Map();
 
-      // Add all auth users first (if we have admin access)
       allAuthUsers.forEach(authUser => {
         const profile = profilesData?.find(p => p.id === authUser.id);
         const userRole = rolesData.data?.find(role => role.user_id === authUser.id);
@@ -168,7 +162,6 @@ const SuperAdminDashboard = () => {
         });
       });
 
-      // Add any profiles that might not have been in auth users
       profilesData?.forEach(profile => {
         if (!userMap.has(profile.id)) {
           const userRole = rolesData.data?.find(role => role.user_id === profile.id);
@@ -180,7 +173,7 @@ const SuperAdminDashboard = () => {
           userMap.set(profile.id, {
             id: profile.id,
             nickname: profile.nickname || 'Unknown User',
-            email: '', // No email available from profiles only
+            email: '',
             created_at: profile.created_at,
             role: userRole?.role || 'user',
             is_banned: isBanned || false,
@@ -219,7 +212,6 @@ const SuperAdminDashboard = () => {
       console.error('❌ Critical error fetching users:', error);
       toast.error('Failed to load users: ' + error.message);
       
-      // Emergency fallback - try to get current user at least
       try {
         const { data: { user: currentUser } } = await supabase.auth.getUser();
         if (currentUser) {
@@ -235,7 +227,7 @@ const SuperAdminDashboard = () => {
               nickname: profile.nickname || 'Current User',
               email: currentUser.email || '',
               created_at: currentUser.created_at,
-              role: 'admin', // Assume admin since they're accessing this panel
+              role: 'admin',
               is_banned: false,
               is_muted: false,
               last_seen: new Date().toISOString(),
@@ -320,10 +312,25 @@ const SuperAdminDashboard = () => {
       })
       .subscribe();
 
+    // Real-time subscription for chat messages
+    const messagesChannel = supabase
+      .channel('admin-messages')
+      .on('postgres_changes', { 
+        event: 'INSERT', 
+        schema: 'public', 
+        table: 'chat_messages' 
+      }, (payload) => {
+        console.log('💬 New message detected in admin panel:', payload);
+        toast.info('New chat message received');
+        // Could refresh messages view if needed
+      })
+      .subscribe();
+
     return () => {
       supabase.removeChannel(locationsChannel);
       supabase.removeChannel(profilesChannel);
       supabase.removeChannel(rolesChannel);
+      supabase.removeChannel(messagesChannel);
     };
   };
 
@@ -338,7 +345,6 @@ const SuperAdminDashboard = () => {
           details: details || {}
         });
       
-      // Refresh logs after adding new one
       fetchAdminLogs();
     } catch (error) {
       console.error('❌ Error logging admin action:', error);

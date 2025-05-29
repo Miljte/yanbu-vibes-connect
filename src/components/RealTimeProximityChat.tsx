@@ -1,178 +1,164 @@
-
-import React, { useState, useRef, useEffect } from 'react';
-import { Send, MapPin, Users, Clock, Lock, Crown, Wifi, WifiOff } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Send, MapPin, Users, MessageSquare, Volume2, VolumeX, AlertCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/hooks/useAuth';
 import { useRealtimeLocation } from '@/hooks/useRealtimeLocation';
-import { useRoles } from '@/hooks/useRoles';
-import { useLocalization } from '@/contexts/LocalizationContext';
+import { useChatValidation } from '@/hooks/useChatValidation';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
-interface Message {
+interface ChatMessage {
   id: string;
-  user_id: string;
   message: string;
+  user_nickname: string;
   created_at: string;
-  message_type: 'user' | 'merchant' | 'system';
+  message_type: 'user' | 'merchant';
   is_promotion: boolean;
-  place_id: string;
-  user_nickname?: string;
 }
 
 interface Place {
   id: string;
   name: string;
+  type: string;
   latitude: number;
   longitude: number;
-  distance?: number;
-  is_active: boolean;
+  distance: number;
 }
 
 const RealTimeProximityChat = () => {
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [newMessage, setNewMessage] = useState('');
   const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [isPromotion, setIsPromotion] = useState(false);
-  const [isConnected, setIsConnected] = useState(true);
+  const [message, setMessage] = useState('');
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [onlineUsers, setOnlineUsers] = useState<number>(0);
   const messagesEndRef = useRef<HTMLDivElement>(null);
   
   const { user } = useAuth();
-  const { location, nearbyPlaces, chatUnlockedPlaces, isTracking } = useRealtimeLocation();
-  const { isMerchant } = useRoles();
-  const { t, isRTL } = useLocalization();
-
-  // Convert nearby places from useRealtimeLocation to our format
-  const availablePlaces: Place[] = nearbyPlaces.map(place => ({
-    id: place.id,
-    name: place.name,
-    latitude: place.latitude,
-    longitude: place.longitude,
-    distance: place.distance,
-    is_active: true
-  }));
-
-  useEffect(() => {
-    if (availablePlaces.length > 0 && !selectedPlace) {
-      setSelectedPlace(availablePlaces[0]);
-    }
-    setLoading(false);
-  }, [availablePlaces, selectedPlace]);
+  const { nearbyPlaces, chatUnlockedPlaces, calculateDistance, location } = useRealtimeLocation();
+  const { isMuted, canSendMessage, getMuteMessage, checkMuteStatus } = useChatValidation();
 
   useEffect(() => {
     if (selectedPlace) {
       fetchMessages();
+      fetchOnlineUsers();
       setupRealtimeSubscription();
     }
   }, [selectedPlace]);
+
+  useEffect(() => {
+    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages]);
+
+  useEffect(() => {
+    checkMuteStatus();
+  }, [user]);
 
   const fetchMessages = async () => {
     if (!selectedPlace) return;
 
     try {
-      console.log('💬 Fetching messages for place:', selectedPlace.name);
+      console.log('📨 Fetching messages for place:', selectedPlace.name);
       
-      const { data: messagesData, error: messagesError } = await supabase
+      const { data: messagesData, error } = await supabase
         .from('chat_messages')
-        .select('*')
+        .select(`
+          id,
+          message,
+          created_at,
+          message_type,
+          is_promotion,
+          user_id
+        `)
         .eq('place_id', selectedPlace.id)
         .eq('is_deleted', false)
         .order('created_at', { ascending: true })
         .limit(50);
 
-      if (messagesError) {
-        console.error('❌ Error fetching messages:', messagesError);
-        throw messagesError;
+      if (error) {
+        console.error('❌ Error fetching messages:', error);
+        return;
       }
 
-      console.log(`✅ Fetched ${messagesData?.length || 0} messages`);
-
-      const userIds = [...new Set(messagesData?.map(msg => msg.user_id).filter(Boolean) || [])];
-      
-      const { data: profilesData, error: profilesError } = await supabase
+      const userIds = messagesData?.map(msg => msg.user_id).filter(Boolean) || [];
+      const { data: profiles } = await supabase
         .from('profiles')
         .select('id, nickname')
         .in('id', userIds);
 
-      if (profilesError) {
-        console.error('❌ Error fetching profiles:', profilesError);
-        throw profilesError;
-      }
-
       const messagesWithNicknames = messagesData?.map(msg => ({
         ...msg,
-        user_nickname: profilesData?.find(profile => profile.id === msg.user_id)?.nickname || 'Anonymous'
+        user_nickname: profiles?.find(p => p.id === msg.user_id)?.nickname || 'Unknown User'
       })) || [];
 
       setMessages(messagesWithNicknames);
-      setIsConnected(true);
+      console.log(`✅ Fetched ${messagesWithNicknames.length} messages`);
     } catch (error) {
-      console.error('❌ Error fetching messages:', error);
-      setIsConnected(false);
-      toast.error('Failed to load messages');
+      console.error('❌ Error in fetchMessages:', error);
+    }
+  };
+
+  const fetchOnlineUsers = async () => {
+    if (!selectedPlace || !location) return;
+
+    try {
+      const { data: locations } = await supabase
+        .from('user_locations')
+        .select('user_id, latitude, longitude')
+        .gte('updated_at', new Date(Date.now() - 10 * 60 * 1000).toISOString());
+
+      if (locations) {
+        const nearbyUsers = locations.filter(loc => {
+          const distance = calculateDistance(
+            selectedPlace.latitude,
+            selectedPlace.longitude,
+            loc.latitude,
+            loc.longitude
+          );
+          return distance <= 500;
+        });
+
+        setOnlineUsers(nearbyUsers.length);
+      }
+    } catch (error) {
+      console.error('❌ Error fetching online users:', error);
     }
   };
 
   const setupRealtimeSubscription = () => {
     if (!selectedPlace) return;
 
-    console.log('🔄 Setting up real-time chat subscription for:', selectedPlace.name);
-
+    console.log('📡 Setting up chat subscription for place:', selectedPlace.name);
+    
     const channel = supabase
-      .channel(`realtime_chat_${selectedPlace.id}`)
-      .on(
-        'postgres_changes',
-        {
-          event: 'INSERT',
-          schema: 'public',
-          table: 'chat_messages',
-          filter: `place_id=eq.${selectedPlace.id}`
-        },
-        async (payload) => {
-          console.log('📨 New message received:', payload);
-          const newMessage = payload.new as Message;
-          
-          // Fetch user nickname for the new message
-          const { data: profileData } = await supabase
-            .from('profiles')
-            .select('nickname')
-            .eq('id', newMessage.user_id)
-            .single();
-
-          const messageWithNickname = {
-            ...newMessage,
-            user_nickname: profileData?.nickname || 'Anonymous'
-          };
-
-          setMessages(prev => [...prev, messageWithNickname]);
-          setIsConnected(true);
-        }
-      )
+      .channel(`chat_${selectedPlace.id}`)
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'chat_messages',
+        filter: `place_id=eq.${selectedPlace.id}`
+      }, (payload) => {
+        console.log('📨 New message received:', payload);
+        fetchMessages();
+      })
       .subscribe((status) => {
         console.log('📡 Chat subscription status:', status);
-        setIsConnected(status === 'SUBSCRIBED');
       });
 
     return () => {
-      console.log('🛑 Removing chat subscription');
       supabase.removeChannel(channel);
     };
   };
 
   const sendMessage = async () => {
-    if (!newMessage.trim() || !selectedPlace || !user) {
-      console.log('❌ Cannot send message - missing data');
-      return;
-    }
+    if (!message.trim() || !selectedPlace || !user) return;
 
-    // STRICT chat activation check
-    if (!chatUnlockedPlaces.has(selectedPlace.id)) {
-      console.log('🔒 Chat locked - user not within 500m of store');
-      toast.error('🚫 You must be within 500m to send messages');
+    if (!canSendMessage()) {
+      const muteMessage = getMuteMessage();
+      if (muteMessage) {
+        toast.error(muteMessage);
+      }
       return;
     }
 
@@ -182,281 +168,208 @@ const RealTimeProximityChat = () => {
       const { error } = await supabase
         .from('chat_messages')
         .insert({
+          message: message.trim(),
           user_id: user.id,
-          message: newMessage,
           place_id: selectedPlace.id,
-          message_type: isMerchant ? 'merchant' : 'user',
-          is_promotion: isPromotion && isMerchant
+          message_type: 'user',
+          is_promotion: false
         });
 
       if (error) {
         console.error('❌ Error sending message:', error);
-        throw error;
+        toast.error('Failed to send message');
+        return;
       }
 
       console.log('✅ Message sent successfully');
-      setNewMessage('');
-      setIsPromotion(false);
+      setMessage('');
       toast.success('Message sent!');
     } catch (error) {
-      console.error('❌ Error sending message:', error);
+      console.error('❌ Error in sendMessage:', error);
       toast.error('Failed to send message');
-      setIsConnected(false);
     }
   };
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
-
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
-
-  const formatTime = (timestamp: string) => {
-    return new Date(timestamp).toLocaleTimeString('en-US', { 
-      hour: '2-digit', 
-      minute: '2-digit' 
-    });
-  };
-
-  const getMessageStyle = (messageType: string, isPromotion: boolean) => {
-    if (isPromotion) {
-      return 'bg-gradient-to-r from-orange-100 to-yellow-100 dark:from-orange-900/30 dark:to-yellow-900/30 border-l-4 border-orange-500 text-orange-900 dark:text-orange-100';
-    }
-    switch (messageType) {
-      case 'merchant':
-        return 'bg-purple-100 dark:bg-purple-900/30 border-l-4 border-purple-500 text-purple-900 dark:text-purple-100';
-      case 'system':
-        return 'bg-muted text-muted-foreground text-center text-sm';
-      default:
-        return 'bg-muted text-foreground';
-    }
-  };
-
-  const isNearby = (place: Place) => {
+  const isPlaceUnlocked = (place: Place) => {
     return chatUnlockedPlaces.has(place.id);
   };
 
-  if (loading) {
+  const formatDistance = (distance: number) => {
+    if (distance < 1000) {
+      return `${Math.round(distance)}m`;
+    } else {
+      return `${(distance / 1000).toFixed(1)}km`;
+    }
+  };
+
+  const getPlaceStatusBadge = (place: Place) => {
+    if (isPlaceUnlocked(place)) {
+      return <Badge className="bg-green-600 text-white">🔓 Unlocked</Badge>;
+    } else {
+      return <Badge variant="secondary">🔒 Locked</Badge>;
+    }
+  };
+
+  const getChatStatusMessage = () => {
+    if (!selectedPlace) return '';
+    
+    if (isPlaceUnlocked(selectedPlace)) {
+      return `🟢 Live chat • Within ${formatDistance(selectedPlace.distance)} • Auto-unlocked`;
+    } else {
+      return `🔴 Chat locked • ${formatDistance(selectedPlace.distance)} away • Move closer`;
+    }
+  };
+
+  if (nearbyPlaces.length === 0) {
     return (
-      <div className={`min-h-screen bg-background p-4 flex items-center justify-center pb-20 ${isRTL ? 'rtl' : 'ltr'}`}>
-        <div className="text-foreground text-lg">Loading real-time chat...</div>
+      <div className="min-h-screen bg-background p-4 flex items-center justify-center">
+        <Card className="w-full max-w-md">
+          <CardContent className="p-6 text-center">
+            <MapPin className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
+            <h3 className="text-lg font-semibold mb-2">No Nearby Stores</h3>
+            <p className="text-muted-foreground">
+              Move closer to stores to access proximity chat
+            </p>
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
   return (
-    <div className={`min-h-screen bg-background p-4 pb-20 ${isRTL ? 'rtl' : 'ltr'}`}>
-      <div className="container mx-auto max-w-6xl">
-        <div className="mb-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-3xl font-bold text-foreground mb-2">🎯 Real-Time Store Chats</h2>
-              <p className="text-muted-foreground">Auto-unlocks within 500m • Live GPS tracking</p>
-            </div>
-            <div className="flex items-center space-x-2">
-              {isConnected ? (
-                <Badge variant="default" className="bg-green-600">
-                  <Wifi className="w-3 h-3 mr-1" />
-                  Live
-                </Badge>
-              ) : (
-                <Badge variant="destructive">
-                  <WifiOff className="w-3 h-3 mr-1" />
-                  Offline
-                </Badge>
-              )}
-              {isTracking && (
-                <Badge variant="secondary">
-                  <MapPin className="w-3 h-3 mr-1" />
-                  GPS Active
-                </Badge>
-              )}
-            </div>
-          </div>
-        </div>
-
-        <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
-          {/* Store List */}
-          <div className="lg:col-span-1">
-            <Card className="bg-card border">
-              <CardHeader>
-                <CardTitle className="text-foreground text-lg">Available Chats ({availablePlaces.length})</CardTitle>
-              </CardHeader>
-              <CardContent className="space-y-3">
-                {availablePlaces.length === 0 ? (
-                  <div className="text-center text-muted-foreground py-8">
-                    <Lock className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                    <p className="text-sm">No stores nearby</p>
-                    <p className="text-xs text-muted-foreground mt-2">Walk closer to stores to unlock chats</p>
-                  </div>
-                ) : (
-                  availablePlaces.map((place) => (
-                    <div
-                      key={place.id}
-                      className={`p-3 rounded-lg cursor-pointer transition-all ${
-                        selectedPlace?.id === place.id
-                          ? 'bg-primary/10 border border-primary'
-                          : 'bg-muted hover:bg-muted/80'
-                      }`}
-                      onClick={() => setSelectedPlace(place)}
-                    >
-                      <div className="flex items-center justify-between mb-2">
-                        <h3 className="text-foreground font-medium text-sm">{place.name}</h3>
-                        <Badge 
-                          variant="secondary" 
-                          className={isNearby(place) ? "bg-green-600 text-white" : "bg-orange-600 text-white"}
-                        >
-                          {isNearby(place) ? 'Unlocked' : 'Locked'}
-                        </Badge>
+    <div className="min-h-screen bg-background">
+      <div className="container mx-auto max-w-4xl p-4 pb-20">
+        {!selectedPlace ? (
+          <div>
+            <h1 className="text-2xl font-bold mb-6 text-center">📍 Proximity Chat</h1>
+            
+            <div className="grid gap-4">
+              {nearbyPlaces.map((place) => (
+                <Card 
+                  key={place.id} 
+                  className={`cursor-pointer transition-all hover:shadow-md ${
+                    isPlaceUnlocked(place) ? 'border-green-500' : 'border-gray-300'
+                  }`}
+                  onClick={() => setSelectedPlace(place)}
+                >
+                  <CardContent className="p-4">
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <h3 className="font-semibold text-lg">{place.name}</h3>
+                        <p className="text-muted-foreground capitalize">
+                          {place.type} • {formatDistance(place.distance)}
+                        </p>
                       </div>
-                      <div className="flex items-center space-x-4 text-xs text-muted-foreground">
-                        <div className="flex items-center space-x-1">
-                          <MapPin className="w-3 h-3" />
-                          <span>{Math.round(place.distance || 0)}m</span>
-                        </div>
-                        <div className="flex items-center space-x-1">
-                          <Users className="w-3 h-3" />
-                          <span>Live</span>
-                        </div>
+                      <div className="flex flex-col items-end space-y-2">
+                        {getPlaceStatusBadge(place)}
+                        <MessageSquare className="w-5 h-5 text-muted-foreground" />
                       </div>
                     </div>
-                  ))
-                )}
-              </CardContent>
-            </Card>
+                  </CardContent>
+                </Card>
+              ))}
+            </div>
           </div>
+        ) : (
+          <div>
+            <div className="flex items-center justify-between mb-4">
+              <Button
+                variant="outline"
+                onClick={() => setSelectedPlace(null)}
+                className="text-sm"
+              >
+                ← Back to Places
+              </Button>
+              <div className="flex items-center space-x-2">
+                <Users className="w-4 h-4" />
+                <span className="text-sm text-muted-foreground">{onlineUsers} nearby</span>
+              </div>
+            </div>
 
-          {/* Chat Area */}
-          <div className="lg:col-span-3">
-            <Card className="bg-card border h-[600px] flex flex-col">
-              <CardHeader className="border-b border-border">
-                <div className="flex items-center justify-between">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center justify-between">
                   <div>
-                    <CardTitle className="text-foreground">
-                      {selectedPlace ? selectedPlace.name : 'Select a Store'}
-                    </CardTitle>
-                    <p className="text-muted-foreground text-sm">
-                      {selectedPlace && isNearby(selectedPlace) 
-                        ? `🟢 Live chat • Within ${Math.round(selectedPlace.distance || 0)}m • Auto-unlocked`
-                        : 'Move within 500m to auto-unlock chat'
-                      }
+                    <h3 className="text-lg">{selectedPlace.name}</h3>
+                    <p className="text-sm text-muted-foreground font-normal">
+                      {getChatStatusMessage()}
                     </p>
                   </div>
-                  <div className="flex items-center space-x-2">
-                    <Badge 
-                      variant="outline" 
-                      className={`${
-                        selectedPlace && isNearby(selectedPlace)
-                          ? 'border-green-500 text-green-600 dark:text-green-400' 
-                          : 'border-red-500 text-red-600 dark:text-red-400'
-                      }`}
-                    >
-                      {selectedPlace && isNearby(selectedPlace) ? '🔓 Unlocked' : '🔒 Locked'}
-                    </Badge>
-                  </div>
-                </div>
+                  {getPlaceStatusBadge(selectedPlace)}
+                </CardTitle>
               </CardHeader>
-
-              {/* Messages */}
-              <CardContent className="flex-1 p-4 overflow-y-auto">
-                {!selectedPlace || !isNearby(selectedPlace) ? (
-                  <div className="flex items-center justify-center h-full">
-                    <div className="text-center text-muted-foreground">
-                      <Lock className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                      <h3 className="text-lg font-medium mb-2">Chat Auto-Locked</h3>
-                      <p className="text-sm">
-                        {selectedPlace 
-                          ? `Walk within 500m of ${selectedPlace.name} to auto-unlock chat`
-                          : 'Select a nearby store to start chatting'
-                        }
-                      </p>
-                      <p className="text-xs text-muted-foreground mt-2">
-                        🎯 Real-time GPS monitoring • Chat unlocks automatically
-                      </p>
+              
+              <CardContent>
+                <div className="h-96 overflow-y-auto border rounded-lg p-4 mb-4 bg-muted/30">
+                  {messages.length === 0 ? (
+                    <div className="text-center text-muted-foreground py-8">
+                      <MessageSquare className="w-12 h-12 mx-auto mb-2 opacity-50" />
+                      <p>No messages yet. Start the conversation!</p>
                     </div>
-                  </div>
-                ) : (
-                  <div className="space-y-4">
-                    {messages.length === 0 ? (
-                      <div className="text-center text-muted-foreground py-8">
-                        <p>No messages yet. Start the conversation!</p>
-                        <p className="text-sm mt-1">🔥 You're within range - chat is live!</p>
-                      </div>
-                    ) : (
-                      messages.map((message) => (
-                        <div key={message.id} className={`p-3 rounded-lg ${getMessageStyle(message.message_type, message.is_promotion)}`}>
-                          {message.message_type !== 'system' && (
-                            <div className="flex items-center justify-between mb-1">
-                              <span className="font-medium text-sm flex items-center space-x-1">
-                                {message.message_type === 'merchant' && <Crown className="w-3 h-3 text-yellow-500" />}
-                                <span>{message.user_nickname || 'Anonymous'}</span>
-                                {message.is_promotion && <span className="text-xs bg-orange-500 text-white px-2 py-1 rounded">PROMO</span>}
-                              </span>
-                              <span className="text-xs opacity-70 flex items-center space-x-1">
-                                <Clock className="w-3 h-3" />
-                                <span>{formatTime(message.created_at)}</span>
-                              </span>
-                            </div>
-                          )}
-                          <p className={message.message_type === 'system' ? 'text-xs' : 'text-sm'}>
-                            {message.message}
-                          </p>
+                  ) : (
+                    <div className="space-y-3">
+                      {messages.map((msg) => (
+                        <div key={msg.id} className="break-words">
+                          <div className="flex items-center space-x-2 mb-1">
+                            <span className="font-medium text-sm flex items-center space-x-1">
+                              {msg.message_type === 'merchant' && (
+                                <Badge className="bg-purple-600 text-white text-xs">MERCHANT</Badge>
+                              )}
+                              <span>{msg.user_nickname}</span>
+                            </span>
+                            <span className="text-xs text-muted-foreground">
+                              {new Date(msg.created_at).toLocaleTimeString()}
+                            </span>
+                            {msg.is_promotion && (
+                              <Badge className="bg-orange-600 text-white text-xs">PROMO</Badge>
+                            )}
+                          </div>
+                          <p className="text-sm text-foreground pl-1">{msg.message}</p>
                         </div>
-                      ))
-                    )}
-                    <div ref={messagesEndRef} />
-                  </div>
-                )}
-              </CardContent>
-
-              {/* Message Input */}
-              <div className="border-t border-border p-4">
-                {isMerchant && selectedPlace && isNearby(selectedPlace) && (
-                  <div className="mb-3">
-                    <label className="flex items-center space-x-2 text-sm text-muted-foreground">
-                      <input
-                        type="checkbox"
-                        checked={isPromotion}
-                        onChange={(e) => setIsPromotion(e.target.checked)}
-                        className="rounded"
-                      />
-                      <span>📢 Send as promotional message</span>
-                    </label>
-                  </div>
-                )}
-                <div className="flex space-x-3">
-                  <Input
-                    value={newMessage}
-                    onChange={(e) => setNewMessage(e.target.value)}
-                    placeholder={
-                      selectedPlace && isNearby(selectedPlace) && user
-                        ? "Type your message..."
-                        : !user
-                        ? "Sign in to chat..."
-                        : "Get closer to auto-unlock chat..."
-                    }
-                    disabled={!selectedPlace || !isNearby(selectedPlace) || !user}
-                    className="flex-1 bg-background border-border text-foreground placeholder-muted-foreground"
-                    onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
-                  />
-                  <Button
-                    onClick={sendMessage}
-                    disabled={!newMessage.trim() || !selectedPlace || !isNearby(selectedPlace) || !user}
-                    className="bg-primary hover:bg-primary/90"
-                  >
-                    <Send className="w-4 h-4" />
-                  </Button>
+                      ))}
+                      <div ref={messagesEndRef} />
+                    </div>
+                  )}
                 </div>
-                <p className="text-xs text-muted-foreground mt-2 flex items-center space-x-2">
-                  <span>🎯 Real-time GPS • 500m auto-unlock • Live sync</span>
-                  {isConnected && <Badge variant="outline" className="text-xs">Connected</Badge>}
-                </p>
-              </div>
+
+                <div className="space-y-2">
+                  {isMuted && (
+                    <div className="flex items-center space-x-2 p-3 bg-red-50 border border-red-200 rounded-lg">
+                      <VolumeX className="w-4 h-4 text-red-600" />
+                      <span className="text-sm text-red-700">
+                        You are muted and cannot send messages
+                      </span>
+                    </div>
+                  )}
+                  
+                  <div className="flex space-x-2">
+                    <Input
+                      value={message}
+                      onChange={(e) => setMessage(e.target.value)}
+                      placeholder={
+                        !isPlaceUnlocked(selectedPlace) 
+                          ? "Move closer to unlock chat..." 
+                          : isMuted
+                            ? "You are muted..."
+                            : "Type your message..."
+                      }
+                      disabled={!isPlaceUnlocked(selectedPlace) || isMuted}
+                      onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
+                      className="flex-1"
+                    />
+                    <Button 
+                      onClick={sendMessage}
+                      disabled={!message.trim() || !isPlaceUnlocked(selectedPlace) || isMuted}
+                      size="sm"
+                    >
+                      <Send className="w-4 h-4" />
+                    </Button>
+                  </div>
+                </div>
+              </CardContent>
             </Card>
           </div>
-        </div>
+        )}
       </div>
     </div>
   );
