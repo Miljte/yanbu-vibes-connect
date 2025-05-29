@@ -1,30 +1,40 @@
 
 import React, { useState, useEffect } from 'react';
+import { User, Settings, Crown, Shield, Store, LogOut, Edit, Save, X } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Label } from '@/components/ui/label';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Badge } from '@/components/ui/badge';
-import { User, Edit3, Save, LogOut, Crown } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { useRoles } from '@/hooks/useRoles';
-import { useLocalization } from '@/contexts/LocalizationContext';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
-const ModernProfile = () => {
+interface ModernProfileProps {
+  onNavigate: (section: string) => void;
+}
+
+interface Profile {
+  id: string;
+  nickname: string;
+  age?: number;
+  gender?: string;
+  interests?: string[];
+  avatar_preset?: string;
+  location_sharing_enabled?: boolean;
+  notifications_enabled?: boolean;
+}
+
+const ModernProfile = ({ onNavigate }: ModernProfileProps) => {
   const { user, signOut } = useAuth();
-  const { userRole } = useRoles();
-  const { t, isRTL } = useLocalization();
-  const [profile, setProfile] = useState({
+  const { userRole, isAdmin, isMerchant } = useRoles();
+  const [profile, setProfile] = useState<Profile | null>(null);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editForm, setEditForm] = useState({
     nickname: '',
     age: '',
     gender: '',
-    interests: [] as string[],
   });
-  const [isEditing, setIsEditing] = useState(false);
-  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -42,70 +52,106 @@ const ModernProfile = () => {
         .eq('id', user.id)
         .single();
 
-      if (error) throw error;
+      if (error && error.code !== 'PGRST116') {
+        console.error('Error fetching profile:', error);
+        return;
+      }
 
-      setProfile({
-        nickname: data.nickname || '',
-        age: data.age?.toString() || '',
-        gender: data.gender || '',
-        interests: data.interests || [],
-      });
+      if (data) {
+        setProfile(data);
+        setEditForm({
+          nickname: data.nickname || '',
+          age: data.age?.toString() || '',
+          gender: data.gender || '',
+        });
+      } else {
+        // Create profile if it doesn't exist
+        await createProfile();
+      }
     } catch (error) {
-      console.error('Error fetching profile:', error);
+      console.error('Error in fetchProfile:', error);
     }
   };
 
-  const updateProfile = async () => {
+  const createProfile = async () => {
     if (!user) return;
 
-    setLoading(true);
     try {
-      const { error } = await supabase
+      const newProfile = {
+        id: user.id,
+        nickname: `User_${user.id.substring(0, 8)}`,
+        location_sharing_enabled: true,
+        notifications_enabled: true,
+        avatar_preset: 'default'
+      };
+
+      const { data, error } = await supabase
         .from('profiles')
-        .update({
-          nickname: profile.nickname,
-          age: profile.age ? parseInt(profile.age) : null,
-          gender: profile.gender,
-          interests: profile.interests,
-          updated_at: new Date().toISOString(),
-        })
-        .eq('id', user.id);
+        .insert(newProfile)
+        .select()
+        .single();
 
       if (error) throw error;
 
-      toast.success('Profile updated successfully!');
+      setProfile(data);
+      setEditForm({
+        nickname: data.nickname,
+        age: '',
+        gender: '',
+      });
+    } catch (error) {
+      console.error('Error creating profile:', error);
+      toast.error('Failed to create profile');
+    }
+  };
+
+  const handleSaveProfile = async () => {
+    if (!user || !profile) return;
+
+    try {
+      const updates = {
+        nickname: editForm.nickname || profile.nickname,
+        age: editForm.age ? parseInt(editForm.age) : null,
+        gender: editForm.gender || null,
+      };
+
+      const { data, error } = await supabase
+        .from('profiles')
+        .update(updates)
+        .eq('id', user.id)
+        .select()
+        .single();
+
+      if (error) throw error;
+
+      setProfile(data);
       setIsEditing(false);
+      toast.success('Profile updated successfully!');
     } catch (error) {
       console.error('Error updating profile:', error);
       toast.error('Failed to update profile');
-    } finally {
-      setLoading(false);
     }
   };
 
-  const getRoleBadge = () => {
-    const roleColors = {
-      admin: 'bg-red-500 text-white',
-      merchant: 'bg-purple-500 text-white',
-      user: 'bg-blue-500 text-white',
-    };
-
-    return (
-      <Badge className={`${roleColors[userRole]} flex items-center space-x-1`}>
-        {userRole === 'admin' && <Crown className="w-3 h-3" />}
-        <span className="capitalize">{userRole}</span>
-      </Badge>
-    );
+  const handleSignOut = async () => {
+    try {
+      await signOut();
+      toast.success('Signed out successfully');
+    } catch (error) {
+      console.error('Error signing out:', error);
+      toast.error('Failed to sign out');
+    }
   };
 
   if (!user) {
     return (
-      <div className={`min-h-screen bg-gray-50 p-4 pb-20 ${isRTL ? 'rtl' : 'ltr'}`}>
+      <div className="min-h-screen bg-background p-4 pb-20">
         <div className="container mx-auto max-w-2xl">
-          <Card className="bg-white border-0 shadow-lg">
-            <CardContent className="p-8 text-center">
-              <User className="w-16 h-16 mx-auto text-gray-400 mb-4" />
-              <p className="text-gray-600">Please sign in to view your profile</p>
+          <Card className="bg-card border">
+            <CardContent className="p-6 text-center">
+              <User className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
+              <h2 className="text-xl font-bold text-foreground mb-2">Not Signed In</h2>
+              <p className="text-muted-foreground">Please sign in to view your profile</p>
             </CardContent>
           </Card>
         </div>
@@ -114,140 +160,144 @@ const ModernProfile = () => {
   }
 
   return (
-    <div className={`min-h-screen bg-gray-50 p-4 pb-20 ${isRTL ? 'rtl' : 'ltr'}`}>
+    <div className="min-h-screen bg-background p-4 pb-20">
       <div className="container mx-auto max-w-2xl space-y-6">
-        {/* Header */}
-        <div className="text-center mb-8">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">{t('profile.title')}</h1>
-          <div className="flex justify-center">
-            {getRoleBadge()}
-          </div>
-        </div>
-
-        {/* Profile Card */}
-        <Card className="bg-white border-0 shadow-lg rounded-2xl">
-          <CardHeader className="pb-4">
-            <div className="flex items-center justify-between">
-              <CardTitle className="text-xl font-bold text-gray-900">Profile Information</CardTitle>
+        {/* Profile Header */}
+        <Card className="bg-card border">
+          <CardHeader>
+            <CardTitle className="text-foreground flex items-center justify-between">
+              <div className="flex items-center space-x-3">
+                <div className="w-12 h-12 bg-primary rounded-full flex items-center justify-center">
+                  <User className="w-6 h-6 text-primary-foreground" />
+                </div>
+                <div>
+                  <h2 className="text-xl font-bold">{profile?.nickname || 'Loading...'}</h2>
+                  <div className="flex items-center space-x-2">
+                    <Badge variant="outline" className="text-xs">
+                      {userRole || 'user'}
+                    </Badge>
+                    {isAdmin && <Crown className="w-4 h-4 text-yellow-500" />}
+                    {isMerchant && <Store className="w-4 h-4 text-blue-500" />}
+                  </div>
+                </div>
+              </div>
               <Button
                 variant="outline"
                 size="sm"
                 onClick={() => setIsEditing(!isEditing)}
-                className="flex items-center space-x-2"
               >
-                <Edit3 className="w-4 h-4" />
-                <span>{isEditing ? t('common.cancel') : t('common.edit')}</span>
+                {isEditing ? <X className="w-4 h-4" /> : <Edit className="w-4 h-4" />}
               </Button>
-            </div>
+            </CardTitle>
           </CardHeader>
-          <CardContent className="space-y-6">
-            {/* Avatar */}
-            <div className="flex justify-center mb-6">
-              <div className="w-24 h-24 bg-gradient-to-br from-blue-500 to-purple-600 rounded-full flex items-center justify-center">
-                <User className="w-12 h-12 text-white" />
-              </div>
-            </div>
-
-            {/* Form Fields */}
-            <div className="space-y-4">
-              <div>
-                <Label htmlFor="nickname">{t('profile.nickname')}</Label>
+          <CardContent className="space-y-4">
+            {isEditing ? (
+              <div className="space-y-4">
                 <Input
-                  id="nickname"
-                  value={profile.nickname}
-                  onChange={(e) => setProfile({ ...profile, nickname: e.target.value })}
-                  disabled={!isEditing}
-                  className="mt-1"
+                  placeholder="Nickname"
+                  value={editForm.nickname}
+                  onChange={(e) => setEditForm({...editForm, nickname: e.target.value})}
                 />
-              </div>
-
-              <div>
-                <Label htmlFor="age">{t('profile.age')}</Label>
                 <Input
-                  id="age"
                   type="number"
-                  value={profile.age}
-                  onChange={(e) => setProfile({ ...profile, age: e.target.value })}
-                  disabled={!isEditing}
-                  className="mt-1"
+                  placeholder="Age"
+                  value={editForm.age}
+                  onChange={(e) => setEditForm({...editForm, age: e.target.value})}
                 />
+                <Input
+                  placeholder="Gender"
+                  value={editForm.gender}
+                  onChange={(e) => setEditForm({...editForm, gender: e.target.value})}
+                />
+                <Button onClick={handleSaveProfile} className="w-full">
+                  <Save className="w-4 h-4 mr-2" />
+                  Save Changes
+                </Button>
               </div>
-
-              <div>
-                <Label>{t('profile.gender')}</Label>
-                <Select
-                  value={profile.gender}
-                  onValueChange={(value) => setProfile({ ...profile, gender: value })}
-                  disabled={!isEditing}
-                >
-                  <SelectTrigger className="mt-1">
-                    <SelectValue placeholder="Select gender" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    <SelectItem value="male">{t('profile.male')}</SelectItem>
-                    <SelectItem value="female">{t('profile.female')}</SelectItem>
-                  </SelectContent>
-                </Select>
+            ) : (
+              <div className="space-y-2">
+                {profile?.age && (
+                  <p className="text-muted-foreground">Age: {profile.age}</p>
+                )}
+                {profile?.gender && (
+                  <p className="text-muted-foreground">Gender: {profile.gender}</p>
+                )}
+                <p className="text-muted-foreground text-sm">ID: {user.id.substring(0, 8)}...</p>
               </div>
-
-              <div>
-                <Label>{t('profile.interests')}</Label>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {['Coffee', 'Food', 'Shopping', 'Events', 'Music', 'Sports'].map((interest) => (
-                    <Button
-                      key={interest}
-                      variant={profile.interests.includes(interest) ? "default" : "outline"}
-                      size="sm"
-                      disabled={!isEditing}
-                      onClick={() => {
-                        if (profile.interests.includes(interest)) {
-                          setProfile({
-                            ...profile,
-                            interests: profile.interests.filter(i => i !== interest)
-                          });
-                        } else {
-                          setProfile({
-                            ...profile,
-                            interests: [...profile.interests, interest]
-                          });
-                        }
-                      }}
-                      className="rounded-full"
-                    >
-                      {interest}
-                    </Button>
-                  ))}
-                </div>
-              </div>
-            </div>
-
-            {/* Action Buttons */}
-            {isEditing && (
-              <Button
-                onClick={updateProfile}
-                disabled={loading}
-                className="w-full bg-blue-600 hover:bg-blue-700 text-white rounded-xl py-3"
-              >
-                <Save className="w-4 h-4 mr-2" />
-                {loading ? t('common.loading') : t('profile.updateProfile')}
-              </Button>
             )}
           </CardContent>
         </Card>
 
-        {/* Sign Out */}
-        <Card className="bg-white border-0 shadow-lg rounded-2xl">
-          <CardContent className="p-6">
+        {/* Quick Actions */}
+        <Card className="bg-card border">
+          <CardHeader>
+            <CardTitle className="text-foreground">Quick Actions</CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-3">
+            {isAdmin && (
+              <Button
+                variant="outline"
+                className="w-full justify-start"
+                onClick={() => onNavigate('admin')}
+              >
+                <Shield className="w-4 h-4 mr-2" />
+                Admin Dashboard
+              </Button>
+            )}
+            
+            {isMerchant && (
+              <Button
+                variant="outline"
+                className="w-full justify-start"
+                onClick={() => onNavigate('merchant')}
+              >
+                <Store className="w-4 h-4 mr-2" />
+                Merchant Dashboard
+              </Button>
+            )}
+            
             <Button
-              onClick={signOut}
               variant="outline"
-              className="w-full border-red-200 text-red-600 hover:bg-red-50 rounded-xl py-3"
+              className="w-full justify-start"
+              onClick={() => onNavigate('settings')}
             >
-              <LogOut className="w-4 h-4 mr-2" />
-              {t('profile.signOut')}
+              <Settings className="w-4 h-4 mr-2" />
+              Settings
             </Button>
           </CardContent>
         </Card>
+
+        {/* Account Actions */}
+        <Card className="bg-card border">
+          <CardHeader>
+            <CardTitle className="text-foreground">Account</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <Button
+              variant="destructive"
+              onClick={handleSignOut}
+              className="w-full"
+            >
+              <LogOut className="w-4 h-4 mr-2" />
+              Sign Out
+            </Button>
+          </CardContent>
+        </Card>
+
+        {/* Debug Info (only show for admins) */}
+        {isAdmin && (
+          <Card className="bg-muted/20 border-dashed">
+            <CardHeader>
+              <CardTitle className="text-foreground text-sm">Debug Info</CardTitle>
+            </CardHeader>
+            <CardContent className="text-xs text-muted-foreground space-y-1">
+              <p>User Role: {userRole}</p>
+              <p>Is Admin: {isAdmin ? 'Yes' : 'No'}</p>
+              <p>Is Merchant: {isMerchant ? 'Yes' : 'No'}</p>
+              <p>User ID: {user.id}</p>
+            </CardContent>
+          </Card>
+        )}
       </div>
     </div>
   );
