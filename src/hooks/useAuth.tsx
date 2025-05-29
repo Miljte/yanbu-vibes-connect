@@ -59,7 +59,7 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
     // Listen for auth changes
     const { data: { subscription } } = supabase.auth.onAuthStateChange((event, session) => {
-      console.log('Auth state changed:', event);
+      console.log('Auth state changed:', event, session?.user?.email);
       
       if (mounted) {
         setSession(session);
@@ -106,15 +106,18 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
   };
 
   const signIn = async (email: string, password: string) => {
-    const { data, error } = await supabase.auth.signInWithPassword({
+    console.log('signIn called with email:', email);
+    const result = await supabase.auth.signInWithPassword({
       email,
       password,
     });
-    return { data, error };
+    console.log('signIn result:', result);
+    return result;
   };
 
   const signUp = async (email: string, password: string, nickname: string) => {
-    const { data, error } = await supabase.auth.signUp({
+    console.log('signUp called with email:', email, 'nickname:', nickname);
+    const result = await supabase.auth.signUp({
       email,
       password,
       options: {
@@ -123,7 +126,8 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
         },
       },
     });
-    return { data, error };
+    console.log('signUp result:', result);
+    return result;
   };
 
   const signOut = async () => {

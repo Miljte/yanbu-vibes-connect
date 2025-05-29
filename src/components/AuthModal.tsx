@@ -25,9 +25,23 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
     setError(null);
     
     const formData = new FormData(e.currentTarget);
+    const email = formData.get('email') as string;
+    const password = formData.get('password') as string;
+    
+    console.log('Attempting login with email:', email);
+    
     try {
-      await signIn(formData.get('email') as string, formData.get('password') as string);
+      const result = await signIn(email, password);
+      console.log('Login result:', result);
+      
+      if (result.error) {
+        setError(result.error.message);
+      } else if (result.data?.user) {
+        console.log('Login successful, closing modal');
+        onClose();
+      }
     } catch (err) {
+      console.error('Login error:', err);
       setError(err instanceof Error ? err.message : 'Login failed');
     } finally {
       setIsLoading(false);
@@ -41,13 +55,24 @@ const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
     setError(null);
     
     const formData = new FormData(e.currentTarget);
+    const email = formData.get('email') as string;
+    const password = formData.get('password') as string;
+    const nickname = formData.get('nickname') as string;
+    
+    console.log('Attempting signup with email:', email, 'nickname:', nickname);
+    
     try {
-      await signUp(
-        formData.get('email') as string, 
-        formData.get('password') as string, 
-        formData.get('nickname') as string
-      );
+      const result = await signUp(email, password, nickname);
+      console.log('Signup result:', result);
+      
+      if (result.error) {
+        setError(result.error.message);
+      } else if (result.data?.user) {
+        console.log('Signup successful, closing modal');
+        onClose();
+      }
     } catch (err) {
+      console.error('Signup error:', err);
       setError(err instanceof Error ? err.message : 'Signup failed');
     } finally {
       setIsLoading(false);
