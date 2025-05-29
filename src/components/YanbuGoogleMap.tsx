@@ -44,7 +44,7 @@ const MapComponent: React.FC<MapComponentProps> = ({
 
   useEffect(() => {
     if (ref.current && !map) {
-      const newMap = new window.google.maps.Map(ref.current, {
+      const newMap = new google.maps.Map(ref.current, {
         center,
         zoom,
         styles: isDark ? [
