@@ -258,12 +258,16 @@ export const useRealtimeLocation = () => {
       // Update every 45 seconds to maintain online status
       updateInterval = setInterval(() => {
         if (location) {
-          supabase
+          const updatePromise = supabase
             .from('user_locations')
             .update({ updated_at: new Date().toISOString() })
-            .eq('user_id', user.id)
-            .then(() => console.log('🔄 Online status refreshed'))
-            .catch(err => console.error('❌ Online status update failed:', err));
+            .eq('user_id', user.id);
+          
+          updatePromise.then(() => {
+            console.log('🔄 Online status refreshed');
+          }).catch(err => {
+            console.error('❌ Online status update failed:', err);
+          });
         }
       }, 45000);
     };
