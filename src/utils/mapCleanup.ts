@@ -25,7 +25,7 @@ export const cleanupMapData = async () => {
       !place.merchant_id || 
       !place.user_roles || 
       place.user_roles.length === 0 ||
-      !place.user_roles.some(role => role.role === 'merchant')
+      (Array.isArray(place.user_roles) && !place.user_roles.some((role: any) => role.role === 'merchant'))
     ) || [];
 
     console.log(`🗑️ Found ${placesToDelete.length} invalid places to remove`);
