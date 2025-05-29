@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { MapPin, Calendar, User, ShoppingBag, Shield } from 'lucide-react';
+import { MapPin, Calendar, User, ShoppingBag, Shield, Settings } from 'lucide-react';
 
 interface ModernBottomNavigationProps {
   activeSection: string;
@@ -35,6 +35,12 @@ const ModernBottomNavigation: React.FC<ModernBottomNavigationProps> = ({
       show: true
     },
     {
+      id: 'settings',
+      label: 'Settings',
+      icon: <Settings className="h-5 w-5" />,
+      show: true
+    },
+    {
       id: 'merchant',
       label: 'Merchant',
       icon: <ShoppingBag className="h-5 w-5" />,
@@ -48,8 +54,8 @@ const ModernBottomNavigation: React.FC<ModernBottomNavigationProps> = ({
     },
   ];
 
-  // Filter items based on user role
-  const visibleNavItems = navItems.filter(item => item.show);
+  // Filter items based on user role and limit to 5 for better mobile UX
+  const visibleNavItems = navItems.filter(item => item.show).slice(0, 5);
 
   const handleSectionChange = (section: string) => {
     if (onSectionChange && typeof onSectionChange === 'function') {

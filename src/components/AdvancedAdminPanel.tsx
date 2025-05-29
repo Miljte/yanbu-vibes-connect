@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Shield, Users, Eye, Ban, Crown, Trash2, MessageSquare, MapPin, Settings } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -14,11 +15,13 @@ import { toast } from 'sonner';
 interface User {
   id: string;
   nickname: string;
+  email?: string;
   created_at: string;
   role: string;
   is_banned: boolean;
   is_muted: boolean;
   last_seen?: string;
+  is_online: boolean;
   location?: { latitude: number; longitude: number };
 }
 
@@ -48,18 +51,31 @@ const AdvancedAdminPanel = () => {
 
   const fetchUsers = async () => {
     try {
-      // Fetch profiles
-      const { data: profilesData } = await supabase
+      console.log('Fetching all users...');
+      
+      // Fetch ALL profiles first
+      const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
         .select('id, nickname, created_at')
         .order('created_at', { ascending: false });
+
+      if (profilesError) {
+        console.error('Error fetching profiles:', profilesError);
+        throw profilesError;
+      }
+
+      console.log('Profiles fetched:', profilesData?.length || 0);
+
+      // Fetch auth users to get email info (admin only)
+      const { data: authData } = await supabase.auth.admin.listUsers();
+      const authUsers = authData?.users || [];
 
       // Fetch user roles
       const { data: rolesData } = await supabase
         .from('user_roles')
         .select('user_id, role');
 
-      // Fetch user locations
+      // Fetch user locations for online status
       const { data: locationsData } = await supabase
         .from('user_locations')
         .select('user_id, latitude, longitude, updated_at');
@@ -77,27 +93,35 @@ const AdvancedAdminPanel = () => {
 
       // Combine all data
       const usersWithDetails = profilesData?.map(profile => {
+        const authUser = authUsers.find(au => au.id === profile.id);
         const userRole = rolesData?.find(role => role.user_id === profile.id);
         const location = locationsData?.find(loc => loc.user_id === profile.id);
         const isBanned = bansData?.some(ban => ban.user_id === profile.id);
         const isMuted = mutesData?.some(mute => mute.user_id === profile.id);
+        
+        // Check if user is online (activity within last 10 minutes)
+        const lastSeen = location?.updated_at || profile.created_at;
+        const isOnline = lastSeen ? new Date(lastSeen) > new Date(Date.now() - 10 * 60 * 1000) : false;
 
         return {
           id: profile.id,
           nickname: profile.nickname,
+          email: authUser?.email,
           created_at: profile.created_at,
           role: userRole?.role || 'user',
           is_banned: isBanned || false,
           is_muted: isMuted || false,
-          last_seen: location?.updated_at,
+          last_seen: lastSeen,
+          is_online: isOnline,
           location: location ? { latitude: location.latitude, longitude: location.longitude } : undefined
         };
       }) || [];
 
+      console.log('Final users with details:', usersWithDetails.length);
       setUsers(usersWithDetails);
     } catch (error) {
       console.error('Error fetching users:', error);
-      toast.error('Failed to load users');
+      toast.error('Failed to load users. Check console for details.');
     } finally {
       setLoading(false);
     }
@@ -105,41 +129,48 @@ const AdvancedAdminPanel = () => {
 
   const fetchAdminLogs = async () => {
     try {
-      // Fetch admin logs with admin profile info
       const { data: logsData } = await supabase
         .from('admin_logs')
         .select('*')
         .order('created_at', { ascending: false })
         .limit(50);
 
-      // Get admin profiles for logs
-      const adminIds = logsData?.map(log => log.admin_id).filter(Boolean) || [];
-      const { data: adminProfiles } = await supabase
-        .from('profiles')
-        .select('id, nickname')
-        .in('id', adminIds);
+      if (logsData) {
+        const adminIds = logsData.map(log => log.admin_id).filter(Boolean);
+        const { data: adminProfiles } = await supabase
+          .from('profiles')
+          .select('id, nickname')
+          .in('id', adminIds);
 
-      const logsWithNames = logsData?.map(log => ({
-        ...log,
-        admin_nickname: adminProfiles?.find(p => p.id === log.admin_id)?.nickname || 'Unknown Admin'
-      })) || [];
+        const logsWithNames = logsData.map(log => ({
+          ...log,
+          admin_nickname: adminProfiles?.find(p => p.id === log.admin_id)?.nickname || 'Unknown Admin'
+        }));
 
-      setAdminLogs(logsWithNames);
+        setAdminLogs(logsWithNames);
+      }
     } catch (error) {
       console.error('Error fetching admin logs:', error);
     }
   };
 
   const setupRealtimeSubscriptions = () => {
-    // Subscribe to profile changes
     const profilesChannel = supabase
       .channel('admin-profiles')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => {
+        console.log('Profile change detected, refreshing users...');
         fetchUsers();
       })
       .subscribe();
 
-    // Subscribe to admin logs
+    const rolesChannel = supabase
+      .channel('admin-roles')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'user_roles' }, () => {
+        console.log('Role change detected, refreshing users...');
+        fetchUsers();
+      })
+      .subscribe();
+
     const logsChannel = supabase
       .channel('admin-logs')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'admin_logs' }, () => {
@@ -149,6 +180,7 @@ const AdvancedAdminPanel = () => {
 
     return () => {
       supabase.removeChannel(profilesChannel);
+      supabase.removeChannel(rolesChannel);
       supabase.removeChannel(logsChannel);
     };
   };
@@ -249,56 +281,58 @@ const AdvancedAdminPanel = () => {
   };
 
   const filteredUsers = users.filter(user => {
-    const matchesSearch = user.nickname.toLowerCase().includes(searchQuery.toLowerCase());
+    const matchesSearch = user.nickname.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                         (user.email && user.email.toLowerCase().includes(searchQuery.toLowerCase()));
     const matchesRole = roleFilter === 'all' || user.role === roleFilter;
     return matchesSearch && matchesRole;
   });
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-4 flex items-center justify-center">
-        <div className="text-white">Loading admin panel...</div>
+      <div className="min-h-screen bg-background p-4 flex items-center justify-center">
+        <div className="text-foreground">Loading admin panel...</div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-4 pb-20">
+    <div className="min-h-screen bg-background p-4 pb-20">
       <div className="container mx-auto max-w-7xl">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-white mb-2">🛡️ Advanced Admin Control Panel</h1>
-          <p className="text-slate-300">Complete control over users, content, and system operations</p>
+          <h1 className="text-3xl font-bold text-foreground mb-2">🛡️ Advanced Admin Control Panel</h1>
+          <p className="text-muted-foreground">Complete control over users, content, and system operations</p>
+          <p className="text-sm text-muted-foreground mt-2">Total Users Found: {users.length}</p>
         </div>
 
         <Tabs defaultValue="users" className="space-y-6">
-          <TabsList className="bg-slate-800 border-slate-700">
-            <TabsTrigger value="users" className="data-[state=active]:bg-cyan-600">
+          <TabsList className="bg-muted">
+            <TabsTrigger value="users">
               <Users className="w-4 h-4 mr-2" />
-              User Management
+              User Management ({filteredUsers.length})
             </TabsTrigger>
-            <TabsTrigger value="surveillance" className="data-[state=active]:bg-cyan-600">
+            <TabsTrigger value="surveillance">
               <Eye className="w-4 h-4 mr-2" />
               Live Surveillance
             </TabsTrigger>
-            <TabsTrigger value="logs" className="data-[state=active]:bg-cyan-600">
+            <TabsTrigger value="logs">
               <Settings className="w-4 h-4 mr-2" />
               Admin Logs
             </TabsTrigger>
           </TabsList>
 
           <TabsContent value="users">
-            <Card className="bg-slate-800/50 border-slate-700">
+            <Card className="bg-card border">
               <CardHeader>
-                <CardTitle className="text-white">User Management & Control</CardTitle>
+                <CardTitle className="text-foreground">User Management & Control</CardTitle>
                 <div className="flex space-x-4">
                   <Input
-                    placeholder="Search users..."
+                    placeholder="Search users by name or email..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
-                    className="max-w-xs bg-slate-700 border-slate-600 text-white"
+                    className="max-w-xs"
                   />
                   <Select value={roleFilter} onValueChange={setRoleFilter}>
-                    <SelectTrigger className="w-48 bg-slate-700 border-slate-600 text-white">
+                    <SelectTrigger className="w-48">
                       <SelectValue placeholder="Filter by role" />
                     </SelectTrigger>
                     <SelectContent>
@@ -311,22 +345,24 @@ const AdvancedAdminPanel = () => {
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
+                <div className="space-y-4 max-h-96 overflow-y-auto">
                   {filteredUsers.map((userData) => (
-                    <div key={userData.id} className="flex items-center justify-between p-4 bg-slate-700/30 rounded-lg">
+                    <div key={userData.id} className="flex items-center justify-between p-4 bg-muted/30 rounded-lg">
                       <div className="flex items-center space-x-4">
-                        <div className="w-10 h-10 bg-cyan-600 rounded-full flex items-center justify-center">
-                          <Users className="w-5 h-5 text-white" />
+                        <div className={`w-3 h-3 rounded-full ${userData.is_online ? 'bg-green-500' : 'bg-gray-400'}`}></div>
+                        <div className="w-10 h-10 bg-primary rounded-full flex items-center justify-center">
+                          <Users className="w-5 h-5 text-primary-foreground" />
                         </div>
                         <div>
-                          <div className="text-white font-medium flex items-center space-x-2">
+                          <div className="text-foreground font-medium flex items-center space-x-2">
                             <span>{userData.nickname}</span>
                             {userData.role === 'admin' && <Crown className="w-4 h-4 text-yellow-400" />}
                             {userData.role === 'merchant' && <Crown className="w-4 h-4 text-purple-400" />}
                             {userData.is_banned && <Badge variant="destructive" className="text-xs">Banned</Badge>}
                             {userData.is_muted && <Badge variant="secondary" className="text-xs">Muted</Badge>}
                           </div>
-                          <div className="text-slate-400 text-sm">
+                          <div className="text-muted-foreground text-sm">
+                            {userData.email && <span>{userData.email} • </span>}
                             Joined {new Date(userData.created_at).toLocaleDateString()} • {userData.role}
                             {userData.last_seen && (
                               <span className="ml-2">
@@ -342,16 +378,15 @@ const AdvancedAdminPanel = () => {
                             <Button
                               size="sm"
                               variant="outline"
-                              className="border-slate-600 text-slate-300 hover:text-white"
                               onClick={() => setSelectedUser(userData)}
                             >
                               <Eye className="w-3 h-3 mr-1" />
-                              Details
+                              Manage
                             </Button>
                           </DialogTrigger>
-                          <DialogContent className="bg-slate-800 border-slate-700">
+                          <DialogContent className="bg-card border">
                             <DialogHeader>
-                              <DialogTitle className="text-white">User Management: {userData.nickname}</DialogTitle>
+                              <DialogTitle className="text-foreground">User Management: {userData.nickname}</DialogTitle>
                             </DialogHeader>
                             <div className="space-y-4">
                               <div className="grid grid-cols-2 gap-4">
@@ -407,6 +442,15 @@ const AdvancedAdminPanel = () => {
                       </div>
                     </div>
                   ))}
+                  {filteredUsers.length === 0 && (
+                    <div className="text-center text-muted-foreground py-8">
+                      <Users className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                      <p>No users found matching your criteria</p>
+                      {users.length === 0 && (
+                        <p className="text-sm mt-2">Check database connection and permissions</p>
+                      )}
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -414,56 +458,62 @@ const AdvancedAdminPanel = () => {
 
           <TabsContent value="surveillance">
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Card className="bg-slate-800/50 border-slate-700">
+              <Card className="bg-card border">
                 <CardHeader>
-                  <CardTitle className="text-white">Live User Activity</CardTitle>
+                  <CardTitle className="text-foreground">Live User Activity</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <div className="space-y-3 max-h-96 overflow-y-auto">
-                    {users.filter(u => u.last_seen && new Date(u.last_seen) > new Date(Date.now() - 30 * 60 * 1000))
-                      .map(user => (
-                        <div key={user.id} className="flex items-center justify-between p-3 bg-slate-700/30 rounded">
-                          <div>
-                            <span className="text-white font-medium">{user.nickname}</span>
-                            <div className="text-slate-400 text-sm">{user.role}</div>
-                          </div>
-                          <div className="flex items-center space-x-2">
-                            <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                            <span className="text-green-400 text-xs">Online</span>
-                          </div>
+                  <div className="space-y-3 max-h-64 overflow-y-auto">
+                    {users.filter(u => u.is_online).map(user => (
+                      <div key={user.id} className="flex items-center justify-between p-3 bg-muted/30 rounded">
+                        <div>
+                          <span className="text-foreground font-medium">{user.nickname}</span>
+                          <div className="text-muted-foreground text-sm">{user.role}</div>
+                          {user.email && <div className="text-muted-foreground text-xs">{user.email}</div>}
                         </div>
-                      ))}
+                        <div className="flex items-center space-x-2">
+                          <div className="w-2 h-2 bg-green-500 rounded-full"></div>
+                          <span className="text-green-400 text-xs">Online</span>
+                        </div>
+                      </div>
+                    ))}
+                    {users.filter(u => u.is_online).length === 0 && (
+                      <div className="text-center text-muted-foreground py-4">
+                        <Eye className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                        <p>No users currently online</p>
+                      </div>
+                    )}
                   </div>
                 </CardContent>
               </Card>
 
-              <Card className="bg-slate-800/50 border-slate-700">
+              <Card className="bg-card border">
                 <CardHeader>
-                  <CardTitle className="text-white">System Statistics</CardTitle>
+                  <CardTitle className="text-foreground">System Statistics</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="grid grid-cols-2 gap-4">
-                    <div className="text-center p-4 bg-slate-700/30 rounded">
-                      <div className="text-2xl font-bold text-cyan-400">{users.length}</div>
-                      <div className="text-slate-400 text-sm">Total Users</div>
+                    <div className="text-center p-4 bg-muted/30 rounded">
+                      <div className="text-2xl font-bold text-primary">{users.length}</div>
+                      <div className="text-muted-foreground text-sm">Total Users</div>
                     </div>
-                    <div className="text-center p-4 bg-slate-700/30 rounded">
+                    <div className="text-center p-4 bg-muted/30 rounded">
                       <div className="text-2xl font-bold text-green-400">
-                        {users.filter(u => u.last_seen && new Date(u.last_seen) > new Date(Date.now() - 30 * 60 * 1000)).length}
+                        {users.filter(u => u.is_online).length}
                       </div>
-                      <div className="text-slate-400 text-sm">Online Now</div>
+                      <div className="text-muted-foreground text-sm">Online Now</div>
                     </div>
-                    <div className="text-center p-4 bg-slate-700/30 rounded">
+                    <div className="text-center p-4 bg-muted/30 rounded">
                       <div className="text-2xl font-bold text-red-400">
                         {users.filter(u => u.is_banned).length}
                       </div>
-                      <div className="text-slate-400 text-sm">Banned</div>
+                      <div className="text-muted-foreground text-sm">Banned</div>
                     </div>
-                    <div className="text-center p-4 bg-slate-700/30 rounded">
+                    <div className="text-center p-4 bg-muted/30 rounded">
                       <div className="text-2xl font-bold text-orange-400">
                         {users.filter(u => u.is_muted).length}
                       </div>
-                      <div className="text-slate-400 text-sm">Muted</div>
+                      <div className="text-muted-foreground text-sm">Muted</div>
                     </div>
                   </div>
                 </CardContent>
@@ -472,30 +522,36 @@ const AdvancedAdminPanel = () => {
           </TabsContent>
 
           <TabsContent value="logs">
-            <Card className="bg-slate-800/50 border-slate-700">
+            <Card className="bg-card border">
               <CardHeader>
-                <CardTitle className="text-white">Admin Action Logs</CardTitle>
+                <CardTitle className="text-foreground">Admin Action Logs</CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-3 max-h-96 overflow-y-auto">
                   {adminLogs.map((log) => (
-                    <div key={log.id} className="p-3 bg-slate-700/30 rounded">
+                    <div key={log.id} className="p-3 bg-muted/30 rounded">
                       <div className="flex items-center justify-between mb-1">
-                        <span className="text-white font-medium">{log.admin_nickname}</span>
-                        <span className="text-slate-400 text-sm">
+                        <span className="text-foreground font-medium">{log.admin_nickname}</span>
+                        <span className="text-muted-foreground text-sm">
                           {new Date(log.created_at).toLocaleString()}
                         </span>
                       </div>
-                      <p className="text-slate-300 text-sm">
+                      <p className="text-muted-foreground text-sm">
                         Action: {log.action_type}
                         {log.details && Object.keys(log.details).length > 0 && (
-                          <span className="text-slate-400 ml-2">
+                          <span className="text-muted-foreground ml-2">
                             ({JSON.stringify(log.details)})
                           </span>
                         )}
                       </p>
                     </div>
                   ))}
+                  {adminLogs.length === 0 && (
+                    <div className="text-center text-muted-foreground py-4">
+                      <Settings className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                      <p>No admin actions logged yet</p>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
