@@ -43,9 +43,9 @@ const Index = () => {
       case 'merchant':
         return isMerchant ? <EnhancedMerchantDashboard /> : <ModernMap />;
       case 'admin':
-        return isAdmin ? <AdvancedAdminPanel /> : <ModernMap />;
+        return isAdmin ? <SuperAdminDashboard /> : <ModernMap />;
       case 'super-admin':
-        return userRole === 'admin' ? <SuperAdminDashboard /> : <ModernMap />;
+        return isAdmin ? <SuperAdminDashboard /> : <ModernMap />;
       default:
         return <ModernMap />;
     }
