@@ -15,8 +15,9 @@ interface ChatMessage {
   message: string;
   user_nickname: string;
   created_at: string;
-  message_type: 'user' | 'merchant';
+  message_type: 'user' | 'merchant' | 'system';
   is_promotion: boolean;
+  user_id: string;
 }
 
 interface Place {
@@ -38,6 +39,13 @@ const RealTimeProximityChat = () => {
   const { user } = useAuth();
   const { nearbyPlaces, chatUnlockedPlaces, calculateDistance, location } = useRealtimeLocation();
   const { isMuted, canSendMessage, getMuteMessage, checkMuteStatus } = useChatValidation();
+
+  // Add debug logging for nearbyPlaces
+  useEffect(() => {
+    console.log('🏪 Nearby places updated:', nearbyPlaces);
+    console.log('📍 Current location:', location);
+    console.log('🔓 Chat unlocked places:', Array.from(chatUnlockedPlaces));
+  }, [nearbyPlaces, location, chatUnlockedPlaces]);
 
   useEffect(() => {
     if (selectedPlace) {
@@ -220,6 +228,7 @@ const RealTimeProximityChat = () => {
     }
   };
 
+  // Show debug info when no nearby places
   if (nearbyPlaces.length === 0) {
     return (
       <div className="min-h-screen bg-background p-4 flex items-center justify-center">
@@ -227,9 +236,16 @@ const RealTimeProximityChat = () => {
           <CardContent className="p-6 text-center">
             <MapPin className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
             <h3 className="text-lg font-semibold mb-2">No Nearby Stores</h3>
-            <p className="text-muted-foreground">
+            <p className="text-muted-foreground mb-4">
               Move closer to stores to access proximity chat
             </p>
+            {location && (
+              <div className="text-xs text-muted-foreground space-y-1">
+                <p>📍 Your location: {location.latitude.toFixed(6)}, {location.longitude.toFixed(6)}</p>
+                <p>🎯 Searching within 2km radius</p>
+                <p>💡 Chat unlocks within 500m of stores</p>
+              </div>
+            )}
           </CardContent>
         </Card>
       </div>

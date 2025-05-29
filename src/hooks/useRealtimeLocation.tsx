@@ -55,7 +55,6 @@ export const useRealtimeLocation = () => {
     );
   };
 
-  // Validate if new location is reasonable (prevent huge jumps)
   const isLocationReasonable = (newLoc: LocationData, prevLoc: LocationData | null): boolean => {
     if (!prevLoc) return true;
     
@@ -64,10 +63,11 @@ export const useRealtimeLocation = () => {
       newLoc.latitude, newLoc.longitude
     );
     
-    // Reject locations that are more than 5km away from previous location
-    // (unless it's the first location or accuracy is very poor)
-    if (distance > 5000 && newLoc.accuracy && newLoc.accuracy < 100) {
-      console.warn('🚫 Location jump detected:', distance + 'm - rejecting');
+    // More lenient for driving - allow up to 10km jumps if accuracy is reasonable
+    const maxJump = newLoc.accuracy && newLoc.accuracy < 50 ? 10000 : 5000;
+    
+    if (distance > maxJump) {
+      console.warn(`🚫 Location jump detected: ${distance}m - rejecting (max: ${maxJump}m)`);
       return false;
     }
     
@@ -89,6 +89,8 @@ export const useRealtimeLocation = () => {
         return;
       }
 
+      console.log(`📊 Found ${places?.length || 0} total active merchant places in database`);
+
       const placesWithDistance = places?.map(place => {
         const distance = calculateDistance(
           currentLocation.latitude,
@@ -104,10 +106,16 @@ export const useRealtimeLocation = () => {
           distance,
           type: place.type
         };
-      }).filter(place => place.distance <= 2000)
+      }).filter(place => place.distance <= 2000) // Show places within 2km
       .sort((a, b) => a.distance - b.distance) || [];
 
-      console.log(`✅ Found ${placesWithDistance.length} nearby merchant places`);
+      console.log(`✅ Found ${placesWithDistance.length} merchant places within 2km`);
+      
+      // Log the closest few places for debugging
+      placesWithDistance.slice(0, 3).forEach(place => {
+        console.log(`📍 ${place.name}: ${place.distance}m away`);
+      });
+
       setNearbyPlaces(placesWithDistance);
 
       const unlockedPlaceIds = new Set(
