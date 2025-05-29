@@ -1,46 +1,73 @@
 
 import React from 'react';
-import { Home, Calendar, MessageSquare, User, MoreHorizontal } from 'lucide-react';
-import { Button } from '@/components/ui/button';
-import { useLocalization } from '@/contexts/LocalizationContext';
+import { MapPin, Calendar, User, ShoppingBag, Shield } from 'lucide-react';
 
 interface ModernBottomNavigationProps {
   activeSection: string;
   onSectionChange: (section: string) => void;
+  userRole?: string;
 }
 
-const ModernBottomNavigation = ({ activeSection, onSectionChange }: ModernBottomNavigationProps) => {
-  const { t, isRTL } = useLocalization();
-
+const ModernBottomNavigation: React.FC<ModernBottomNavigationProps> = ({ 
+  activeSection,
+  onSectionChange,
+  userRole = 'user' 
+}) => {
+  
+  // Navigation items with conditional admin/merchant sections
   const navItems = [
-    { id: 'map', icon: Home, label: t('nav.home') },
-    { id: 'events', icon: Calendar, label: t('nav.events') },
-    { id: 'chat', icon: MessageSquare, label: t('nav.chat') },
-    { id: 'profile', icon: User, label: t('nav.profile') },
-    { id: 'more', icon: MoreHorizontal, label: t('nav.more') }
+    {
+      id: 'map',
+      label: 'Map',
+      icon: <MapPin className="h-5 w-5" />,
+      show: true
+    },
+    {
+      id: 'events',
+      label: 'Events',
+      icon: <Calendar className="h-5 w-5" />,
+      show: true
+    },
+    {
+      id: 'profile',
+      label: 'Profile',
+      icon: <User className="h-5 w-5" />,
+      show: true
+    },
+    {
+      id: 'merchant',
+      label: 'Merchant',
+      icon: <ShoppingBag className="h-5 w-5" />,
+      show: userRole === 'merchant' || userRole === 'admin'
+    },
+    {
+      id: 'admin',
+      label: 'Admin',
+      icon: <Shield className="h-5 w-5" />,
+      show: userRole === 'admin'
+    },
   ];
 
+  // Filter items based on user role
+  const visibleNavItems = navItems.filter(item => item.show);
+
   return (
-    <div className={`fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur-lg border-t border-border z-50 ${isRTL ? 'rtl' : 'ltr'}`}>
-      <div className="safe-area-pb">
-        <div className="flex justify-around items-center py-2 px-4 max-w-md mx-auto">
-          {navItems.map((item) => (
-            <Button
-              key={item.id}
-              variant="ghost"
-              size="sm"
-              onClick={() => onSectionChange(item.id)}
-              className={`flex flex-col items-center space-y-1 px-3 py-3 min-w-0 transition-all duration-200 ${
-                activeSection === item.id 
-                  ? 'text-primary bg-primary/10' 
-                  : 'text-muted-foreground hover:text-primary hover:bg-primary/5'
+    <div className="fixed bottom-0 left-0 right-0 z-10">
+      <div className="bg-background border-t border-border px-2 py-2 flex justify-between">
+        {visibleNavItems.map((item) => (
+          <button
+            key={item.id}
+            onClick={() => onSectionChange(item.id)}
+            className={`flex flex-1 flex-col items-center justify-center p-2 rounded-md transition-colors
+              ${activeSection === item.id 
+                ? 'text-primary bg-primary/10' 
+                : 'text-muted-foreground hover:text-foreground'
               }`}
-            >
-              <item.icon className={`w-5 h-5 ${activeSection === item.id ? 'scale-110' : ''} transition-transform`} />
-              <span className="text-xs font-medium">{item.label}</span>
-            </Button>
-          ))}
-        </div>
+          >
+            {item.icon}
+            <span className="text-xs mt-1">{item.label}</span>
+          </button>
+        ))}
       </div>
     </div>
   );

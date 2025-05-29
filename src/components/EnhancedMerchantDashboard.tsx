@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Store, Image, Calendar, Gift, Users, BarChart3, MapPin } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -14,11 +13,16 @@ import MediaUpload from './MediaUpload';
 import OfferManager from './OfferManager';
 import MerchantEngagementPanel from './MerchantEngagementPanel';
 
+// Import types from Supabase
+import type { Database } from '@/integrations/supabase/types';
+
+type PlaceType = Database['public']['Tables']['places']['Row']['type'];
+
 interface Place {
-  id: string;
+  id?: string;
   name: string;
   description: string;
-  type: string;
+  type: PlaceType;
   latitude: number;
   longitude: number;
   image_urls: string[];
@@ -33,7 +37,7 @@ const EnhancedMerchantDashboard = () => {
   const [formData, setFormData] = useState({
     name: '',
     description: '',
-    type: 'restaurant',
+    type: 'restaurant' as PlaceType, // Type assertion to ensure it's a valid place type
     address: '',
     latitude: 24.0892,
     longitude: 38.0618,
@@ -76,7 +80,9 @@ const EnhancedMerchantDashboard = () => {
     try {
       const placeData = {
         ...formData,
-        merchant_id: user.id
+        merchant_id: user.id,
+        // Ensure type is correctly typed as PlaceType
+        type: formData.type as PlaceType
       };
 
       if (selectedPlace && isEditing) {

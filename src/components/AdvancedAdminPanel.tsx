@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Shield, Users, Eye, Ban, Crown, Trash2, MessageSquare, MapPin, Settings } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -106,15 +105,23 @@ const AdvancedAdminPanel = () => {
 
   const fetchAdminLogs = async () => {
     try {
+      // Fetch admin logs with admin profile info
       const { data: logsData } = await supabase
         .from('admin_logs')
-        .select('*, admin:admin_id(nickname)')
+        .select('*')
         .order('created_at', { ascending: false })
         .limit(50);
 
+      // Get admin profiles for logs
+      const adminIds = logsData?.map(log => log.admin_id).filter(Boolean) || [];
+      const { data: adminProfiles } = await supabase
+        .from('profiles')
+        .select('id, nickname')
+        .in('id', adminIds);
+
       const logsWithNames = logsData?.map(log => ({
         ...log,
-        admin_nickname: log.admin?.nickname || 'Unknown Admin'
+        admin_nickname: adminProfiles?.find(p => p.id === log.admin_id)?.nickname || 'Unknown Admin'
       })) || [];
 
       setAdminLogs(logsWithNames);

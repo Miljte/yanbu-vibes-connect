@@ -18,7 +18,7 @@ const Index = () => {
   const [currentView, setCurrentView] = useState('map');
 
   if (!user) {
-    return <AuthModal />;
+    return <AuthModal isOpen={true} onClose={() => {}} />;
   }
 
   const renderCurrentView = () => {
@@ -44,8 +44,8 @@ const Index = () => {
     <div className="min-h-screen bg-background">
       {renderCurrentView()}
       <ModernBottomNavigation 
-        currentView={currentView} 
-        onViewChange={setCurrentView}
+        activeSection={currentView} 
+        onSectionChange={setCurrentView}
         userRole={userRole}
       />
     </div>

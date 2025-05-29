@@ -1,124 +1,104 @@
 
-import React, { useState } from 'react';
-import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { Button } from '@/components/ui/button';
+import React from 'react';
+import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Input } from '@/components/ui/input';
+import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { useAuth } from '@/hooks/useAuth';
-import { toast } from 'sonner';
 
-interface AuthModalProps {
+export interface AuthModalProps {
   isOpen: boolean;
   onClose: () => void;
 }
 
-const AuthModal = ({ isOpen, onClose }: AuthModalProps) => {
-  const [isSignUp, setIsSignUp] = useState(false);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [nickname, setNickname] = useState('');
-  const [loading, setLoading] = useState(false);
-  const { signIn, signUp } = useAuth();
+const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
+  const { user, signIn, signUp, isLoading, error } = useAuth();
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  // Login form handlers
+  const handleLoginSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    setLoading(true);
-
-    try {
-      if (isSignUp) {
-        const { error } = await signUp(email, password, nickname);
-        if (error) {
-          toast.error(error.message);
-        } else {
-          toast.success('Account created successfully! Please check your email for verification.');
-          onClose();
-        }
-      } else {
-        const { error } = await signIn(email, password);
-        if (error) {
-          toast.error(error.message);
-        } else {
-          toast.success('Signed in successfully!');
-          onClose();
-        }
-      }
-    } catch (error) {
-      toast.error('An unexpected error occurred');
-    } finally {
-      setLoading(false);
-    }
+    const formData = new FormData(e.currentTarget);
+    await signIn(formData.get('email') as string, formData.get('password') as string);
   };
 
+  // Signup form handlers
+  const handleSignupSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const formData = new FormData(e.currentTarget);
+    await signUp(
+      formData.get('email') as string, 
+      formData.get('password') as string, 
+      formData.get('nickname') as string
+    );
+  };
+
+  if (!isOpen) return null;
+
   return (
-    <Dialog open={isOpen} onOpenChange={onClose}>
-      <DialogContent className="sm:max-w-md bg-slate-800 border-slate-700">
-        <DialogHeader>
-          <DialogTitle className="text-white">
-            {isSignUp ? 'Create Account' : 'Sign In'}
-          </DialogTitle>
-        </DialogHeader>
-        
-        <form onSubmit={handleSubmit} className="space-y-4">
-          {isSignUp && (
-            <div>
-              <Label htmlFor="nickname" className="text-slate-300">Nickname</Label>
-              <Input
-                id="nickname"
-                type="text"
-                value={nickname}
-                onChange={(e) => setNickname(e.target.value)}
-                required
-                className="bg-slate-700 border-slate-600 text-white"
-                placeholder="Enter your nickname"
-              />
-            </div>
-          )}
-          
-          <div>
-            <Label htmlFor="email" className="text-slate-300">Email</Label>
-            <Input
-              id="email"
-              type="email"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
-              required
-              className="bg-slate-700 border-slate-600 text-white"
-              placeholder="Enter your email"
-            />
-          </div>
-          
-          <div>
-            <Label htmlFor="password" className="text-slate-300">Password</Label>
-            <Input
-              id="password"
-              type="password"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-              required
-              className="bg-slate-700 border-slate-600 text-white"
-              placeholder="Enter your password"
-            />
-          </div>
-          
-          <Button
-            type="submit"
-            disabled={loading}
-            className="w-full bg-cyan-600 hover:bg-cyan-700"
-          >
-            {loading ? 'Please wait...' : (isSignUp ? 'Create Account' : 'Sign In')}
-          </Button>
-          
-          <Button
-            type="button"
-            variant="ghost"
-            onClick={() => setIsSignUp(!isSignUp)}
-            className="w-full text-slate-300 hover:text-white"
-          >
-            {isSignUp ? 'Already have an account? Sign In' : "Don't have an account? Sign Up"}
-          </Button>
-        </form>
-      </DialogContent>
-    </Dialog>
+    <div className="fixed inset-0 flex items-center justify-center z-50 bg-black/50">
+      <Card className="w-[350px]">
+        <CardHeader>
+          <CardTitle>POP IN</CardTitle>
+          <CardDescription>Sign in or create an account to continue</CardDescription>
+        </CardHeader>
+        <CardContent>
+          <Tabs defaultValue="login" className="w-full">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="login">Login</TabsTrigger>
+              <TabsTrigger value="signup">Sign Up</TabsTrigger>
+            </TabsList>
+            
+            <TabsContent value="login">
+              <form onSubmit={handleLoginSubmit} className="space-y-4 mt-4">
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email</Label>
+                  <Input id="email" name="email" type="email" placeholder="your@email.com" required />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="password">Password</Label>
+                  <Input id="password" name="password" type="password" required />
+                </div>
+                <Button 
+                  type="submit" 
+                  className="w-full" 
+                  disabled={isLoading}
+                >
+                  {isLoading ? 'Logging in...' : 'Login'}
+                </Button>
+              </form>
+            </TabsContent>
+            
+            <TabsContent value="signup">
+              <form onSubmit={handleSignupSubmit} className="space-y-4 mt-4">
+                <div className="space-y-2">
+                  <Label htmlFor="nickname">Nickname</Label>
+                  <Input id="nickname" name="nickname" placeholder="How others will see you" required />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="signup-email">Email</Label>
+                  <Input id="signup-email" name="email" type="email" placeholder="your@email.com" required />
+                </div>
+                <div className="space-y-2">
+                  <Label htmlFor="signup-password">Password</Label>
+                  <Input id="signup-password" name="password" type="password" minLength={6} required />
+                </div>
+                <Button 
+                  type="submit" 
+                  className="w-full" 
+                  disabled={isLoading}
+                >
+                  {isLoading ? 'Creating account...' : 'Sign Up'}
+                </Button>
+              </form>
+            </TabsContent>
+          </Tabs>
+        </CardContent>
+        <CardFooter className="flex justify-center">
+          {error && <p className="text-sm text-red-500">{error}</p>}
+        </CardFooter>
+      </Card>
+    </div>
   );
 };
 
