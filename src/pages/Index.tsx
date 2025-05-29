@@ -22,13 +22,6 @@ const Index = () => {
   // Start real-time location tracking for logged-in users
   const { location, error: locationError, isTracking, isInYanbu } = useRealtimeLocation();
 
-  // Debug logging
-  console.log('Index - userRole:', userRole);
-  console.log('Index - isAdmin:', isAdmin);
-  console.log('Index - isMerchant:', isMerchant);
-  console.log('Index - location tracking:', isTracking, location);
-  console.log('Index - isInYanbu:', isInYanbu);
-
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
@@ -86,14 +79,12 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Location error notification */}
+      {/* Location error notification - only show if not a restriction issue */}
       {locationError && isInYanbu !== false && (
         <div className="fixed top-4 left-4 right-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded z-50">
           <span className="block sm:inline">{locationError}</span>
         </div>
       )}
-      
-      {/* Removed the debug tracking status display */}
       
       {renderCurrentView()}
       <ModernBottomNavigation 

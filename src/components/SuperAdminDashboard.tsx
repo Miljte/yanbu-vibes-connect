@@ -1,501 +1,406 @@
 import React, { useState, useEffect } from 'react';
-import { Shield, Users, Eye, Ban, Crown, Trash2, MessageSquare, MapPin, Settings, UserX, Volume2, VolumeX, UserCheck, RefreshCw } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Input } from '@/components/ui/input';
+import { Badge } from '@/components/ui/badge';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog';
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
-import { useAuth } from '@/hooks/useAuth';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
+import { Users, MessageSquare, MapPin, Settings, Shield, Ban, VolumeX, Eye, Trash2, CheckCircle, XCircle, RefreshCw } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { useAuth } from '@/hooks/useAuth';
 
 interface User {
   id: string;
   nickname: string;
-  email?: string;
   created_at: string;
-  role: string;
-  is_banned: boolean;
-  is_muted: boolean;
-  last_seen?: string;
-  is_online: boolean;
-  location?: { latitude: number; longitude: number };
   age?: number;
   gender?: string;
 }
 
-interface AdminLog {
+interface ChatMessage {
   id: string;
-  action_type: string;
-  target_user_id?: string;
-  details: any;
+  message: string;
   created_at: string;
-  admin_nickname: string;
+  user_id: string;
+  place_id: string;
+  message_type: string;
+  is_promotion: boolean;
+  user?: User;
+  place?: { name: string };
+}
+
+interface Place {
+  id: string;
+  name: string;
+  type: string;
+  latitude: number;
+  longitude: number;
+  is_active: boolean;
+}
+
+interface UserMute {
+  id: string;
+  user_id: string;
+  reason: string;
+  expires_at: string | null;
+  is_active: boolean;
+  user?: User;
+}
+
+interface UserBan {
+  id: string;
+  user_id: string;
+  reason: string;
+  expires_at: string | null;
+  is_active: boolean;
+  user?: User;
 }
 
 const SuperAdminDashboard = () => {
   const [users, setUsers] = useState<User[]>([]);
-  const [adminLogs, setAdminLogs] = useState<AdminLog[]>([]);
-  const [selectedUser, setSelectedUser] = useState<User | null>(null);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [roleFilter, setRoleFilter] = useState('all');
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [places, setPlaces] = useState<Place[]>([]);
+  const [mutes, setMutes] = useState<UserMute[]>([]);
+  const [bans, setBans] = useState<UserBan[]>([]);
   const [loading, setLoading] = useState(true);
-  const [syncing, setSyncing] = useState(false);
-  const [lastRefresh, setLastRefresh] = useState<Date>(new Date());
-  const { user } = useAuth();
+  const [muteUserId, setMuteUserId] = useState('');
+  const [muteReason, setMuteReason] = useState('');
+  const [muteDuration, setMuteDuration] = useState('24');
+  const [banUserId, setBanUserId] = useState('');
+  const [banReason, setBanReason] = useState('');
+  const [banDuration, setBanDuration] = useState('24');
+  const { user: currentUser } = useAuth();
 
   useEffect(() => {
-    initializeDashboard();
+    fetchAllData();
     setupRealtimeSubscriptions();
-    
-    const refreshInterval = setInterval(() => {
-      fetchAllUsers();
-      setLastRefresh(new Date());
-    }, 30000);
-
-    return () => clearInterval(refreshInterval);
   }, []);
 
-  const initializeDashboard = async () => {
-    setLoading(true);
-    console.log('🚀 Initializing Super Admin Dashboard...');
-    await Promise.all([
-      syncUsersIfNeeded(),
-      fetchAllUsers(),
-      fetchAdminLogs()
-    ]);
-    setLoading(false);
-  };
-
-  const syncUsersIfNeeded = async () => {
-    try {
-      setSyncing(true);
-      console.log('🔄 Force syncing all auth users to profiles...');
-      
-      const { data, error } = await supabase.functions.invoke('sync-users');
-      
-      if (error) {
-        console.error('❌ Sync error:', error);
-        toast.error('Failed to sync users');
-        return;
-      }
-
-      console.log('✅ Sync result:', data);
-      if (data?.createdProfiles > 0) {
-        toast.success(`Synced ${data.createdProfiles} new users`);
-      }
-    } catch (error) {
-      console.error('❌ Sync failed:', error);
-      toast.error('Sync failed');
-    } finally {
-      setSyncing(false);
-    }
-  };
-
-  const fetchAllUsers = async () => {
-    try {
-      console.log('👥 Fetching ALL users from database...');
-      
-      console.log('🔓 Attempting to fetch auth users with admin privileges...');
-      const { data: authData, error: authError } = await supabase.auth.admin.listUsers();
-      
-      let allAuthUsers = [];
-      if (authError) {
-        console.error('❌ Auth admin access failed:', authError);
-        console.log('⚠️ Falling back to profiles-only approach...');
-      } else {
-        allAuthUsers = authData.users || [];
-        console.log(`✅ Found ${allAuthUsers.length} auth users via admin API`);
-      }
-
-      const { data: profilesData, error: profilesError } = await supabase
-        .from('profiles')
-        .select('*')
-        .order('created_at', { ascending: false });
-
-      if (profilesError) {
-        console.error('❌ Error fetching profiles:', profilesError);
-        throw profilesError;
-      }
-
-      console.log(`✅ Found ${profilesData?.length || 0} profiles`);
-
-      const [rolesData, locationsData, allLocationsData, bansData, mutesData] = await Promise.all([
-        supabase.from('user_roles').select('user_id, role'),
-        supabase.from('user_locations').select('user_id, latitude, longitude, updated_at').gte('updated_at', new Date(Date.now() - 10 * 60 * 1000).toISOString()),
-        supabase.from('user_locations').select('user_id, updated_at'),
-        supabase.from('user_bans').select('user_id').eq('is_active', true),
-        supabase.from('user_mutes').select('user_id').eq('is_active', true)
-      ]);
-
-      console.log('✅ Supporting data fetched');
-
-      const userMap = new Map();
-
-      allAuthUsers.forEach(authUser => {
-        const profile = profilesData?.find(p => p.id === authUser.id);
-        const userRole = rolesData.data?.find(role => role.user_id === authUser.id);
-        const recentLocation = locationsData.data?.find(loc => loc.user_id === authUser.id);
-        const lastLocation = allLocationsData.data?.find(loc => loc.user_id === authUser.id);
-        const isBanned = bansData.data?.some(ban => ban.user_id === authUser.id);
-        const isMuted = mutesData.data?.some(mute => mute.user_id === authUser.id);
-
-        userMap.set(authUser.id, {
-          id: authUser.id,
-          nickname: profile?.nickname || authUser.email?.split('@')[0] || 'Unknown User',
-          email: authUser.email || '',
-          created_at: authUser.created_at,
-          role: userRole?.role || 'user',
-          is_banned: isBanned || false,
-          is_muted: isMuted || false,
-          last_seen: lastLocation?.updated_at || authUser.created_at,
-          is_online: !!recentLocation,
-          location: recentLocation ? { 
-            latitude: recentLocation.latitude, 
-            longitude: recentLocation.longitude 
-          } : undefined,
-          age: profile?.age,
-          gender: profile?.gender
-        });
-      });
-
-      profilesData?.forEach(profile => {
-        if (!userMap.has(profile.id)) {
-          const userRole = rolesData.data?.find(role => role.user_id === profile.id);
-          const recentLocation = locationsData.data?.find(loc => loc.user_id === profile.id);
-          const lastLocation = allLocationsData.data?.find(loc => loc.user_id === profile.id);
-          const isBanned = bansData.data?.some(ban => ban.user_id === profile.id);
-          const isMuted = mutesData.data?.some(mute => mute.user_id === profile.id);
-
-          userMap.set(profile.id, {
-            id: profile.id,
-            nickname: profile.nickname || 'Unknown User',
-            email: '',
-            created_at: profile.created_at,
-            role: userRole?.role || 'user',
-            is_banned: isBanned || false,
-            is_muted: isMuted || false,
-            last_seen: lastLocation?.updated_at || profile.created_at,
-            is_online: !!recentLocation,
-            location: recentLocation ? { 
-              latitude: recentLocation.latitude, 
-              longitude: recentLocation.longitude 
-            } : undefined,
-            age: profile.age,
-            gender: profile.gender
-          });
-        }
-      });
-
-      const allUsers = Array.from(userMap.values());
-      
-      console.log(`✅ Final user count: ${allUsers.length} total users`);
-      console.log(`🟢 Online users: ${allUsers.filter(u => u.is_online).length}`);
-      console.log(`🔴 Offline users: ${allUsers.filter(u => !u.is_online).length}`);
-      console.log(`👤 User breakdown:`, {
-        admins: allUsers.filter(u => u.role === 'admin').length,
-        merchants: allUsers.filter(u => u.role === 'merchant').length,
-        users: allUsers.filter(u => u.role === 'user').length
-      });
-      
-      setUsers(allUsers);
-      
-      if (allUsers.length === 0) {
-        console.log('⚠️ No users found - this might indicate a permissions issue');
-        toast.error('No users found. Check admin permissions or run sync.');
-      }
-      
-    } catch (error) {
-      console.error('❌ Critical error fetching users:', error);
-      toast.error('Failed to load users: ' + error.message);
-      
-      try {
-        const { data: { user: currentUser } } = await supabase.auth.getUser();
-        if (currentUser) {
-          const { data: profile } = await supabase
-            .from('profiles')
-            .select('*')
-            .eq('id', currentUser.id)
-            .single();
-
-          if (profile) {
-            setUsers([{
-              id: currentUser.id,
-              nickname: profile.nickname || 'Current User',
-              email: currentUser.email || '',
-              created_at: currentUser.created_at,
-              role: 'admin',
-              is_banned: false,
-              is_muted: false,
-              last_seen: new Date().toISOString(),
-              is_online: true,
-              location: undefined,
-              age: profile.age,
-              gender: profile.gender
-            }]);
-            console.log('✅ Fallback: Loaded current user only');
-          }
-        }
-      } catch (fallbackError) {
-        console.error('❌ Even fallback failed:', fallbackError);
-      }
-    }
-  };
-
-  const fetchAdminLogs = async () => {
-    try {
-      const { data: logsData } = await supabase
-        .from('admin_logs')
-        .select('*')
-        .order('created_at', { ascending: false })
-        .limit(50);
-
-      if (logsData) {
-        const adminIds = logsData.map(log => log.admin_id).filter(Boolean);
-        const { data: adminProfiles } = await supabase
-          .from('profiles')
-          .select('id, nickname')
-          .in('id', adminIds);
-
-        const logsWithNames = logsData.map(log => ({
-          ...log,
-          admin_nickname: adminProfiles?.find(p => p.id === log.admin_id)?.nickname || 'Unknown Admin'
-        }));
-
-        setAdminLogs(logsWithNames);
-      }
-    } catch (error) {
-      console.error('❌ Error fetching admin logs:', error);
-    }
-  };
-
   const setupRealtimeSubscriptions = () => {
-    // Real-time subscription for user locations (online status)
-    const locationsChannel = supabase
-      .channel('admin-locations')
-      .on('postgres_changes', { 
-        event: '*', 
-        schema: 'public', 
-        table: 'user_locations' 
-      }, () => {
-        console.log('📍 Location update detected, refreshing users...');
-        fetchAllUsers();
-      })
-      .subscribe();
-
-    // Real-time subscription for profiles
-    const profilesChannel = supabase
-      .channel('admin-profiles')
-      .on('postgres_changes', { 
-        event: '*', 
-        schema: 'public', 
-        table: 'profiles' 
-      }, () => {
-        console.log('👤 Profile update detected, refreshing users...');
-        fetchAllUsers();
-      })
-      .subscribe();
-
-    // Real-time subscription for roles
-    const rolesChannel = supabase
-      .channel('admin-roles')
-      .on('postgres_changes', { 
-        event: '*', 
-        schema: 'public', 
-        table: 'user_roles' 
-      }, () => {
-        console.log('👑 Role update detected, refreshing users...');
-        fetchAllUsers();
-      })
-      .subscribe();
-
-    // Real-time subscription for chat messages
+    // Subscribe to chat messages in real-time
     const messagesChannel = supabase
-      .channel('admin-messages')
-      .on('postgres_changes', { 
-        event: 'INSERT', 
-        schema: 'public', 
-        table: 'chat_messages' 
-      }, (payload) => {
-        console.log('💬 New message detected in admin panel:', payload);
-        toast.info('New chat message received');
-        // Could refresh messages view if needed
+      .channel('admin-chat-messages')
+      .on('postgres_changes', {
+        event: 'INSERT',
+        schema: 'public',
+        table: 'chat_messages'
+      }, () => {
+        console.log('📨 New message detected, refreshing...');
+        fetchMessages();
+      })
+      .on('postgres_changes', {
+        event: 'UPDATE',
+        schema: 'public',
+        table: 'chat_messages'
+      }, () => {
+        console.log('📨 Message updated, refreshing...');
+        fetchMessages();
+      })
+      .subscribe();
+
+    // Subscribe to user changes
+    const usersChannel = supabase
+      .channel('admin-users')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'profiles'
+      }, () => {
+        fetchUsers();
+      })
+      .subscribe();
+
+    // Subscribe to places changes
+    const placesChannel = supabase
+      .channel('admin-places')
+      .on('postgres_changes', {
+        event: '*',
+        schema: 'public',
+        table: 'places'
+      }, () => {
+        fetchPlaces();
       })
       .subscribe();
 
     return () => {
-      supabase.removeChannel(locationsChannel);
-      supabase.removeChannel(profilesChannel);
-      supabase.removeChannel(rolesChannel);
       supabase.removeChannel(messagesChannel);
+      supabase.removeChannel(usersChannel);
+      supabase.removeChannel(placesChannel);
     };
   };
 
-  const logAdminAction = async (actionType: string, targetUserId?: string, details?: any) => {
+  const fetchAllData = async () => {
+    setLoading(true);
     try {
-      await supabase
-        .from('admin_logs')
-        .insert({
-          admin_id: user?.id,
-          action_type: actionType,
-          target_user_id: targetUserId,
-          details: details || {}
-        });
-      
-      fetchAdminLogs();
+      await Promise.all([
+        fetchUsers(),
+        fetchMessages(),
+        fetchPlaces(),
+        fetchMutes(),
+        fetchBans()
+      ]);
     } catch (error) {
-      console.error('❌ Error logging admin action:', error);
+      console.error('❌ Error fetching admin data:', error);
+      toast.error('Failed to load admin data');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const promoteUser = async (userId: string, newRole: 'user' | 'merchant' | 'admin') => {
+  const fetchUsers = async () => {
     try {
-      const { error } = await supabase
-        .from('user_roles')
-        .upsert({
-          user_id: userId,
-          role: newRole,
-          assigned_by: user?.id
-        });
+      const { data, error } = await supabase
+        .from('profiles')
+        .select('*')
+        .order('created_at', { ascending: false })
+        .limit(100);
 
       if (error) throw error;
-
-      await logAdminAction('role_change', userId, { 
-        newRole, 
-        previousRole: users.find(u => u.id === userId)?.role 
-      });
-      
-      toast.success(`User promoted to ${newRole}`);
-      fetchAllUsers();
+      setUsers(data || []);
+      console.log('✅ Fetched users:', data?.length);
     } catch (error) {
-      console.error('❌ Error promoting user:', error);
-      toast.error('Failed to promote user');
+      console.error('❌ Error fetching users:', error);
     }
   };
 
-  const banUser = async (userId: string, reason?: string) => {
+  const fetchMessages = async () => {
     try {
-      const { error } = await supabase
+      const { data, error } = await supabase
+        .from('chat_messages')
+        .select(`
+          *,
+          user:profiles(id, nickname),
+          place:places(name)
+        `)
+        .eq('is_deleted', false)
+        .order('created_at', { ascending: false })
+        .limit(100);
+
+      if (error) throw error;
+      setMessages(data || []);
+      console.log('✅ Fetched messages:', data?.length);
+    } catch (error) {
+      console.error('❌ Error fetching messages:', error);
+    }
+  };
+
+  const fetchPlaces = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('places')
+        .select('*')
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setPlaces(data || []);
+    } catch (error) {
+      console.error('❌ Error fetching places:', error);
+    }
+  };
+
+  const fetchMutes = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('user_mutes')
+        .select(`
+          *,
+          user:profiles(id, nickname)
+        `)
+        .eq('is_active', true)
+        .order('muted_at', { ascending: false });
+
+      if (error) throw error;
+      setMutes(data || []);
+    } catch (error) {
+      console.error('❌ Error fetching mutes:', error);
+    }
+  };
+
+  const fetchBans = async () => {
+    try {
+      const { data, error } = await supabase
         .from('user_bans')
-        .insert({
-          user_id: userId,
-          banned_by: user?.id,
-          reason: reason || 'Admin action'
-        });
+        .select(`
+          *,
+          user:profiles(id, nickname)
+        `)
+        .eq('is_active', true)
+        .order('banned_at', { ascending: false });
 
       if (error) throw error;
-
-      await logAdminAction('user_banned', userId, { reason });
-      toast.success('User banned successfully');
-      fetchAllUsers();
+      setBans(data || []);
     } catch (error) {
-      console.error('❌ Error banning user:', error);
-      toast.error('Failed to ban user');
+      console.error('❌ Error fetching bans:', error);
     }
   };
 
-  const unbanUser = async (userId: string) => {
+  const muteUser = async () => {
+    if (!muteUserId || !muteReason || !currentUser) return;
+
     try {
-      const { error } = await supabase
-        .from('user_bans')
-        .update({ is_active: false })
-        .eq('user_id', userId)
-        .eq('is_active', true);
+      const expiresAt = new Date();
+      expiresAt.setHours(expiresAt.getHours() + parseInt(muteDuration));
 
-      if (error) throw error;
-
-      await logAdminAction('user_unbanned', userId);
-      toast.success('User unbanned successfully');
-      fetchAllUsers();
-    } catch (error) {
-      console.error('❌ Error unbanning user:', error);
-      toast.error('Failed to unban user');
-    }
-  };
-
-  const muteUser = async (userId: string, reason?: string) => {
-    try {
       const { error } = await supabase
         .from('user_mutes')
         .insert({
-          user_id: userId,
-          muted_by: user?.id,
-          reason: reason || 'Admin action'
+          user_id: muteUserId,
+          reason: muteReason,
+          expires_at: expiresAt.toISOString(),
+          muted_by: currentUser.id,
+          is_active: true
         });
 
       if (error) throw error;
 
-      await logAdminAction('user_muted', userId, { reason });
+      // Log admin action
+      await supabase
+        .from('admin_logs')
+        .insert({
+          admin_id: currentUser.id,
+          action_type: 'mute_user',
+          target_user_id: muteUserId,
+          details: { reason: muteReason, duration: muteDuration }
+        });
+
       toast.success('User muted successfully');
-      fetchAllUsers();
+      setMuteUserId('');
+      setMuteReason('');
+      setMuteDuration('24');
+      fetchMutes();
     } catch (error) {
       console.error('❌ Error muting user:', error);
       toast.error('Failed to mute user');
     }
   };
 
-  const unmuteUser = async (userId: string) => {
+  const banUser = async () => {
+    if (!banUserId || !banReason || !currentUser) return;
+
     try {
+      const expiresAt = new Date();
+      expiresAt.setHours(expiresAt.getHours() + parseInt(banDuration));
+
       const { error } = await supabase
-        .from('user_mutes')
-        .update({ is_active: false })
-        .eq('user_id', userId)
-        .eq('is_active', true);
+        .from('user_bans')
+        .insert({
+          user_id: banUserId,
+          reason: banReason,
+          expires_at: expiresAt.toISOString(),
+          banned_by: currentUser.id,
+          is_active: true
+        });
 
       if (error) throw error;
 
-      await logAdminAction('user_unmuted', userId);
-      toast.success('User unmuted successfully');
-      fetchAllUsers();
+      // Log admin action
+      await supabase
+        .from('admin_logs')
+        .insert({
+          admin_id: currentUser.id,
+          action_type: 'ban_user',
+          target_user_id: banUserId,
+          details: { reason: banReason, duration: banDuration }
+        });
+
+      toast.success('User banned successfully');
+      setBanUserId('');
+      setBanReason('');
+      setBanDuration('24');
+      fetchBans();
     } catch (error) {
-      console.error('❌ Error unmuting user:', error);
-      toast.error('Failed to unmute user');
+      console.error('❌ Error banning user:', error);
+      toast.error('Failed to ban user');
     }
   };
 
-  const deleteUserMessages = async (userId: string) => {
+  const deleteMessage = async (messageId: string) => {
+    if (!currentUser) return;
+
     try {
       const { error } = await supabase
         .from('chat_messages')
         .update({ is_deleted: true })
-        .eq('user_id', userId);
+        .eq('id', messageId);
 
       if (error) throw error;
 
-      await logAdminAction('messages_deleted', userId);
-      toast.success('User messages deleted');
+      // Log admin action
+      await supabase
+        .from('admin_logs')
+        .insert({
+          admin_id: currentUser.id,
+          action_type: 'delete_message',
+          target_entity_id: messageId,
+          details: { action: 'message_deleted' }
+        });
+
+      toast.success('Message deleted');
+      fetchMessages();
     } catch (error) {
-      console.error('❌ Error deleting messages:', error);
-      toast.error('Failed to delete messages');
+      console.error('❌ Error deleting message:', error);
+      toast.error('Failed to delete message');
     }
   };
 
-  const filteredUsers = users.filter(user => {
-    const matchesSearch = user.nickname.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         (user.email && user.email.toLowerCase().includes(searchQuery.toLowerCase()));
-    const matchesRole = roleFilter === 'all' || user.role === roleFilter;
-    return matchesSearch && matchesRole;
-  });
+  const togglePlaceStatus = async (placeId: string, isActive: boolean) => {
+    if (!currentUser) return;
 
-  const stats = {
-    totalUsers: users.length,
-    onlineUsers: users.filter(u => u.is_online).length,
-    bannedUsers: users.filter(u => u.is_banned).length,
-    mutedUsers: users.filter(u => u.is_muted).length,
-    adminUsers: users.filter(u => u.role === 'admin').length,
-    merchantUsers: users.filter(u => u.role === 'merchant').length,
+    try {
+      const { error } = await supabase
+        .from('places')
+        .update({ is_active: !isActive })
+        .eq('id', placeId);
+
+      if (error) throw error;
+
+      toast.success(`Place ${!isActive ? 'activated' : 'deactivated'}`);
+      fetchPlaces();
+    } catch (error) {
+      console.error('❌ Error updating place:', error);
+      toast.error('Failed to update place');
+    }
+  };
+
+  const removeMute = async (muteId: string) => {
+    try {
+      const { error } = await supabase
+        .from('user_mutes')
+        .update({ is_active: false })
+        .eq('id', muteId);
+
+      if (error) throw error;
+
+      toast.success('Mute removed');
+      fetchMutes();
+    } catch (error) {
+      console.error('❌ Error removing mute:', error);
+      toast.error('Failed to remove mute');
+    }
+  };
+
+  const removeBan = async (banId: string) => {
+    try {
+      const { error } = await supabase
+        .from('user_bans')
+        .update({ is_active: false })
+        .eq('id', banId);
+
+      if (error) throw error;
+
+      toast.success('Ban removed');
+      fetchBans();
+    } catch (error) {
+      console.error('❌ Error removing ban:', error);
+      toast.error('Failed to remove ban');
+    }
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-background p-4 flex items-center justify-center">
-        <div className="text-center">
-          <RefreshCw className="w-8 h-8 animate-spin mx-auto mb-4" />
-          <div className="text-foreground">Loading super admin dashboard...</div>
-        </div>
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-foreground">Loading admin dashboard...</div>
       </div>
     );
   }
@@ -503,449 +408,447 @@ const SuperAdminDashboard = () => {
   return (
     <div className="min-h-screen bg-background p-4 pb-20">
       <div className="container mx-auto max-w-7xl">
-        <div className="mb-8">
-          <h1 className="text-3xl font-bold text-foreground mb-2">🛡️ Super Admin Control Center</h1>
-          <p className="text-muted-foreground">Real-time monitoring and control for POP IN</p>
-          
-          <div className="flex items-center gap-4 mt-4">
-            <Button 
-              onClick={() => {
-                syncUsersIfNeeded();
-                fetchAllUsers();
-              }} 
-              disabled={syncing} 
-              variant="outline"
-            >
-              {syncing ? (
-                <>
-                  <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                  Syncing...
-                </>
-              ) : (
-                <>
-                  <RefreshCw className="w-4 h-4 mr-2" />
-                  Force Refresh
-                </>
-              )}
-            </Button>
-            <div className="text-sm text-muted-foreground">
-              📊 Live Data: {stats.totalUsers} total users • {stats.onlineUsers} online now
-            </div>
-            <div className="text-xs text-muted-foreground">
-              🔄 Last refresh: {lastRefresh.toLocaleTimeString()}
-            </div>
-          </div>
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-3xl font-bold text-foreground flex items-center">
+            <Shield className="w-8 h-8 mr-3 text-blue-600" />
+            Admin Dashboard
+          </h1>
+          <Button onClick={fetchAllData} variant="outline" size="sm">
+            <RefreshCw className="w-4 h-4 mr-2" />
+            Refresh
+          </Button>
         </div>
 
-        {/* Enhanced Stats Grid */}
-        <div className="grid grid-cols-2 md:grid-cols-6 gap-4 mb-8">
-          <Card className="bg-card border">
-            <CardContent className="p-4 text-center">
-              <div className="text-2xl font-bold text-primary">{stats.totalUsers}</div>
-              <div className="text-sm text-muted-foreground">Total Users</div>
-              <div className="text-xs text-muted-foreground mt-1">All registered</div>
-            </CardContent>
-          </Card>
-          
-          <Card className="bg-card border">
-            <CardContent className="p-4 text-center">
-              <div className="text-2xl font-bold text-green-500">{stats.onlineUsers}</div>
-              <div className="text-sm text-muted-foreground">Online Now</div>
-              <div className="text-xs text-muted-foreground mt-1">Active in 10min</div>
-            </CardContent>
-          </Card>
-          
-          <Card className="bg-card border">
-            <CardContent className="p-4 text-center">
-              <div className="text-2xl font-bold text-yellow-500">{stats.adminUsers}</div>
-              <div className="text-sm text-muted-foreground">Admins</div>
-              <div className="text-xs text-muted-foreground mt-1">With control</div>
-            </CardContent>
-          </Card>
-          
-          <Card className="bg-card border">
-            <CardContent className="p-4 text-center">
-              <div className="text-2xl font-bold text-purple-500">{stats.merchantUsers}</div>
-              <div className="text-sm text-muted-foreground">Merchants</div>
-              <div className="text-xs text-muted-foreground mt-1">Business users</div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-card border">
-            <CardContent className="p-4 text-center">
-              <div className="text-2xl font-bold text-red-500">{stats.bannedUsers}</div>
-              <div className="text-sm text-muted-foreground">Banned</div>
-              <div className="text-xs text-muted-foreground mt-1">Suspended</div>
-            </CardContent>
-          </Card>
-
-          <Card className="bg-card border">
-            <CardContent className="p-4 text-center">
-              <div className="text-2xl font-bold text-orange-500">{stats.mutedUsers}</div>
-              <div className="text-sm text-muted-foreground">Muted</div>
-              <div className="text-xs text-muted-foreground mt-1">No chat</div>
-            </CardContent>
-          </Card>
-        </div>
-
-        <Tabs defaultValue="users" className="space-y-6">
-          <TabsList className="bg-muted">
-            <TabsTrigger value="users">
-              <Users className="w-4 h-4 mr-2" />
-              👥 All Users ({filteredUsers.length})
-            </TabsTrigger>
-            <TabsTrigger value="surveillance">
-              <Eye className="w-4 h-4 mr-2" />
-              🔍 Live Surveillance
-            </TabsTrigger>
-            <TabsTrigger value="logs">
-              <Settings className="w-4 h-4 mr-2" />
-              📊 Admin Logs ({adminLogs.length})
-            </TabsTrigger>
+        <Tabs defaultValue="overview" className="space-y-6">
+          <TabsList className="grid w-full grid-cols-6">
+            <TabsTrigger value="overview">Overview</TabsTrigger>
+            <TabsTrigger value="users">Users</TabsTrigger>
+            <TabsTrigger value="messages">Messages</TabsTrigger>
+            <TabsTrigger value="places">Places</TabsTrigger>
+            <TabsTrigger value="moderation">Moderation</TabsTrigger>
+            <TabsTrigger value="actions">Actions</TabsTrigger>
           </TabsList>
 
-          <TabsContent value="users">
-            <Card className="bg-card border">
+          <TabsContent value="overview" className="space-y-4">
+            <Card>
               <CardHeader>
-                <CardTitle className="text-foreground">Complete User Management</CardTitle>
-                <div className="flex flex-col sm:flex-row gap-4">
-                  <Input
-                    placeholder="Search by name or email..."
-                    value={searchQuery}
-                    onChange={(e) => setSearchQuery(e.target.value)}
-                    className="max-w-xs"
-                  />
-                  <Select value={roleFilter} onValueChange={setRoleFilter}>
-                    <SelectTrigger className="w-48">
-                      <SelectValue placeholder="Filter by role" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="all">All Roles</SelectItem>
-                      <SelectItem value="user">Users</SelectItem>
-                      <SelectItem value="merchant">Merchants</SelectItem>
-                      <SelectItem value="admin">Admins</SelectItem>
-                    </SelectContent>
-                  </Select>
-                </div>
+                <CardTitle className="flex items-center">
+                  <Users className="w-5 h-5 mr-2" />
+                  User Statistics
+                </CardTitle>
               </CardHeader>
               <CardContent>
-                <Table>
-                  <TableHeader>
-                    <TableRow>
-                      <TableHead>Status</TableHead>
-                      <TableHead>User</TableHead>
-                      <TableHead>Role</TableHead>
-                      <TableHead>Email</TableHead>
-                      <TableHead>Joined</TableHead>
-                      <TableHead>Last Seen</TableHead>
-                      <TableHead>Actions</TableHead>
-                    </TableRow>
-                  </TableHeader>
-                  <TableBody>
-                    {filteredUsers.map((userData) => (
-                      <TableRow key={userData.id}>
-                        <TableCell>
-                          <div className="flex items-center space-x-2">
-                            <div className={`w-3 h-3 rounded-full ${
-                              userData.is_online ? 'bg-green-500 animate-pulse' : 'bg-gray-400'
-                            }`}></div>
-                            <span className={`text-xs font-medium ${
-                              userData.is_online ? 'text-green-600' : 'text-gray-500'
-                            }`}>
-                              {userData.is_online ? 'ONLINE' : 'OFFLINE'}
-                            </span>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <div className="flex items-center space-x-3">
-                            <div className="w-8 h-8 bg-primary rounded-full flex items-center justify-center">
-                              <Users className="w-4 h-4 text-primary-foreground" />
-                            </div>
-                            <div>
-                              <div className="font-medium text-foreground flex items-center space-x-2">
-                                <span>{userData.nickname}</span>
-                                {userData.role === 'admin' && <Crown className="w-3 h-3 text-yellow-400" />}
-                                {userData.role === 'merchant' && <Crown className="w-3 h-3 text-purple-400" />}
-                              </div>
-                              <div className="text-xs text-muted-foreground">
-                                ID: {userData.id.substring(0, 8)}...
-                              </div>
-                            </div>
-                          </div>
-                        </TableCell>
-                        <TableCell>
-                          <Badge variant="outline" className={`${
-                            userData.role === 'admin' ? 'border-yellow-400 text-yellow-600' :
-                            userData.role === 'merchant' ? 'border-purple-400 text-purple-600' : 
-                            'border-gray-400 text-gray-600'
-                          }`}>
-                            {userData.role}
-                          </Badge>
-                          {userData.is_banned && (
-                            <Badge variant="destructive" className="ml-2 text-xs">BANNED</Badge>
-                          )}
-                          {userData.is_muted && (
-                            <Badge variant="secondary" className="ml-2 text-xs">MUTED</Badge>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-sm text-muted-foreground">
-                          {userData.email || 'N/A'}
-                        </TableCell>
-                        <TableCell className="text-sm text-muted-foreground">
-                          {new Date(userData.created_at).toLocaleDateString()}
-                        </TableCell>
-                        <TableCell className="text-sm text-muted-foreground">
-                          {userData.is_online ? (
-                            <span className="text-green-600 font-medium">Online now</span>
-                          ) : (
-                            userData.last_seen ? new Date(userData.last_seen).toLocaleString() : 'Never'
-                          )}
-                        </TableCell>
-                        <TableCell>
-                          <Dialog>
-                            <DialogTrigger asChild>
-                              <Button
-                                size="sm"
-                                variant="outline"
-                                onClick={() => setSelectedUser(userData)}
-                              >
-                                <Settings className="w-3 h-3 mr-1" />
-                                Control
-                              </Button>
-                            </DialogTrigger>
-                            <DialogContent className="bg-card border max-w-md">
-                              <DialogHeader>
-                                <DialogTitle className="text-foreground">Control: {userData.nickname}</DialogTitle>
-                              </DialogHeader>
-                              <div className="space-y-4">
-                                {/* Role Management */}
-                                <div className="space-y-2">
-                                  <h4 className="font-medium text-foreground">Role Management</h4>
-                                  <div className="grid grid-cols-2 gap-2">
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      onClick={() => promoteUser(userData.id, 'user')}
-                                      disabled={userData.role === 'user'}
-                                      className="text-xs"
-                                    >
-                                      → User
-                                    </Button>
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      onClick={() => promoteUser(userData.id, 'merchant')}
-                                      disabled={userData.role === 'merchant'}
-                                      className="border-purple-600 text-purple-400 text-xs"
-                                    >
-                                      → Merchant
-                                    </Button>
-                                    <Button
-                                      size="sm"
-                                      variant="outline"
-                                      onClick={() => promoteUser(userData.id, 'admin')}
-                                      disabled={userData.role === 'admin'}
-                                      className="border-yellow-600 text-yellow-400 text-xs col-span-2"
-                                    >
-                                      <Crown className="w-3 h-3 mr-1" />
-                                      → Admin
-                                    </Button>
-                                  </div>
-                                </div>
-
-                                {/* Moderation Actions */}
-                                <div className="space-y-2">
-                                  <h4 className="font-medium text-foreground">Moderation</h4>
-                                  <div className="grid grid-cols-2 gap-2">
-                                    {userData.is_muted ? (
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={() => unmuteUser(userData.id)}
-                                        className="border-green-600 text-green-400 text-xs"
-                                      >
-                                        <Volume2 className="w-3 h-3 mr-1" />
-                                        Unmute
-                                      </Button>
-                                    ) : (
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={() => muteUser(userData.id)}
-                                        className="border-orange-600 text-orange-400 text-xs"
-                                      >
-                                        <VolumeX className="w-3 h-3 mr-1" />
-                                        Mute
-                                      </Button>
-                                    )}
-                                    
-                                    {userData.is_banned ? (
-                                      <Button
-                                        size="sm"
-                                        variant="outline"
-                                        onClick={() => unbanUser(userData.id)}
-                                        className="border-green-600 text-green-400 text-xs"
-                                      >
-                                        <UserCheck className="w-3 h-3 mr-1" />
-                                        Unban
-                                      </Button>
-                                    ) : (
-                                      <Button
-                                        size="sm"
-                                        variant="destructive"
-                                        onClick={() => banUser(userData.id)}
-                                        disabled={userData.role === 'admin'}
-                                        className="text-xs"
-                                      >
-                                        <UserX className="w-3 h-3 mr-1" />
-                                        Ban
-                                      </Button>
-                                    )}
-                                  </div>
-                                </div>
-
-                                {/* Destructive Actions */}
-                                <div className="space-y-2">
-                                  <h4 className="font-medium text-foreground">Destructive Actions</h4>
-                                  <Button
-                                    size="sm"
-                                    variant="destructive"
-                                    onClick={() => deleteUserMessages(userData.id)}
-                                    className="w-full text-xs"
-                                  >
-                                    <Trash2 className="w-3 h-3 mr-1" />
-                                    Delete All Messages
-                                  </Button>
-                                </div>
-                              </div>
-                            </DialogContent>
-                          </Dialog>
-                        </TableCell>
-                      </TableRow>
-                    ))}
-                  </TableBody>
-                </Table>
-                
-                {filteredUsers.length === 0 && (
-                  <div className="text-center text-muted-foreground py-8">
-                    <Users className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                    <p>No users found matching your criteria</p>
-                    {users.length === 0 && (
-                      <div className="mt-4 space-y-2">
-                        <p className="text-sm">Try syncing users or check database connection</p>
-                        <Button 
-                          onClick={() => {
-                            syncUsersIfNeeded();
-                            fetchAllUsers();
-                          }}
-                          variant="outline"
-                          size="sm"
-                        >
-                          <RefreshCw className="w-4 h-4 mr-2" />
-                          Sync Users Now
-                        </Button>
-                      </div>
-                    )}
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div className="p-4 rounded-lg border">
+                    <h3 className="text-lg font-semibold text-foreground">Total Users</h3>
+                    <p className="text-2xl text-muted-foreground">{users.length}</p>
                   </div>
-                )}
+                  <div className="p-4 rounded-lg border">
+                    <h3 className="text-lg font-semibold text-foreground">Active Mutes</h3>
+                    <p className="text-2xl text-muted-foreground">{mutes.length}</p>
+                  </div>
+                  <div className="p-4 rounded-lg border">
+                    <h3 className="text-lg font-semibold text-foreground">Active Bans</h3>
+                    <p className="text-2xl text-muted-foreground">{bans.length}</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <MessageSquare className="w-5 h-5 mr-2" />
+                  Chat Statistics
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div className="p-4 rounded-lg border">
+                    <h3 className="text-lg font-semibold text-foreground">Total Messages</h3>
+                    <p className="text-2xl text-muted-foreground">{messages.length}</p>
+                  </div>
+                  <div className="p-4 rounded-lg border">
+                    <h3 className="text-lg font-semibold text-foreground">Promotional Messages</h3>
+                    <p className="text-2xl text-muted-foreground">
+                      {messages.filter((msg) => msg.is_promotion).length}
+                    </p>
+                  </div>
+                  {/* Add more chat statistics as needed */}
+                </div>
+              </CardContent>
+            </Card>
+
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <MapPin className="w-5 h-5 mr-2" />
+                  Location Statistics
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  <div className="p-4 rounded-lg border">
+                    <h3 className="text-lg font-semibold text-foreground">Total Places</h3>
+                    <p className="text-2xl text-muted-foreground">{places.length}</p>
+                  </div>
+                  <div className="p-4 rounded-lg border">
+                    <h3 className="text-lg font-semibold text-foreground">Active Places</h3>
+                    <p className="text-2xl text-muted-foreground">
+                      {places.filter((place) => place.is_active).length}
+                    </p>
+                  </div>
+                  {/* Add more location statistics as needed */}
+                </div>
               </CardContent>
             </Card>
           </TabsContent>
 
-          <TabsContent value="surveillance">
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-              <Card className="bg-card border">
-                <CardHeader>
-                  <CardTitle className="text-foreground">🔍 Live User Activity</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="space-y-3 max-h-64 overflow-y-auto">
-                    {users.filter(u => u.is_online).map(user => (
-                      <div key={user.id} className="flex items-center justify-between p-3 bg-muted/30 rounded">
-                        <div>
-                          <span className="text-foreground font-medium">{user.nickname}</span>
-                          <div className="text-muted-foreground text-sm">{user.role}</div>
-                          {user.location && (
-                            <div className="text-muted-foreground text-xs">
-                              📍 {user.location.latitude.toFixed(4)}, {user.location.longitude.toFixed(4)}
-                            </div>
-                          )}
-                        </div>
-                        <div className="flex items-center space-x-2">
-                          <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                          <span className="text-green-400 text-xs font-medium">ONLINE</span>
-                        </div>
-                      </div>
-                    ))}
-                    {users.filter(u => u.is_online).length === 0 && (
-                      <div className="text-center text-muted-foreground py-4">
-                        <Eye className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                        <p>No users currently online</p>
-                      </div>
-                    )}
-                  </div>
-                </CardContent>
-              </Card>
-
-              <Card className="bg-card border">
-                <CardHeader>
-                  <CardTitle className="text-foreground">📊 System Statistics</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="grid grid-cols-2 gap-4">
-                    <div className="text-center p-4 bg-muted/30 rounded">
-                      <div className="text-2xl font-bold text-primary">{stats.totalUsers}</div>
-                      <div className="text-muted-foreground text-sm">Total Users</div>
-                    </div>
-                    <div className="text-center p-4 bg-muted/30 rounded">
-                      <div className="text-2xl font-bold text-green-400">{stats.onlineUsers}</div>
-                      <div className="text-muted-foreground text-sm">Online</div>
-                    </div>
-                    <div className="text-center p-4 bg-muted/30 rounded">
-                      <div className="text-2xl font-bold text-red-400">{stats.bannedUsers}</div>
-                      <div className="text-muted-foreground text-sm">Banned</div>
-                    </div>
-                    <div className="text-center p-4 bg-muted/30 rounded">
-                      <div className="text-2xl font-bold text-orange-400">{stats.mutedUsers}</div>
-                      <div className="text-muted-foreground text-sm">Muted</div>
-                    </div>
-                  </div>
-                </CardContent>
-              </Card>
-            </div>
+          <TabsContent value="users" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <Users className="w-5 h-5 mr-2" />
+                  Recent Users ({users.length})
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="max-h-96 overflow-y-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="text-left">
+                        <th className="py-2">Nickname</th>
+                        <th className="py-2">Created At</th>
+                        {/* Add more user details as needed */}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {users.map((user) => (
+                        <tr key={user.id} className="hover:bg-muted">
+                          <td className="py-2">{user.nickname}</td>
+                          <td className="py-2">
+                            {new Date(user.created_at).toLocaleDateString()}
+                          </td>
+                          {/* Add more user details as needed */}
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
           </TabsContent>
 
-          <TabsContent value="logs">
-            <Card className="bg-card border">
+          <TabsContent value="messages" className="space-y-4">
+            <Card>
               <CardHeader>
-                <CardTitle className="text-foreground">📊 Admin Action Logs</CardTitle>
+                <CardTitle className="flex items-center">
+                  <MessageSquare className="w-5 h-5 mr-2" />
+                  Recent Messages ({messages.length})
+                </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="space-y-3 max-h-96 overflow-y-auto">
-                  {adminLogs.map((log) => (
-                    <div key={log.id} className="p-3 bg-muted/30 rounded border-l-4 border-primary">
-                      <div className="flex items-center justify-between mb-1">
-                        <span className="text-foreground font-medium">{log.admin_nickname}</span>
-                        <span className="text-muted-foreground text-sm">
-                          {new Date(log.created_at).toLocaleString()}
-                        </span>
+                  {messages.length === 0 ? (
+                    <p className="text-center text-muted-foreground py-8">No messages found</p>
+                  ) : (
+                    messages.map((message) => (
+                      <div key={message.id} className="border rounded-lg p-3 space-y-2">
+                        <div className="flex items-center justify-between">
+                          <div className="flex items-center space-x-2">
+                            <span className="font-medium">
+                              {message.user?.nickname || 'Unknown User'}
+                            </span>
+                            <Badge variant="outline" className="text-xs">
+                              {message.place?.name || 'Unknown Place'}
+                            </Badge>
+                            {message.message_type === 'merchant' && (
+                              <Badge className="bg-purple-600 text-white text-xs">
+                                MERCHANT
+                              </Badge>
+                            )}
+                            {message.is_promotion && (
+                              <Badge className="bg-orange-600 text-white text-xs">
+                                PROMO
+                              </Badge>
+                            )}
+                          </div>
+                          <div className="flex items-center space-x-2">
+                            <span className="text-xs text-muted-foreground">
+                              {new Date(message.created_at).toLocaleString()}
+                            </span>
+                            <AlertDialog>
+                              <AlertDialogTrigger asChild>
+                                <Button variant="destructive" size="sm">
+                                  <Trash2 className="w-3 h-3" />
+                                </Button>
+                              </AlertDialogTrigger>
+                              <AlertDialogContent>
+                                <AlertDialogHeader>
+                                  <AlertDialogTitle>Delete Message</AlertDialogTitle>
+                                  <AlertDialogDescription>
+                                    Are you sure you want to delete this message? This action cannot be undone.
+                                  </AlertDialogDescription>
+                                </AlertDialogHeader>
+                                <AlertDialogFooter>
+                                  <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                  <AlertDialogAction 
+                                    onClick={() => deleteMessage(message.id)}
+                                    className="bg-red-600 hover:bg-red-700"
+                                  >
+                                    Delete
+                                  </AlertDialogAction>
+                                </AlertDialogFooter>
+                              </AlertDialogContent>
+                            </AlertDialog>
+                          </div>
+                        </div>
+                        <p className="text-sm bg-muted p-2 rounded">
+                          {message.message}
+                        </p>
                       </div>
-                      <p className="text-muted-foreground text-sm">
-                        <span className="font-medium">{log.action_type}</span>
-                        {log.target_user_id && ` • Target: ${log.target_user_id.substring(0, 8)}...`}
-                        {log.details && Object.keys(log.details).length > 0 && (
-                          <span className="text-muted-foreground ml-2">
-                            ({JSON.stringify(log.details)})
-                          </span>
-                        )}
-                      </p>
+                    ))
+                  )}
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="places" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <MapPin className="w-5 h-5 mr-2" />
+                  Places Management ({places.length})
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="max-h-96 overflow-y-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className="text-left">
+                        <th className="py-2">Name</th>
+                        <th className="py-2">Type</th>
+                        <th className="py-2">Status</th>
+                        <th className="py-2">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {places.map((place) => (
+                        <tr key={place.id} className="hover:bg-muted">
+                          <td className="py-2">{place.name}</td>
+                          <td className="py-2">{place.type}</td>
+                          <td className="py-2">
+                            {place.is_active ? (
+                              <Badge className="bg-green-600 text-white">Active</Badge>
+                            ) : (
+                              <Badge variant="secondary">Inactive</Badge>
+                            )}
+                          </td>
+                          <td className="py-2">
+                            <Button
+                              variant="outline"
+                              size="sm"
+                              onClick={() => togglePlaceStatus(place.id, place.is_active)}
+                            >
+                              {place.is_active ? (
+                                <>
+                                  <XCircle className="w-3 h-3 mr-1" />
+                                  Deactivate
+                                </>
+                              ) : (
+                                <>
+                                  <CheckCircle className="w-3 h-3 mr-1" />
+                                  Activate
+                                </>
+                              )}
+                            </Button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="moderation" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <Shield className="w-5 h-5 mr-2" />
+                  User Moderation
+                </CardTitle>
+              </CardHeader>
+              <CardContent className="space-y-4">
+                {/* Mute User */}
+                <div className="border rounded-lg p-4">
+                  <h3 className="text-lg font-semibold text-foreground mb-2">Mute User</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <Input
+                        type="text"
+                        placeholder="User ID to mute"
+                        value={muteUserId}
+                        onChange={(e) => setMuteUserId(e.target.value)}
+                      />
                     </div>
-                  ))}
-                  {adminLogs.length === 0 && (
-                    <div className="text-center text-muted-foreground py-4">
-                      <Settings className="w-8 h-8 mx-auto mb-2 opacity-50" />
-                      <p>No admin actions logged yet</p>
+                    <div>
+                      <Input
+                        type="text"
+                        placeholder="Reason for mute"
+                        value={muteReason}
+                        onChange={(e) => setMuteReason(e.target.value)}
+                      />
                     </div>
+                    <div>
+                      <select
+                        className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                        value={muteDuration}
+                        onChange={(e) => setMuteDuration(e.target.value)}
+                      >
+                        <option value="1">1 Hour</option>
+                        <option value="24">24 Hours</option>
+                        <option value="168">7 Days</option>
+                      </select>
+                    </div>
+                  </div>
+                  <Button onClick={muteUser} className="mt-4">
+                    Mute User
+                  </Button>
+                </div>
+
+                {/* Ban User */}
+                <div className="border rounded-lg p-4">
+                  <h3 className="text-lg font-semibold text-foreground mb-2">Ban User</h3>
+                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                      <Input
+                        type="text"
+                        placeholder="User ID to ban"
+                        value={banUserId}
+                        onChange={(e) => setBanUserId(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <Input
+                        type="text"
+                        placeholder="Reason for ban"
+                        value={banReason}
+                        onChange={(e) => setBanReason(e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <select
+                        className="w-full rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background file:border-0 file:bg-transparent file:text-sm file:font-medium placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-50"
+                        value={banDuration}
+                        onChange={(e) => setBanDuration(e.target.value)}
+                      >
+                        <option value="24">24 Hours</option>
+                        <option value="168">7 Days</option>
+                        <option value="720">30 Days</option>
+                        <option value="8760">Permanent</option>
+                      </select>
+                    </div>
+                  </div>
+                  <Button onClick={banUser} className="mt-4 bg-red-600 hover:bg-red-700">
+                    Ban User
+                  </Button>
+                </div>
+              </CardContent>
+            </Card>
+          </TabsContent>
+
+          <TabsContent value="actions" className="space-y-4">
+            <Card>
+              <CardHeader>
+                <CardTitle className="flex items-center">
+                  <Settings className="w-5 h-5 mr-2" />
+                  Recent Actions
+                </CardTitle>
+              </CardHeader>
+              <CardContent>
+                {/* Display recent admin actions (e.g., mutes, bans, deletions) */}
+                <div className="space-y-3">
+                  {mutes.length > 0 && (
+                    <>
+                      <h4 className="text-lg font-semibold text-foreground">Recent Mutes</h4>
+                      <div className="max-h-48 overflow-y-auto">
+                        <table className="w-full">
+                          <thead>
+                            <tr className="text-left">
+                              <th className="py-2">User</th>
+                              <th className="py-2">Reason</th>
+                              <th className="py-2">Expires At</th>
+                              <th className="py-2">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {mutes.map((mute) => (
+                              <tr key={mute.id} className="hover:bg-muted">
+                                <td className="py-2">{mute.user?.nickname || 'Unknown'}</td>
+                                <td className="py-2">{mute.reason}</td>
+                                <td className="py-2">
+                                  {mute.expires_at
+                                    ? new Date(mute.expires_at).toLocaleString()
+                                    : 'Never'}
+                                </td>
+                                <td className="py-2">
+                                  <Button
+                                    variant="destructive"
+                                    size="sm"
+                                    onClick={() => removeMute(mute.id)}
+                                  >
+                                    <VolumeX className="w-3 h-3" />
+                                  </Button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </>
+                  )}
+
+                  {bans.length > 0 && (
+                    <>
+                      <h4 className="text-lg font-semibold text-foreground mt-4">Recent Bans</h4>
+                      <div className="max-h-48 overflow-y-auto">
+                        <table className="w-full">
+                          <thead>
+                            <tr className="text-left">
+                              <th className="py-2">User</th>
+                              <th className="py-2">Reason</th>
+                              <th className="py-2">Expires At</th>
+                              <th className="py-2">Actions</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {bans.map((ban) => (
+                              <tr key={ban.id} className="hover:bg-muted">
+                                <td className="py-2">{ban.user?.nickname || 'Unknown'}</td>
+                                <td className="py-2">{ban.reason}</td>
+                                <td className="py-2">
+                                  {ban.expires_at
+                                    ? new Date(ban.expires_at).toLocaleString()
+                                    : 'Never'}
+                                </td>
+                                <td className="py-2">
+                                  <Button
+                                    variant="destructive"
+                                    size="sm"
+                                    onClick={() => removeBan(ban.id)}
+                                  >
+                                    <Ban className="w-3 h-3" />
+                                  </Button>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </>
                   )}
                 </div>
               </CardContent>

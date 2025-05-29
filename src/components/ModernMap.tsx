@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Wrapper, Status } from '@googlemaps/react-wrapper';
 import { Card, CardContent } from '@/components/ui/card';
@@ -36,7 +37,7 @@ interface MapComponentProps {
   selectedCategory: string;
 }
 
-const MapComponent: React.FC<MapComponentProps> = ({
+const MapComponent: React.FC<MapComponentProps> = React.memo(({
   center,
   zoom,
   places,
@@ -50,37 +51,28 @@ const MapComponent: React.FC<MapComponentProps> = ({
 
   // Yanbu city bounds - restricting map movement to Yanbu area only
   const yanbuBounds = new google.maps.LatLngBounds(
-    new google.maps.LatLng(23.9500, 37.9500), // Southwest corner
+    new google.maps.LatLng(23.9000, 37.9500), // Southwest corner
     new google.maps.LatLng(24.2500, 38.3000)  // Northeast corner
   );
 
-  // Ultra-clean map style - removes everything except roads
-  const ultraCleanMapStyle = [
+  // Clean map style optimized for mobile
+  const optimizedMapStyle = [
     {
       "featureType": "administrative",
-      "stylers": [{ "visibility": "off" }]
+      "stylers": [{ "visibility": "simplified" }]
     },
     {
       "featureType": "poi",
+      "elementType": "labels",
       "stylers": [{ "visibility": "off" }]
     },
     {
       "featureType": "road",
-      "elementType": "labels",
+      "elementType": "labels.icon",
       "stylers": [{ "visibility": "off" }]
     },
     {
       "featureType": "transit",
-      "stylers": [{ "visibility": "off" }]
-    },
-    {
-      "featureType": "water",
-      "elementType": "labels",
-      "stylers": [{ "visibility": "off" }]
-    },
-    {
-      "featureType": "landscape",
-      "elementType": "labels",
       "stylers": [{ "visibility": "off" }]
     }
   ];
@@ -100,8 +92,8 @@ const MapComponent: React.FC<MapComponentProps> = ({
       fillColor: config.color,
       fillOpacity: 1,
       strokeColor: '#ffffff',
-      strokeWeight: 3,
-      scale: 16, // Fixed size - won't scale with zoom
+      strokeWeight: 2,
+      scale: 14,
     };
   }, []);
 
@@ -110,17 +102,18 @@ const MapComponent: React.FC<MapComponentProps> = ({
       const newMap = new google.maps.Map(ref.current, {
         center,
         zoom,
-        minZoom: 12, // Prevent zooming too far out
-        maxZoom: 18, // Prevent zooming too close
+        minZoom: 11,
+        maxZoom: 19,
         restriction: {
           latLngBounds: yanbuBounds,
-          strictBounds: true, // Prevent panning outside bounds
+          strictBounds: true,
         },
-        styles: ultraCleanMapStyle,
+        styles: optimizedMapStyle,
         disableDefaultUI: true,
         zoomControl: true,
         gestureHandling: 'cooperative',
         backgroundColor: '#f8fafc',
+        clickableIcons: false, // Improve performance
       });
       
       setMap(newMap);
@@ -130,11 +123,11 @@ const MapComponent: React.FC<MapComponentProps> = ({
   useEffect(() => {
     if (!map) return;
 
-    // Clear existing markers
+    // Clear existing markers efficiently
     markers.forEach(marker => marker.setMap(null));
     const newMarkers: google.maps.Marker[] = [];
 
-    // Add user location marker
+    // Add user location marker with enhanced visibility
     if (userLocation) {
       const userMarker = new google.maps.Marker({
         position: { lat: userLocation.latitude, lng: userLocation.longitude },
@@ -145,28 +138,21 @@ const MapComponent: React.FC<MapComponentProps> = ({
           fillColor: '#3B82F6',
           fillOpacity: 1,
           strokeColor: '#ffffff',
-          strokeWeight: 4,
-          scale: 12, // Fixed size
+          strokeWeight: 3,
+          scale: 10,
         },
         zIndex: 1000,
-        animation: google.maps.Animation.BOUNCE,
+        optimized: true, // Improve performance
       });
-      
-      setTimeout(() => {
-        if (userMarker.getAnimation()) {
-          userMarker.setAnimation(null);
-        }
-      }, 2000);
       
       newMarkers.push(userMarker);
     }
 
-    // Filter places by category
+    // Filter and add place markers
     const filteredPlaces = selectedCategory === 'all' 
       ? places.filter(place => place.is_active)
       : places.filter(place => place.is_active && place.type === selectedCategory);
 
-    // Add place markers with fixed size
     filteredPlaces.forEach(place => {
       const marker = new google.maps.Marker({
         position: { lat: place.latitude, lng: place.longitude },
@@ -174,6 +160,7 @@ const MapComponent: React.FC<MapComponentProps> = ({
         title: place.name,
         icon: getMarkerIcon(place.type),
         zIndex: 500,
+        optimized: true,
       });
 
       marker.addListener('click', () => {
@@ -188,7 +175,7 @@ const MapComponent: React.FC<MapComponentProps> = ({
   }, [map, places, userLocation, onPlaceClick, selectedCategory, getMarkerIcon]);
 
   return <div ref={ref} className="w-full h-full" style={{ minHeight: '100vh' }} />;
-};
+});
 
 const render = (status: Status) => {
   const { t } = useLocalization();
@@ -288,7 +275,7 @@ const ModernMap = () => {
   };
 
   const isNearby = (place: Place) => {
-    return place.distance !== null && place.distance <= 500;
+    return place.distance !== null && place.distance <= 1000; // Increased to 1km
   };
 
   const handleJoinChat = (place: Place) => {
@@ -379,7 +366,7 @@ const ModernMap = () => {
       <Wrapper apiKey={googleMapsApiKey} render={render} libraries={['places']}>
         <MapComponent
           center={location ? { lat: location.latitude, lng: location.longitude } : yanbuCenter}
-          zoom={15}
+          zoom={14}
           places={places}
           userLocation={location}
           onPlaceClick={setSelectedPlace}
@@ -470,7 +457,7 @@ const ModernMap = () => {
                     className="w-full bg-muted cursor-not-allowed text-muted-foreground rounded-xl py-3"
                   >
                     <Lock className="w-5 h-5 mr-2" />
-                    {t('map.moveCloser')}
+                    Move within 1km to chat
                   </Button>
                 )}
 

@@ -5,6 +5,7 @@ import { useAuth } from './useAuth';
 
 export const useChatValidation = () => {
   const [isMuted, setIsMuted] = useState(false);
+  const [isBanned, setIsBanned] = useState(false);
   const [loading, setLoading] = useState(true);
   const { user } = useAuth();
 
@@ -14,28 +15,28 @@ export const useChatValidation = () => {
       return;
     }
 
-    checkMuteStatus();
+    checkMuteAndBanStatus();
   }, [user]);
 
-  const checkMuteStatus = async () => {
+  const checkMuteAndBanStatus = async () => {
     if (!user) return;
 
     try {
       setLoading(true);
       
-      const { data: muteData, error } = await supabase
+      // Check mute status
+      const { data: muteData, error: muteError } = await supabase
         .from('user_mutes')
         .select('*')
         .eq('user_id', user.id)
         .eq('is_active', true)
         .single();
 
-      if (error && error.code !== 'PGRST116') {
-        console.error('❌ Error checking mute status:', error);
-        setIsMuted(false);
-        return;
+      if (muteError && muteError.code !== 'PGRST116') {
+        console.error('❌ Error checking mute status:', muteError);
       }
 
+      let userIsMuted = false;
       if (muteData) {
         // Check if mute has expired
         if (muteData.expires_at && new Date(muteData.expires_at) < new Date()) {
@@ -44,17 +45,47 @@ export const useChatValidation = () => {
             .from('user_mutes')
             .update({ is_active: false })
             .eq('id', muteData.id);
-          setIsMuted(false);
+          userIsMuted = false;
         } else {
           console.log('🔇 User is currently muted');
-          setIsMuted(true);
+          userIsMuted = true;
         }
-      } else {
-        setIsMuted(false);
       }
+      setIsMuted(userIsMuted);
+
+      // Check ban status
+      const { data: banData, error: banError } = await supabase
+        .from('user_bans')
+        .select('*')
+        .eq('user_id', user.id)
+        .eq('is_active', true)
+        .single();
+
+      if (banError && banError.code !== 'PGRST116') {
+        console.error('❌ Error checking ban status:', banError);
+      }
+
+      let userIsBanned = false;
+      if (banData) {
+        // Check if ban has expired
+        if (banData.expires_at && new Date(banData.expires_at) < new Date()) {
+          console.log('🔓 Ban has expired, deactivating...');
+          await supabase
+            .from('user_bans')
+            .update({ is_active: false })
+            .eq('id', banData.id);
+          userIsBanned = false;
+        } else {
+          console.log('🚫 User is currently banned');
+          userIsBanned = true;
+        }
+      }
+      setIsBanned(userIsBanned);
+
     } catch (error) {
-      console.error('❌ Error in checkMuteStatus:', error);
+      console.error('❌ Error in checkMuteAndBanStatus:', error);
       setIsMuted(false);
+      setIsBanned(false);
     } finally {
       setLoading(false);
     }
@@ -63,10 +94,13 @@ export const useChatValidation = () => {
   const canSendMessage = () => {
     if (loading) return false;
     if (!user) return false;
-    return !isMuted;
+    return !isMuted && !isBanned;
   };
 
   const getMuteMessage = () => {
+    if (isBanned) {
+      return "You are currently banned and cannot send messages.";
+    }
     if (isMuted) {
       return "You are currently muted and cannot send messages.";
     }
@@ -75,9 +109,10 @@ export const useChatValidation = () => {
 
   return {
     isMuted,
+    isBanned,
     loading,
     canSendMessage,
     getMuteMessage,
-    checkMuteStatus
+    checkMuteStatus: checkMuteAndBanStatus
   };
 };
