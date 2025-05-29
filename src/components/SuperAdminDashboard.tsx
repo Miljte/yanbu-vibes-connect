@@ -67,28 +67,38 @@ const SuperAdminDashboard = () => {
 
   const fetchLiveData = async () => {
     try {
-      console.log('📊 🚨 CRITICAL: Fetching ALL user data - checking multiple sources...');
+      console.log('📊 🚨 CRITICAL: Starting comprehensive user detection...');
       
-      // 🚨 STEP 1: Fetch ALL auth users using service role (admin function)
-      let authUsers: any[] = [];
+      // 🚨 STEP 1: Try to fetch auth users (will fail but worth trying)
+      let authUsersFromAdmin: any[] = [];
       try {
-        console.log('🔍 Attempting to fetch auth users via admin API...');
+        console.log('🔍 Attempting auth.admin.listUsers()...');
         const { data: authResponse, error: authError } = await supabase.auth.admin.listUsers();
         
         if (authError) {
-          console.error('❌ Auth admin error:', authError);
-          console.log('⚠️ Trying alternative method - will use profiles only');
+          console.error('❌ Expected auth admin error (no service role):', authError.message);
         } else {
-          authUsers = authResponse?.users || [];
-          console.log(`✅ AUTH USERS FOUND VIA ADMIN API: ${authUsers.length}`);
-          console.log('📧 Auth user emails:', authUsers.map(u => u.email));
+          authUsersFromAdmin = authResponse?.users || [];
+          console.log(`✅ AUTH ADMIN SUCCESS: ${authUsersFromAdmin.length} users found`);
         }
       } catch (error) {
-        console.error('❌ Auth admin call failed:', error);
-        console.log('⚠️ Continuing with profiles-only approach');
+        console.log('⚠️ Auth admin failed as expected (client-side limitation)');
       }
 
-      // 🚨 STEP 2: Fetch ALL profiles from database - EXPANDED QUERY
+      // 🚨 STEP 2: Get the current session to extract user info
+      console.log('🔍 Getting current session...');
+      const { data: sessionData } = await supabase.auth.getSession();
+      const currentUser = sessionData?.session?.user;
+      
+      if (currentUser) {
+        console.log('✅ Current session user found:', {
+          id: currentUser.id,
+          email: currentUser.email,
+          created_at: currentUser.created_at
+        });
+      }
+
+      // 🚨 STEP 3: Fetch ALL profiles from database
       console.log('📊 Fetching ALL profiles from database...');
       const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
@@ -100,41 +110,29 @@ const SuperAdminDashboard = () => {
         throw profilesError;
       }
 
-      console.log(`✅ PROFILES FOUND: ${profilesData?.length || 0} total users in database`);
-      console.log('👤 Profile nicknames:', profilesData?.map(p => ({ id: p.id, nickname: p.nickname })));
+      console.log(`✅ PROFILES FOUND: ${profilesData?.length || 0} profiles in database`);
+      console.log('👤 Profile details:', profilesData?.map(p => ({ 
+        id: p.id, 
+        nickname: p.nickname,
+        created_at: p.created_at 
+      })));
 
-      // 🚨 STEP 3: Cross-reference auth users with profiles
-      console.log('🔄 Cross-referencing auth users with profiles...');
-      
-      // Create a comprehensive user list
-      const allUserIds = new Set([
-        ...authUsers.map(u => u.id),
-        ...(profilesData || []).map(p => p.id)
-      ]);
-      
-      console.log(`🔍 TOTAL UNIQUE USER IDs FOUND: ${allUserIds.size}`);
-      console.log('📝 All User IDs:', Array.from(allUserIds));
-
-      // 🚨 STEP 4: For any auth users without profiles, create missing profile data
-      for (const authUser of authUsers) {
-        const hasProfile = profilesData?.some(p => p.id === authUser.id);
+      // 🚨 STEP 4: Check if current user has a profile, if not create it
+      if (currentUser) {
+        const hasProfile = profilesData?.some(p => p.id === currentUser.id);
         if (!hasProfile) {
-          console.log(`⚠️ Missing profile for auth user: ${authUser.email} (${authUser.id})`);
-          console.log('🔧 Creating missing profile...');
-          
+          console.log('⚠️ Current user missing profile, creating...');
           try {
             const { error: insertError } = await supabase
               .from('profiles')
               .insert({
-                id: authUser.id,
-                nickname: authUser.email?.split('@')[0] || `User_${authUser.id.substring(0, 8)}`,
-                created_at: authUser.created_at
+                id: currentUser.id,
+                nickname: currentUser.email?.split('@')[0] || `User_${currentUser.id.substring(0, 8)}`,
+                created_at: currentUser.created_at
               });
             
-            if (insertError) {
-              console.error('❌ Error creating missing profile:', insertError);
-            } else {
-              console.log('✅ Created missing profile');
+            if (!insertError) {
+              console.log('✅ Created profile for current user');
               // Refresh profiles data
               const { data: updatedProfiles } = await supabase
                 .from('profiles')
@@ -143,6 +141,7 @@ const SuperAdminDashboard = () => {
               if (updatedProfiles) {
                 profilesData.length = 0;
                 profilesData.push(...updatedProfiles);
+                console.log('✅ Refreshed profiles list');
               }
             }
           } catch (error) {
@@ -151,48 +150,74 @@ const SuperAdminDashboard = () => {
         }
       }
 
-      // Fetch ALL user roles - NO FILTERS
-      const { data: rolesData, error: rolesError } = await supabase
-        .from('user_roles')
-        .select('*');
+      // 🚨 STEP 5: Use RPC function to get recent sessions/activity
+      console.log('🔍 Checking for additional user activity...');
+      try {
+        // Query user_locations to find users who have been active
+        const { data: locationsData } = await supabase
+          .from('user_locations')
+          .select('user_id, updated_at')
+          .order('updated_at', { ascending: false })
+          .limit(100);
 
-      if (rolesError) {
-        console.error('❌ Error fetching roles:', rolesError);
+        console.log(`📍 Found ${locationsData?.length || 0} location records`);
+        
+        // Extract unique user IDs from locations
+        const locationUserIds = locationsData?.map(l => l.user_id).filter(Boolean) || [];
+        const uniqueLocationUserIds = [...new Set(locationUserIds)];
+        
+        console.log(`👥 Unique users with location data: ${uniqueLocationUserIds.length}`);
+        console.log('🆔 Location user IDs:', uniqueLocationUserIds);
+
+        // Check if we have profiles for all location users
+        for (const locationUserId of uniqueLocationUserIds) {
+          const hasProfile = profilesData?.some(p => p.id === locationUserId);
+          if (!hasProfile) {
+            console.log(`⚠️ Missing profile for location user: ${locationUserId}`);
+            console.log('🔧 Creating profile for active user...');
+            
+            try {
+              const { error: insertError } = await supabase
+                .from('profiles')
+                .insert({
+                  id: locationUserId,
+                  nickname: `User_${locationUserId.substring(0, 8)}`,
+                  created_at: new Date().toISOString()
+                });
+              
+              if (!insertError) {
+                console.log('✅ Created profile for active user');
+                // Add to our local data
+                profilesData?.push({
+                  id: locationUserId,
+                  nickname: `User_${locationUserId.substring(0, 8)}`,
+                  created_at: new Date().toISOString()
+                });
+              }
+            } catch (error) {
+              console.error('❌ Failed to create profile for active user:', error);
+            }
+          }
+        }
+      } catch (error) {
+        console.error('❌ Error checking user activity:', error);
       }
 
-      console.log(`✅ ROLES FOUND: ${rolesData?.length || 0} role assignments`);
+      // 🚨 STEP 6: Fetch user roles, locations, bans, and mutes
+      const { data: rolesData } = await supabase.from('user_roles').select('*');
+      const { data: locationsData } = await supabase.from('user_locations').select('*');
+      const { data: bansData } = await supabase.from('user_bans').select('user_id').eq('is_active', true);
+      const { data: mutesData } = await supabase.from('user_mutes').select('user_id').eq('is_active', true);
 
-      // Fetch ALL user locations for online status (last 10 minutes = online)
-      const { data: locationsData, error: locationsError } = await supabase
-        .from('user_locations')
-        .select('*');
+      console.log(`✅ ROLES: ${rolesData?.length || 0}`);
+      console.log(`✅ LOCATIONS: ${locationsData?.length || 0}`);
+      console.log(`✅ BANS: ${bansData?.length || 0}`);
+      console.log(`✅ MUTES: ${mutesData?.length || 0}`);
 
-      if (locationsError) {
-        console.error('❌ Error fetching locations:', locationsError);
-      }
-
-      console.log(`✅ LOCATIONS FOUND: ${locationsData?.length || 0} location records`);
-
-      // Fetch ban status for all users
-      const { data: bansData } = await supabase
-        .from('user_bans')
-        .select('user_id')
-        .eq('is_active', true);
-
-      // Fetch mute status for all users
-      const { data: mutesData } = await supabase
-        .from('user_mutes')
-        .select('user_id')
-        .eq('is_active', true);
-
-      console.log(`✅ BANS FOUND: ${bansData?.length || 0} banned users`);
-      console.log(`✅ MUTES FOUND: ${mutesData?.length || 0} muted users`);
-
-      // 🚨 STEP 5: Combine ALL user data with DETAILED LOGGING
+      // 🚨 STEP 7: Build comprehensive user list
       const usersWithStatus: LiveUser[] = (profilesData || []).map(profile => {
         const userRole = rolesData?.find(role => role.user_id === profile.id);
         const location = locationsData?.find(loc => loc.user_id === profile.id);
-        const authUser = authUsers.find(au => au.id === profile.id);
         const isBanned = bansData?.some(ban => ban.user_id === profile.id) || false;
         const isMuted = mutesData?.some(mute => mute.user_id === profile.id) || false;
         
@@ -200,19 +225,25 @@ const SuperAdminDashboard = () => {
         const lastSeen = location?.updated_at || profile.created_at;
         const isOnline = lastSeen ? new Date(lastSeen) > new Date(Date.now() - 10 * 60 * 1000) : false;
 
+        // Try to get email from current session if it's the same user
+        let email = undefined;
+        if (currentUser && currentUser.id === profile.id) {
+          email = currentUser.email;
+        }
+
         console.log(`👤 Processing User ${profile.nickname}:`);
         console.log(`  - ID: ${profile.id}`);
         console.log(`  - Role: ${userRole?.role || 'user'}`);
         console.log(`  - Online: ${isOnline}`);
         console.log(`  - Last Seen: ${lastSeen}`);
-        console.log(`  - Email: ${authUser?.email || 'N/A'}`);
+        console.log(`  - Email: ${email || 'N/A'}`);
         console.log(`  - Banned: ${isBanned}`);
         console.log(`  - Muted: ${isMuted}`);
 
         return {
           id: profile.id,
           nickname: profile.nickname,
-          email: authUser?.email || undefined,
+          email,
           latitude: location?.latitude,
           longitude: location?.longitude,
           last_seen: lastSeen,
@@ -224,41 +255,19 @@ const SuperAdminDashboard = () => {
         };
       });
 
-      // 🚨 STEP 6: Add any auth users that don't have profiles yet
-      for (const authUser of authUsers) {
-        const hasProfile = usersWithStatus.some(u => u.id === authUser.id);
-        if (!hasProfile) {
-          console.log(`⚠️ Adding auth user without profile: ${authUser.email}`);
-          usersWithStatus.push({
-            id: authUser.id,
-            nickname: authUser.email?.split('@')[0] || `User_${authUser.id.substring(0, 8)}`,
-            email: authUser.email,
-            latitude: undefined,
-            longitude: undefined,
-            last_seen: authUser.created_at,
-            role: 'user',
-            is_online: false,
-            created_at: authUser.created_at,
-            is_banned: false,
-            is_muted: false
-          });
-        }
-      }
-
-      console.log(`📊 🚨 FINAL PROCESSING RESULT:`);
+      console.log(`📊 🚨 FINAL USER PROCESSING RESULT:`);
       console.log(`- Total users processed: ${usersWithStatus.length}`);
       console.log(`- Online users: ${usersWithStatus.filter(u => u.is_online).length}`);
       console.log(`- Offline users: ${usersWithStatus.filter(u => !u.is_online).length}`);
       console.log(`- Admins: ${usersWithStatus.filter(u => u.role === 'admin').length}`);
       console.log(`- Merchants: ${usersWithStatus.filter(u => u.role === 'merchant').length}`);
       console.log(`- Regular users: ${usersWithStatus.filter(u => u.role === 'user').length}`);
-      console.log('📧 All user emails:', usersWithStatus.map(u => u.email).filter(Boolean));
+      console.log('📧 User emails found:', usersWithStatus.map(u => u.email).filter(Boolean));
       
-      // CRITICAL: Ensure we're setting the state with ALL users
       setLiveUsers(usersWithStatus);
       console.log(`✅ STATE UPDATED: Set ${usersWithStatus.length} users in component state`);
 
-      // Fetch recent messages with user and place info
+      // Fetch recent messages
       const { data: messagesData } = await supabase
         .from('chat_messages')
         .select('id, message, created_at, user_id, place_id')
@@ -266,16 +275,13 @@ const SuperAdminDashboard = () => {
         .order('created_at', { ascending: false })
         .limit(50);
 
-      console.log(`💬 MESSAGES FOUND: ${messagesData?.length || 0} recent messages`);
-
-      // Get user profiles for message authors
+      // Get user profiles and places for messages
       const userIds = messagesData?.map(msg => msg.user_id).filter(Boolean) || [];
       const { data: messageProfiles } = await supabase
         .from('profiles')
         .select('id, nickname')
         .in('id', userIds);
 
-      // Get places for messages
       const placeIds = messagesData?.map(msg => msg.place_id).filter(Boolean) || [];
       const { data: places } = await supabase
         .from('places')
@@ -299,7 +305,7 @@ const SuperAdminDashboard = () => {
 
       setLiveMessages(messagesWithInfo);
 
-      // Calculate accurate stats
+      // Calculate stats
       const newStats = {
         totalUsers: usersWithStatus.length,
         onlineUsers: usersWithStatus.filter(u => u.is_online).length,
@@ -309,6 +315,18 @@ const SuperAdminDashboard = () => {
 
       console.log(`📈 STATS UPDATE:`, newStats);
       setStats(newStats);
+
+      // 🚨 FINAL DIAGNOSTIC
+      if (usersWithStatus.length < 3) {
+        console.log('🚨 WARNING: Expected at least 3 users but only found', usersWithStatus.length);
+        console.log('📧 Expected emails: hak4rgof120876@gmail.com, ahmedsindi200@gmail.com');
+        console.log('💡 Possible causes:');
+        console.log('  1. Users signed up but profiles were not created');
+        console.log('  2. Users are in auth.users but not accessible via client');
+        console.log('  3. Need to implement server-side user discovery');
+        
+        toast.error(`Only ${usersWithStatus.length} users found. Expected more users. Check console for details.`);
+      }
 
     } catch (error) {
       console.error('❌ CRITICAL ERROR in fetchLiveData:', error);
@@ -321,18 +339,6 @@ const SuperAdminDashboard = () => {
   const setupRealtimeSubscriptions = () => {
     console.log('🔗 Setting up real-time subscriptions...');
     
-    // Subscribe to auth schema changes (if possible)
-    const authChannel = supabase
-      .channel('admin-auth')
-      .on('postgres_changes', 
-        { event: '*', schema: 'auth', table: 'users' },
-        (payload) => {
-          console.log('🔐 Auth user change detected:', payload);
-          fetchLiveData();
-        }
-      )
-      .subscribe();
-
     // Subscribe to profile changes
     const profilesChannel = supabase
       .channel('admin-profiles')
@@ -357,7 +363,7 @@ const SuperAdminDashboard = () => {
       )
       .subscribe();
 
-    // Subscribe to location updates (for online status)
+    // Subscribe to location updates
     const locationsChannel = supabase
       .channel('admin-locations')
       .on('postgres_changes',
@@ -381,38 +387,12 @@ const SuperAdminDashboard = () => {
       )
       .subscribe();
 
-    // Subscribe to ban/mute changes
-    const bansChannel = supabase
-      .channel('admin-bans')
-      .on('postgres_changes',
-        { event: '*', schema: 'public', table: 'user_bans' },
-        (payload) => {
-          console.log('🚫 Ban change detected:', payload);
-          fetchLiveData();
-        }
-      )
-      .subscribe();
-
-    const mutesChannel = supabase
-      .channel('admin-mutes')
-      .on('postgres_changes',
-        { event: '*', schema: 'public', table: 'user_mutes' },
-        (payload) => {
-          console.log('🔇 Mute change detected:', payload);
-          fetchLiveData();
-        }
-      )
-      .subscribe();
-
     return () => {
       console.log('🛑 Cleaning up real-time subscriptions');
-      supabase.removeChannel(authChannel);
       supabase.removeChannel(profilesChannel);
       supabase.removeChannel(rolesChannel);
       supabase.removeChannel(locationsChannel);
       supabase.removeChannel(messagesChannel);
-      supabase.removeChannel(bansChannel);
-      supabase.removeChannel(mutesChannel);
     };
   };
 
@@ -538,6 +518,11 @@ const SuperAdminDashboard = () => {
           <p className="text-xs text-purple-600 mt-1">
             📊 Showing {filteredUsers.length} of {liveUsers.length} users in list
           </p>
+          {liveUsers.length < 3 && (
+            <p className="text-xs text-red-600 mt-1">
+              ⚠️ Expected more users (hak4rgof120876@gmail.com, ahmedsindi200@gmail.com) - Check console logs
+            </p>
+          )}
         </div>
 
         {/* Real-time Stats */}
