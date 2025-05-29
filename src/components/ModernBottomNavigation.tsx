@@ -51,13 +51,19 @@ const ModernBottomNavigation: React.FC<ModernBottomNavigationProps> = ({
   // Filter items based on user role
   const visibleNavItems = navItems.filter(item => item.show);
 
+  const handleSectionChange = (section: string) => {
+    if (onSectionChange && typeof onSectionChange === 'function') {
+      onSectionChange(section);
+    }
+  };
+
   return (
     <div className="fixed bottom-0 left-0 right-0 z-10">
       <div className="bg-background border-t border-border px-2 py-2 flex justify-between">
         {visibleNavItems.map((item) => (
           <button
             key={item.id}
-            onClick={() => onSectionChange(item.id)}
+            onClick={() => handleSectionChange(item.id)}
             className={`flex flex-1 flex-col items-center justify-center p-2 rounded-md transition-colors
               ${activeSection === item.id 
                 ? 'text-primary bg-primary/10' 

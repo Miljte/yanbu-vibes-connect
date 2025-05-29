@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Label } from '@/components/ui/label';
 import { useAuth } from '@/hooks/useAuth';
+import { useState } from 'react';
 
 export interface AuthModalProps {
   isOpen: boolean;
@@ -13,24 +14,44 @@ export interface AuthModalProps {
 }
 
 const AuthModal: React.FC<AuthModalProps> = ({ isOpen, onClose }) => {
-  const { user, signIn, signUp, isLoading, error } = useAuth();
+  const { user, signIn, signUp } = useAuth();
+  const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // Login form handlers
   const handleLoginSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    setIsLoading(true);
+    setError(null);
+    
     const formData = new FormData(e.currentTarget);
-    await signIn(formData.get('email') as string, formData.get('password') as string);
+    try {
+      await signIn(formData.get('email') as string, formData.get('password') as string);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Login failed');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   // Signup form handlers
   const handleSignupSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
+    setIsLoading(true);
+    setError(null);
+    
     const formData = new FormData(e.currentTarget);
-    await signUp(
-      formData.get('email') as string, 
-      formData.get('password') as string, 
-      formData.get('nickname') as string
-    );
+    try {
+      await signUp(
+        formData.get('email') as string, 
+        formData.get('password') as string, 
+        formData.get('nickname') as string
+      );
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Signup failed');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   if (!isOpen) return null;

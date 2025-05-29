@@ -4,7 +4,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useRoles } from '@/hooks/useRoles';
 import AuthModal from '@/components/AuthModal';
 import ModernBottomNavigation from '@/components/ModernBottomNavigation';
-import RealYanbuMap from '@/components/RealYanbuMap';
+import ModernMap from '@/components/ModernMap';
 import ModernProfile from '@/components/ModernProfile';
 import ModernEvents from '@/components/ModernEvents';
 import EnhancedMerchantDashboard from '@/components/EnhancedMerchantDashboard';
@@ -24,19 +24,19 @@ const Index = () => {
   const renderCurrentView = () => {
     switch (currentView) {
       case 'map':
-        return <RealYanbuMap />;
+        return <ModernMap />;
       case 'events':
         return <ModernEvents />;
       case 'profile':
         return <ModernProfile />;
       case 'merchant':
-        return isMerchant ? <EnhancedMerchantDashboard /> : <RealYanbuMap />;
+        return isMerchant ? <EnhancedMerchantDashboard /> : <ModernMap />;
       case 'admin':
-        return isAdmin ? <AdvancedAdminPanel /> : <RealYanbuMap />;
+        return isAdmin ? <AdvancedAdminPanel /> : <ModernMap />;
       case 'super-admin':
-        return userRole === 'admin' ? <SuperAdminDashboard /> : <RealYanbuMap />;
+        return userRole === 'admin' ? <SuperAdminDashboard /> : <ModernMap />;
       default:
-        return <RealYanbuMap />;
+        return <ModernMap />;
     }
   };
 
