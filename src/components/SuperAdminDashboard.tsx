@@ -123,13 +123,22 @@ const SuperAdminDashboard = () => {
         if (!hasProfile) {
           console.log('⚠️ Current user missing profile, creating...');
           try {
+            const newProfile = {
+              id: currentUser.id,
+              nickname: currentUser.email?.split('@')[0] || `User_${currentUser.id.substring(0, 8)}`,
+              created_at: currentUser.created_at,
+              updated_at: new Date().toISOString(),
+              age: null,
+              gender: null,
+              avatar_preset: 'default',
+              interests: [],
+              location_sharing_enabled: true,
+              notifications_enabled: true
+            };
+
             const { error: insertError } = await supabase
               .from('profiles')
-              .insert({
-                id: currentUser.id,
-                nickname: currentUser.email?.split('@')[0] || `User_${currentUser.id.substring(0, 8)}`,
-                created_at: currentUser.created_at
-              });
+              .insert(newProfile);
             
             if (!insertError) {
               console.log('✅ Created profile for current user');
@@ -177,22 +186,27 @@ const SuperAdminDashboard = () => {
             console.log('🔧 Creating profile for active user...');
             
             try {
+              const newProfile = {
+                id: locationUserId,
+                nickname: `User_${locationUserId.substring(0, 8)}`,
+                created_at: new Date().toISOString(),
+                updated_at: new Date().toISOString(),
+                age: null,
+                gender: null,
+                avatar_preset: 'default',
+                interests: [],
+                location_sharing_enabled: true,
+                notifications_enabled: true
+              };
+
               const { error: insertError } = await supabase
                 .from('profiles')
-                .insert({
-                  id: locationUserId,
-                  nickname: `User_${locationUserId.substring(0, 8)}`,
-                  created_at: new Date().toISOString()
-                });
+                .insert(newProfile);
               
               if (!insertError) {
                 console.log('✅ Created profile for active user');
                 // Add to our local data
-                profilesData?.push({
-                  id: locationUserId,
-                  nickname: `User_${locationUserId.substring(0, 8)}`,
-                  created_at: new Date().toISOString()
-                });
+                profilesData?.push(newProfile);
               }
             } catch (error) {
               console.error('❌ Failed to create profile for active user:', error);
