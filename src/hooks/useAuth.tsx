@@ -7,8 +7,9 @@ import { toast } from 'sonner';
 interface AuthContextType {
   user: User | null;
   loading: boolean;
-  signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string, nickname: string) => Promise<void>;
+  userRole: string | null;
+  signIn: (email: string, password: string) => Promise<{ data?: any; error?: any }>;
+  signUp: (email: string, password: string, nickname: string) => Promise<{ data?: any; error?: any }>;
   signOut: () => Promise<void>;
 }
 
@@ -17,6 +18,7 @@ const AuthContext = createContext<AuthContextType | undefined>(undefined);
 export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
   const [user, setUser] = useState<User | null>(null);
   const [loading, setLoading] = useState(true);
+  const [userRole, setUserRole] = useState<string | null>(null);
 
   useEffect(() => {
     // Get initial session
@@ -26,7 +28,10 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUser(session?.user ?? null);
         
         if (session?.user) {
-          await ensureProfileExists(session.user);
+          setTimeout(async () => {
+            await fetchUserRole(session.user.id);
+            await ensureProfileExists(session.user);
+          }, 0);
         }
       } catch (error) {
         console.error('Error getting initial session:', error);
@@ -43,7 +48,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         setUser(session?.user ?? null);
         
         if (session?.user && event === 'SIGNED_IN') {
-          await ensureProfileExists(session.user);
+          setTimeout(async () => {
+            await fetchUserRole(session.user.id);
+            await ensureProfileExists(session.user);
+          }, 0);
+        } else {
+          setUserRole(null);
         }
         
         setLoading(false);
@@ -52,6 +62,21 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
 
     return () => subscription.unsubscribe();
   }, []);
+
+  const fetchUserRole = async (userId: string) => {
+    try {
+      const { data: roleData } = await supabase
+        .from('user_roles')
+        .select('role')
+        .eq('user_id', userId)
+        .single();
+      
+      setUserRole(roleData?.role || 'user');
+    } catch (error) {
+      console.error('Error fetching user role:', error);
+      setUserRole('user');
+    }
+  };
 
   const ensureProfileExists = async (user: User) => {
     try {
@@ -88,17 +113,22 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signIn = async (email: string, password: string) => {
     try {
       setLoading(true);
-      const { error } = await supabase.auth.signInWithPassword({
+      const result = await supabase.auth.signInWithPassword({
         email,
         password,
       });
       
-      if (error) throw error;
+      if (result.error) {
+        toast.error(result.error.message || 'Failed to sign in');
+        return { error: result.error };
+      }
+      
       toast.success('Signed in successfully!');
+      return { data: result.data };
     } catch (error: any) {
       console.error('Sign in error:', error);
       toast.error(error.message || 'Failed to sign in');
-      throw error;
+      return { error };
     } finally {
       setLoading(false);
     }
@@ -107,7 +137,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const signUp = async (email: string, password: string, nickname: string) => {
     try {
       setLoading(true);
-      const { error } = await supabase.auth.signUp({
+      const result = await supabase.auth.signUp({
         email,
         password,
         options: {
@@ -117,12 +147,17 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         }
       });
       
-      if (error) throw error;
+      if (result.error) {
+        toast.error(result.error.message || 'Failed to create account');
+        return { error: result.error };
+      }
+      
       toast.success('Account created successfully! Please check your email for verification.');
+      return { data: result.data };
     } catch (error: any) {
       console.error('Sign up error:', error);
       toast.error(error.message || 'Failed to create account');
-      throw error;
+      return { error };
     } finally {
       setLoading(false);
     }
@@ -133,6 +168,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
       setLoading(true);
       const { error } = await supabase.auth.signOut();
       if (error) throw error;
+      setUserRole(null);
     } catch (error: any) {
       console.error('Sign out error:', error);
       toast.error(error.message || 'Failed to sign out');
@@ -145,6 +181,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
   const value = {
     user,
     loading,
+    userRole,
     signIn,
     signUp,
     signOut,

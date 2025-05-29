@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Settings, Moon, Sun, Globe, User, Bell, MapPin, Shield, Eye, EyeOff } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -25,7 +24,7 @@ interface UserProfile {
 }
 
 const ModernSettings = () => {
-  const { user, signOut, updateProfile } = useAuth();
+  const { user, signOut } = useAuth();
   const { isDark, toggleTheme } = useTheme();
   const [profile, setProfile] = useState<UserProfile>({
     nickname: '',

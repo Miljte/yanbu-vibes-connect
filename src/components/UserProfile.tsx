@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { User, MapPin, Heart, Calendar, Settings, Edit3, Save } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -13,7 +12,7 @@ import { toast } from 'sonner';
 const UserProfile = () => {
   const [isEditing, setIsEditing] = useState(false);
   const [loading, setLoading] = useState(false);
-  const { user, updateProfile } = useAuth();
+  const { user } = useAuth();
   
   const [profile, setProfile] = useState({
     nickname: '',
