@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Wrapper, Status } from '@googlemaps/react-wrapper';
 import { Card, CardContent } from '@/components/ui/card';
@@ -308,6 +307,12 @@ const ModernMap = () => {
     }
   };
 
+  // Calculate nearby places and chat unlocked places
+  const nearbyPlaces = places.filter(place => place.distance !== null && place.distance <= 5000);
+  const chatUnlockedPlaces = new Set(
+    places.filter(place => place.distance !== null && place.distance <= 1000).map(p => p.id)
+  );
+
   // NOW handle conditional rendering AFTER all hooks are called
   if (isChecking) {
     return (
@@ -331,7 +336,11 @@ const ModernMap = () => {
         >
           ← Back to Map
         </Button>
-        <RealTimeProximityChat />
+        <RealTimeProximityChat 
+          nearbyPlaces={nearbyPlaces}
+          chatUnlockedPlaces={chatUnlockedPlaces}
+          userLocation={location}
+        />
       </div>
     );
   }

@@ -89,8 +89,14 @@ const RealTimeProximityChat: React.FC<RealTimeProximityChatProps> = ({
       const { data: messagesData, error } = await supabase
         .from('chat_messages')
         .select(`
-          *,
-          user:profiles(nickname)
+          id,
+          message,
+          user_id,
+          place_id,
+          created_at,
+          is_deleted,
+          message_type,
+          is_promotion
         `)
         .eq('place_id', selectedPlace)
         .eq('is_deleted', false)
@@ -102,8 +108,24 @@ const RealTimeProximityChat: React.FC<RealTimeProximityChatProps> = ({
         return;
       }
 
-      console.log('✅ Fetched messages:', messagesData?.length || 0);
-      setMessages(messagesData || []);
+      // Fetch user nicknames separately
+      const messagesWithUsers = await Promise.all(
+        (messagesData || []).map(async (message) => {
+          const { data: profileData } = await supabase
+            .from('profiles')
+            .select('nickname')
+            .eq('id', message.user_id)
+            .single();
+
+          return {
+            ...message,
+            user: profileData ? { nickname: profileData.nickname } : { nickname: 'Unknown User' }
+          };
+        })
+      );
+
+      console.log('✅ Fetched messages:', messagesWithUsers.length);
+      setMessages(messagesWithUsers);
     } catch (error) {
       console.error('❌ Error in fetchMessages:', error);
     } finally {
