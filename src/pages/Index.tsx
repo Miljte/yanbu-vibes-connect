@@ -1,6 +1,6 @@
 
 import React, { useState } from 'react';
-import YanbuMapbox from "@/components/YanbuMapbox";
+import YanbuGoogleMap from "@/components/YanbuGoogleMap";
 import ProximityChat from "@/components/ProximityChat";
 import EventsSection from "@/components/EventsSection";
 import UserProfile from "@/components/UserProfile";
@@ -29,7 +29,7 @@ const Index = () => {
   const renderActiveSection = () => {
     switch (activeSection) {
       case 'map':
-        return <YanbuMapbox />;
+        return <YanbuGoogleMap />;
       case 'events':
         return <EventsSection />;
       case 'chat':
@@ -92,7 +92,7 @@ const Index = () => {
       case 'admin':
         return hasPermission('admin_dashboard') ? <AdminDashboard /> : <div className="min-h-screen bg-background p-4 flex items-center justify-center pb-20"><div className="text-foreground">Access denied</div></div>;
       default:
-        return <YanbuMapbox />;
+        return <YanbuGoogleMap />;
     }
   };
 
