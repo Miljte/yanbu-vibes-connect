@@ -81,15 +81,14 @@ export const useRealtimeLocation = () => {
       const { data: places, error: placesError } = await supabase
         .from('places')
         .select('*')
-        .eq('is_active', true)
-        .not('merchant_id', 'is', null);
+        .eq('is_active', true);
 
       if (placesError) {
         console.error('❌ Error fetching places:', placesError);
         return;
       }
 
-      console.log(`📊 Found ${places?.length || 0} total active merchant places in database`);
+      console.log(`📊 Found ${places?.length || 0} total active places in database`);
 
       const placesWithDistance = places?.map(place => {
         const distance = calculateDistance(
@@ -106,18 +105,19 @@ export const useRealtimeLocation = () => {
           distance,
           type: place.type
         };
-      }).filter(place => place.distance <= 2000) // Show places within 2km
+      }).filter(place => place.distance <= 5000) // Increased range to 5km for better detection
       .sort((a, b) => a.distance - b.distance) || [];
 
-      console.log(`✅ Found ${placesWithDistance.length} merchant places within 2km`);
+      console.log(`✅ Found ${placesWithDistance.length} places within 5km`);
       
-      // Log the closest few places for debugging
-      placesWithDistance.slice(0, 3).forEach(place => {
-        console.log(`📍 ${place.name}: ${place.distance}m away`);
+      // Log all places with distances for debugging
+      placesWithDistance.forEach(place => {
+        console.log(`📍 ${place.name}: ${place.distance}m away (${place.distance <= 500 ? 'UNLOCKED' : 'locked'})`);
       });
 
       setNearbyPlaces(placesWithDistance);
 
+      // Auto-unlock chat for places within 500m
       const unlockedPlaceIds = new Set(
         placesWithDistance
           .filter(place => place.distance <= 500)
@@ -126,6 +126,10 @@ export const useRealtimeLocation = () => {
       setChatUnlockedPlaces(unlockedPlaceIds);
       
       console.log(`🔓 Chat auto-unlocked for ${unlockedPlaceIds.size} places within 500m`);
+      
+      if (unlockedPlaceIds.size > 0) {
+        console.log('🎉 Unlocked place IDs:', Array.from(unlockedPlaceIds));
+      }
     } catch (error) {
       console.error('❌ Error in fetchNearbyPlaces:', error);
     }
@@ -171,8 +175,8 @@ export const useRealtimeLocation = () => {
 
       const options = {
         enableHighAccuracy: true,
-        timeout: 15000, // Increased timeout for better accuracy
-        maximumAge: 30000, // Allow slightly older positions for smoother updates
+        timeout: 15000,
+        maximumAge: 30000,
       };
 
       const updateLocation = async (position: GeolocationPosition) => {
@@ -182,9 +186,9 @@ export const useRealtimeLocation = () => {
           accuracy: position.coords.accuracy,
         };
 
-        // Validate location accuracy and reasonableness
-        if (newLocation.accuracy && newLocation.accuracy > 100) {
-          console.warn('⚠️ Poor GPS accuracy:', newLocation.accuracy + 'm - skipping update');
+        // More lenient accuracy check - accept locations up to 1000m accuracy
+        if (newLocation.accuracy && newLocation.accuracy > 1000) {
+          console.warn('⚠️ Very poor GPS accuracy:', newLocation.accuracy + 'm - skipping update');
           return;
         }
 
@@ -209,12 +213,14 @@ export const useRealtimeLocation = () => {
         setLocation(newLocation);
         setError(null);
 
+        // Always fetch nearby places when location updates
         try {
           await fetchNearbyPlaces(newLocation);
         } catch (error) {
           console.error('❌ Error fetching nearby places:', error);
         }
 
+        // Update location in database
         try {
           await supabase
             .from('user_locations')
@@ -266,14 +272,14 @@ export const useRealtimeLocation = () => {
         options
       );
 
-      // Start continuous tracking with reduced frequency for smoother updates
+      // Start continuous tracking
       watchId = navigator.geolocation.watchPosition(
         updateLocation,
         handleError,
         options
       );
 
-      // Update every 60 seconds to maintain online status (less frequent)
+      // Update every 60 seconds to maintain online status
       updateInterval = setInterval(async () => {
         if (location) {
           try {

@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef } from 'react';
 import { Send, MapPin, Users, MessageSquare, Volume2, VolumeX, AlertCircle } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -40,11 +41,21 @@ const RealTimeProximityChat = () => {
   const { nearbyPlaces, chatUnlockedPlaces, calculateDistance, location } = useRealtimeLocation();
   const { isMuted, canSendMessage, getMuteMessage, checkMuteStatus } = useChatValidation();
 
-  // Add debug logging for nearbyPlaces
+  // Enhanced debug logging for proximity chat
   useEffect(() => {
-    console.log('🏪 Nearby places updated:', nearbyPlaces);
-    console.log('📍 Current location:', location);
-    console.log('🔓 Chat unlocked places:', Array.from(chatUnlockedPlaces));
+    console.log('🏪 RealTimeProximityChat - Nearby places updated:', nearbyPlaces);
+    console.log('📍 RealTimeProximityChat - Current location:', location);
+    console.log('🔓 RealTimeProximityChat - Chat unlocked places:', Array.from(chatUnlockedPlaces));
+    
+    if (nearbyPlaces.length > 0) {
+      console.log('🎯 Detailed place analysis:');
+      nearbyPlaces.forEach(place => {
+        const isUnlocked = chatUnlockedPlaces.has(place.id);
+        console.log(`  - ${place.name}: ${place.distance}m away, ${isUnlocked ? 'UNLOCKED' : 'LOCKED'}`);
+      });
+    } else {
+      console.log('❌ No nearby places found in RealTimeProximityChat');
+    }
   }, [nearbyPlaces, location, chatUnlockedPlaces]);
 
   useEffect(() => {
@@ -199,7 +210,9 @@ const RealTimeProximityChat = () => {
   };
 
   const isPlaceUnlocked = (place: Place) => {
-    return chatUnlockedPlaces.has(place.id);
+    const unlocked = chatUnlockedPlaces.has(place.id);
+    console.log(`🔍 Checking if ${place.name} is unlocked: ${unlocked} (distance: ${place.distance}m)`);
+    return unlocked;
   };
 
   const formatDistance = (distance: number) => {
@@ -228,7 +241,7 @@ const RealTimeProximityChat = () => {
     }
   };
 
-  // Show debug info when no nearby places
+  // Enhanced debug info when no nearby places
   if (nearbyPlaces.length === 0) {
     return (
       <div className="min-h-screen bg-background p-4 flex items-center justify-center">
@@ -240,10 +253,12 @@ const RealTimeProximityChat = () => {
               Move closer to stores to access proximity chat
             </p>
             {location && (
-              <div className="text-xs text-muted-foreground space-y-1">
+              <div className="text-xs text-muted-foreground space-y-1 bg-muted p-3 rounded">
+                <p><strong>Debug Info:</strong></p>
                 <p>📍 Your location: {location.latitude.toFixed(6)}, {location.longitude.toFixed(6)}</p>
-                <p>🎯 Searching within 2km radius</p>
+                <p>🎯 Searching within 5km radius</p>
                 <p>💡 Chat unlocks within 500m of stores</p>
+                <p>📊 Check console for detailed logs</p>
               </div>
             )}
           </CardContent>
