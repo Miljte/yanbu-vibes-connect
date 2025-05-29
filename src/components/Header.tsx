@@ -63,6 +63,16 @@ const Header = () => {
                   <span>{language === 'ar' ? 'الملف الشخصي' : 'Profile'}</span>
                 </a>
               )}
+              {hasPermission('merchant_dashboard') && (
+                <a href="#merchant" className="flex items-center space-x-2 text-slate-300 hover:text-cyan-400 transition-colors">
+                  <span>{language === 'ar' ? 'لوحة التاجر' : 'Merchant'}</span>
+                </a>
+              )}
+              {hasPermission('admin_dashboard') && (
+                <a href="#admin" className="flex items-center space-x-2 text-slate-300 hover:text-cyan-400 transition-colors">
+                  <span>{language === 'ar' ? 'لوحة الإدارة' : 'Admin'}</span>
+                </a>
+              )}
             </nav>
 
             {/* Auth & Language Toggle */}
@@ -133,6 +143,16 @@ const Header = () => {
                   <a href="#profile" className="flex items-center space-x-2 text-slate-300 hover:text-cyan-400 transition-colors">
                     <User className="w-4 h-4" />
                     <span>{language === 'ar' ? 'الملف الشخصي' : 'Profile'}</span>
+                  </a>
+                )}
+                {hasPermission('merchant_dashboard') && (
+                  <a href="#merchant" className="flex items-center space-x-2 text-slate-300 hover:text-cyan-400 transition-colors">
+                    <span>{language === 'ar' ? 'لوحة التاجر' : 'Merchant'}</span>
+                  </a>
+                )}
+                {hasPermission('admin_dashboard') && (
+                  <a href="#admin" className="flex items-center space-x-2 text-slate-300 hover:text-cyan-400 transition-colors">
+                    <span>{language === 'ar' ? 'لوحة الإدارة' : 'Admin'}</span>
                   </a>
                 )}
                 
