@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Wrapper, Status } from '@googlemaps/react-wrapper';
 import { Card, CardContent } from '@/components/ui/card';
@@ -84,7 +85,7 @@ const MapComponent: React.FC<MapComponentProps> = ({
     }
   ];
 
-  const getMarkerIcon = (type: string) => {
+  const getMarkerIcon = useCallback((type: string) => {
     const iconConfig = {
       'cafe': { color: '#8B4513', emoji: '☕' },
       'restaurant': { color: '#FF6347', emoji: '🍽️' },
@@ -102,7 +103,7 @@ const MapComponent: React.FC<MapComponentProps> = ({
       strokeWeight: 3,
       scale: 16, // Fixed size - won't scale with zoom
     };
-  };
+  }, []);
 
   useEffect(() => {
     if (ref.current && !map) {
@@ -124,7 +125,7 @@ const MapComponent: React.FC<MapComponentProps> = ({
       
       setMap(newMap);
     }
-  }, [ref, map, center, zoom]);
+  }, [center, zoom]);
 
   useEffect(() => {
     if (!map) return;
@@ -152,7 +153,9 @@ const MapComponent: React.FC<MapComponentProps> = ({
       });
       
       setTimeout(() => {
-        userMarker.setAnimation(null);
+        if (userMarker.getAnimation()) {
+          userMarker.setAnimation(null);
+        }
       }, 2000);
       
       newMarkers.push(userMarker);
@@ -182,7 +185,7 @@ const MapComponent: React.FC<MapComponentProps> = ({
     });
 
     setMarkers(newMarkers);
-  }, [map, places, userLocation, onPlaceClick, selectedCategory]);
+  }, [map, places, userLocation, onPlaceClick, selectedCategory, getMarkerIcon]);
 
   return <div ref={ref} className="w-full h-full" style={{ minHeight: '100vh' }} />;
 };
@@ -242,22 +245,28 @@ const ModernMap = () => {
   }
 
   useEffect(() => {
-    fetchActivePlaces();
-    
-    const placesSubscription = supabase
-      .channel('places-changes')
-      .on('postgres_changes', 
-        { event: '*', schema: 'public', table: 'places' }, 
-        () => {
-          fetchActivePlaces();
-        }
-      )
-      .subscribe();
+    if (isInYanbu === true) {
+      fetchActivePlaces();
+    }
+  }, [isInYanbu, location]);
 
-    return () => {
-      supabase.removeChannel(placesSubscription);
-    };
-  }, [location]);
+  useEffect(() => {
+    if (isInYanbu === true) {
+      const placesSubscription = supabase
+        .channel('places-changes')
+        .on('postgres_changes', 
+          { event: '*', schema: 'public', table: 'places' }, 
+          () => {
+            fetchActivePlaces();
+          }
+        )
+        .subscribe();
+
+      return () => {
+        supabase.removeChannel(placesSubscription);
+      };
+    }
+  }, [isInYanbu]);
 
   const fetchActivePlaces = async () => {
     try {

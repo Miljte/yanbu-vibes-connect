@@ -28,22 +28,25 @@ export const useYanbuLocationCheck = () => {
   };
 
   useEffect(() => {
-    if (!loading && location) {
-      const inBounds = checkLocationInBounds(location.latitude, location.longitude);
-      setIsInYanbu(inBounds);
-      setIsChecking(false);
-    } else if (!loading && !location) {
-      // If no location available, assume outside Yanbu for safety
-      setIsInYanbu(false);
+    if (!loading) {
+      if (location) {
+        const inBounds = checkLocationInBounds(location.latitude, location.longitude);
+        setIsInYanbu(inBounds);
+      } else {
+        // If no location available, assume outside Yanbu for safety
+        setIsInYanbu(false);
+      }
       setIsChecking(false);
     }
-  }, [location, loading]);
+  }, [location, loading]); // Fixed dependency array
 
   const recheckLocation = () => {
     setIsChecking(true);
     if (location) {
       const inBounds = checkLocationInBounds(location.latitude, location.longitude);
       setIsInYanbu(inBounds);
+    } else {
+      setIsInYanbu(false);
     }
     setIsChecking(false);
   };
