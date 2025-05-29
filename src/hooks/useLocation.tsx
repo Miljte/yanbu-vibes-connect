@@ -21,7 +21,14 @@ export const useLocation = () => {
       return;
     }
 
-    // First try to get current position immediately
+    // High-accuracy GPS options for real-time tracking
+    const gpsOptions = {
+      enableHighAccuracy: true,
+      timeout: 5000,
+      maximumAge: 0, // Always get fresh location
+    };
+
+    // Get initial position with high accuracy
     navigator.geolocation.getCurrentPosition(
       async (position) => {
         const newLocation = {
@@ -30,11 +37,12 @@ export const useLocation = () => {
           accuracy: position.coords.accuracy,
         };
         
+        console.log('High-accuracy GPS location:', newLocation);
         setLocation(newLocation);
         setError(null);
         setLoading(false);
 
-        // Update location in database if user is logged in
+        // Update location in database for real-time tracking
         if (user) {
           try {
             await supabase
@@ -46,31 +54,28 @@ export const useLocation = () => {
                 accuracy: newLocation.accuracy,
                 updated_at: new Date().toISOString(),
               });
+            console.log('Location updated in database');
           } catch (error) {
             console.error('Error updating location:', error);
           }
         }
       },
       (error) => {
-        console.error('Geolocation error:', error);
-        setError(`Location access denied: ${error.message}`);
+        console.error('High-accuracy geolocation error:', error);
+        setError(`GPS access required for proximity features: ${error.message}`);
         setLoading(false);
         
-        // Set default Yanbu location if permission denied
+        // Set default Yanbu location if GPS fails
         setLocation({
           latitude: 24.0892,
           longitude: 38.0618,
           accuracy: 1000
         });
       },
-      {
-        enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 60000, // 1 minute
-      }
+      gpsOptions
     );
 
-    // Then set up watching for location changes
+    // Set up continuous real-time tracking with high accuracy
     const watchId = navigator.geolocation.watchPosition(
       async (position) => {
         const newLocation = {
@@ -79,10 +84,11 @@ export const useLocation = () => {
           accuracy: position.coords.accuracy,
         };
         
+        console.log('Real-time GPS update:', newLocation);
         setLocation(newLocation);
         setError(null);
 
-        // Update location in database if user is logged in
+        // Update location in database for live tracking
         if (user) {
           try {
             await supabase
@@ -95,7 +101,7 @@ export const useLocation = () => {
                 updated_at: new Date().toISOString(),
               });
           } catch (error) {
-            console.error('Error updating location:', error);
+            console.error('Error updating real-time location:', error);
           }
         }
       },
@@ -105,14 +111,16 @@ export const useLocation = () => {
       },
       {
         enableHighAccuracy: true,
-        timeout: 15000,
-        maximumAge: 300000, // 5 minutes
+        timeout: 10000,
+        maximumAge: 5000, // Fresh location every 5 seconds
       }
     );
 
+    // Cleanup function
     return () => {
       if (watchId) {
         navigator.geolocation.clearWatch(watchId);
+        console.log('GPS tracking stopped');
       }
     };
   }, [user]);
@@ -127,7 +135,7 @@ export const useLocation = () => {
       Math.sin(dLon/2) * Math.sin(dLon/2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
     const distance = R * c * 1000; // Distance in meters
-    return distance;
+    return Math.round(distance); // Round to nearest meter for accuracy
   };
 
   return {
