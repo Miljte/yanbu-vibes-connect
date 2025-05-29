@@ -59,10 +59,12 @@ export const useRealtimeLocation = () => {
     try {
       console.log('🏪 Fetching nearby places for location:', currentLocation);
       
+      // Only fetch places that have a valid merchant_id (merchant-added stores only)
       const { data: places, error: placesError } = await supabase
         .from('places')
         .select('*')
-        .eq('is_active', true);
+        .eq('is_active', true)
+        .not('merchant_id', 'is', null); // Only merchant-added places
 
       if (placesError) {
         console.error('❌ Error fetching places:', placesError);
@@ -87,10 +89,10 @@ export const useRealtimeLocation = () => {
       }).filter(place => place.distance <= 2000) // Show places within 2km
       .sort((a, b) => a.distance - b.distance) || [];
 
-      console.log(`✅ Found ${placesWithDistance.length} nearby places`);
+      console.log(`✅ Found ${placesWithDistance.length} nearby merchant places`);
       setNearbyPlaces(placesWithDistance);
 
-      // Update chat unlocked places (within 500m)
+      // CRITICAL: Update chat unlocked places (within 500m for chat access)
       const unlockedPlaceIds = new Set(
         placesWithDistance
           .filter(place => place.distance <= 500)
@@ -98,7 +100,7 @@ export const useRealtimeLocation = () => {
       );
       setChatUnlockedPlaces(unlockedPlaceIds);
       
-      console.log(`🔓 Chat unlocked for ${unlockedPlaceIds.size} places`);
+      console.log(`🔓 Chat auto-unlocked for ${unlockedPlaceIds.size} places within 500m:`, Array.from(unlockedPlaceIds));
     } catch (error) {
       console.error('❌ Error in fetchNearbyPlaces:', error);
     }
@@ -113,12 +115,16 @@ export const useRealtimeLocation = () => {
         console.log('🟢 Marking user as ONLINE');
       } else {
         console.log('🔴 Marking user as OFFLINE');
-        await supabase
+        const { error } = await supabase
           .from('user_locations')
           .update({ 
             updated_at: new Date(Date.now() - 11 * 60 * 1000).toISOString() 
           })
           .eq('user_id', user.id);
+        
+        if (error) {
+          console.error('❌ Error marking user offline:', error);
+        }
       }
     } catch (error) {
       console.error('❌ Error updating online status:', error);
@@ -142,14 +148,13 @@ export const useRealtimeLocation = () => {
         return;
       }
 
-      console.log('🌍 Starting optimized real-time tracking for user:', user.id);
+      console.log('🌍 Starting real-time GPS tracking for user:', user.id);
       setIsTracking(true);
 
-      // More forgiving options to prevent timeouts
       const options = {
         enableHighAccuracy: true,
-        timeout: 8000, // Reduced timeout
-        maximumAge: 10000, // Allow 10-second old positions
+        timeout: 8000,
+        maximumAge: 10000,
       };
 
       const updateLocation = async (position: GeolocationPosition) => {
@@ -169,7 +174,7 @@ export const useRealtimeLocation = () => {
           const errorMsg = `🚫 Outside Yanbu city limits - Map access restricted`;
           setError(errorMsg);
           console.warn('❌ User outside Yanbu bounds:', newLocation);
-          setLocation(newLocation); // Still set location for other features
+          setLocation(newLocation);
           return;
         }
 
@@ -177,8 +182,12 @@ export const useRealtimeLocation = () => {
         setLocation(newLocation);
         setError(null);
 
-        // Fetch nearby places based on current location
-        await fetchNearbyPlaces(newLocation);
+        // Fetch nearby places and auto-unlock chats based on distance
+        try {
+          await fetchNearbyPlaces(newLocation);
+        } catch (error) {
+          console.error('❌ Error fetching nearby places:', error);
+        }
 
         try {
           // Update/insert user location in database using UPSERT (marks as online)
@@ -207,7 +216,6 @@ export const useRealtimeLocation = () => {
       const handleError = (error: GeolocationPositionError) => {
         console.warn('⚠️ GPS error (continuing with last known location):', error.message);
         
-        // Don't set error state immediately - give it a chance to recover
         setTimeout(() => {
           if (!location) {
             let errorMessage = 'GPS issue: ';
@@ -230,7 +238,7 @@ export const useRealtimeLocation = () => {
         }, 2000);
       };
 
-      // Get immediate position with progressive enhancement
+      // Get immediate position
       navigator.geolocation.getCurrentPosition(
         updateLocation,
         (error) => {
@@ -247,10 +255,9 @@ export const useRealtimeLocation = () => {
         options
       );
 
-      // Update every 45 seconds to maintain online status (less frequent to reduce timeouts)
+      // Update every 45 seconds to maintain online status
       updateInterval = setInterval(() => {
         if (location) {
-          // Just update the timestamp to stay online
           supabase
             .from('user_locations')
             .update({ updated_at: new Date().toISOString() })
@@ -291,7 +298,7 @@ export const useRealtimeLocation = () => {
     };
 
     // Handle page unload (user closes app)
-    const handleBeforeUnload = async () => {
+    const handleBeforeUnload = () => {
       console.log('👋 User leaving app - marking offline');
       updateOnlineStatus(false);
     };
