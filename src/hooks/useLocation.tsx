@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
@@ -22,7 +21,8 @@ export const useLocation = () => {
       return;
     }
 
-    const watchId = navigator.geolocation.watchPosition(
+    // First try to get current position immediately
+    navigator.geolocation.getCurrentPosition(
       async (position) => {
         const newLocation = {
           latitude: position.coords.latitude,
@@ -52,13 +52,61 @@ export const useLocation = () => {
         }
       },
       (error) => {
-        setError(error.message);
+        console.error('Geolocation error:', error);
+        setError(`Location access denied: ${error.message}`);
         setLoading(false);
+        
+        // Set default Yanbu location if permission denied
+        setLocation({
+          latitude: 24.0892,
+          longitude: 38.0618,
+          accuracy: 1000
+        });
       },
       {
         enableHighAccuracy: true,
         timeout: 10000,
         maximumAge: 60000, // 1 minute
+      }
+    );
+
+    // Then set up watching for location changes
+    const watchId = navigator.geolocation.watchPosition(
+      async (position) => {
+        const newLocation = {
+          latitude: position.coords.latitude,
+          longitude: position.coords.longitude,
+          accuracy: position.coords.accuracy,
+        };
+        
+        setLocation(newLocation);
+        setError(null);
+
+        // Update location in database if user is logged in
+        if (user) {
+          try {
+            await supabase
+              .from('user_locations')
+              .upsert({
+                user_id: user.id,
+                latitude: newLocation.latitude,
+                longitude: newLocation.longitude,
+                accuracy: newLocation.accuracy,
+                updated_at: new Date().toISOString(),
+              });
+          } catch (error) {
+            console.error('Error updating location:', error);
+          }
+        }
+      },
+      (error) => {
+        console.error('Watch position error:', error);
+        // Don't set error state for watch failures, keep the last known location
+      },
+      {
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 300000, // 5 minutes
       }
     );
 

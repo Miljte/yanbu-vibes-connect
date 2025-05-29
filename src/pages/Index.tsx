@@ -1,6 +1,5 @@
 
 import React, { useState } from 'react';
-import Header from "@/components/Header";
 import RealYanbuMap from "@/components/RealYanbuMap";
 import ProximityChat from "@/components/ProximityChat";
 import EventsSection from "@/components/EventsSection";
@@ -18,8 +17,6 @@ const Index = () => {
 
   console.log('Index page - user:', user?.id, 'loading:', loading);
   console.log('Index page - activeSection:', activeSection);
-  console.log('Index page - hasPermission admin_dashboard:', hasPermission('admin_dashboard'));
-  console.log('Index page - hasPermission merchant_dashboard:', hasPermission('merchant_dashboard'));
 
   if (loading) {
     return (
@@ -49,7 +46,6 @@ const Index = () => {
               </div>
               
               <div className="space-y-6">
-                {/* Merchant Dashboard */}
                 {hasPermission('merchant_dashboard') && (
                   <div 
                     className="bg-slate-800/50 border border-slate-700 rounded-lg p-6 cursor-pointer hover:bg-slate-700/50 transition-colors"
@@ -60,7 +56,6 @@ const Index = () => {
                   </div>
                 )}
                 
-                {/* Admin Dashboard */}
                 {hasPermission('admin_dashboard') && (
                   <div 
                     className="bg-slate-800/50 border border-slate-700 rounded-lg p-6 cursor-pointer hover:bg-slate-700/50 transition-colors"
@@ -71,7 +66,6 @@ const Index = () => {
                   </div>
                 )}
                 
-                {/* General Options */}
                 <div className="bg-slate-800/50 border border-slate-700 rounded-lg p-6">
                   <h3 className="text-xl font-semibold text-white mb-4">Settings</h3>
                   <div className="space-y-3">
@@ -104,7 +98,6 @@ const Index = () => {
 
   return (
     <div className="min-h-screen">
-      <Header />
       {renderActiveSection()}
       <BottomNavigation 
         activeSection={activeSection} 
