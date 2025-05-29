@@ -14,6 +14,9 @@ const ModernBottomNavigation: React.FC<ModernBottomNavigationProps> = ({
   userRole = 'user' 
 }) => {
   
+  // Debug logging
+  console.log('ModernBottomNavigation - userRole:', userRole);
+  
   // Navigation items with conditional admin/merchant sections
   const navItems = [
     {
@@ -55,7 +58,12 @@ const ModernBottomNavigation: React.FC<ModernBottomNavigationProps> = ({
   ];
 
   // Filter items based on user role and limit to 5 for better mobile UX
-  const visibleNavItems = navItems.filter(item => item.show).slice(0, 5);
+  const visibleNavItems = navItems.filter(item => {
+    console.log(`Item ${item.id} - show: ${item.show}, userRole: ${userRole}`);
+    return item.show;
+  }).slice(0, 5);
+
+  console.log('Visible nav items:', visibleNavItems.map(item => item.id));
 
   const handleSectionChange = (section: string) => {
     if (onSectionChange && typeof onSectionChange === 'function') {

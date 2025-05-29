@@ -18,6 +18,11 @@ const Index = () => {
   const { userRole, isAdmin, isMerchant } = useRoles();
   const [currentView, setCurrentView] = useState('map');
 
+  // Debug logging
+  console.log('Index - userRole:', userRole);
+  console.log('Index - isAdmin:', isAdmin);
+  console.log('Index - isMerchant:', isMerchant);
+
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
