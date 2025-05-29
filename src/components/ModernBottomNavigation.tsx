@@ -32,6 +32,18 @@ const ModernBottomNavigation: React.FC<ModernBottomNavigationProps> = ({
       show: true
     },
     {
+      id: 'admin',
+      label: 'Admin',
+      icon: <Shield className="h-5 w-5" />,
+      show: userRole === 'admin'
+    },
+    {
+      id: 'merchant',
+      label: 'Merchant',
+      icon: <ShoppingBag className="h-5 w-5" />,
+      show: userRole === 'merchant' || userRole === 'admin'
+    },
+    {
       id: 'profile',
       label: 'Profile',
       icon: <User className="h-5 w-5" />,
@@ -43,25 +55,14 @@ const ModernBottomNavigation: React.FC<ModernBottomNavigationProps> = ({
       icon: <Settings className="h-5 w-5" />,
       show: true
     },
-    {
-      id: 'merchant',
-      label: 'Merchant',
-      icon: <ShoppingBag className="h-5 w-5" />,
-      show: userRole === 'merchant' || userRole === 'admin'
-    },
-    {
-      id: 'admin',
-      label: 'Admin',
-      icon: <Shield className="h-5 w-5" />,
-      show: userRole === 'admin'
-    },
   ];
 
-  // Filter items based on user role and limit to 5 for better mobile UX
+  // Filter items based on user role and allow up to 6 items for admin users
+  const maxItems = userRole === 'admin' ? 6 : 5;
   const visibleNavItems = navItems.filter(item => {
     console.log(`Item ${item.id} - show: ${item.show}, userRole: ${userRole}`);
     return item.show;
-  }).slice(0, 5);
+  }).slice(0, maxItems);
 
   console.log('Visible nav items:', visibleNavItems.map(item => item.id));
 
