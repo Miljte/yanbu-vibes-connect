@@ -34,18 +34,9 @@ interface LiveMessage {
   place_id: string;
 }
 
-interface StoreActivity {
-  place_id: string;
-  place_name: string;
-  nearby_users: number;
-  message_count: number;
-  merchant_name: string;
-}
-
 const SuperAdminDashboard = () => {
   const [liveMessages, setLiveMessages] = useState<LiveMessage[]>([]);
   const [liveUsers, setLiveUsers] = useState<LiveUser[]>([]);
-  const [storeActivity, setStoreActivity] = useState<StoreActivity[]>([]);
   const [stats, setStats] = useState({
     totalUsers: 0,
     onlineUsers: 0,
@@ -53,48 +44,66 @@ const SuperAdminDashboard = () => {
     activeStores: 0
   });
   const [searchFilter, setSearchFilter] = useState('');
-  const [selectedStore, setSelectedStore] = useState<string>('all');
-  const [userFilter, setUserFilter] = useState('all'); // all, online, offline, banned, muted
+  const [userFilter, setUserFilter] = useState('all');
   const [loading, setLoading] = useState(true);
   const { user } = useAuth();
 
-  // Real-time data fetching
+  // Real-time data fetching with enhanced logging
   useEffect(() => {
+    console.log('🔄 SuperAdmin Dashboard initializing...');
     fetchLiveData();
     setupRealtimeSubscriptions();
     
-    // Set up periodic refresh for online status
-    const interval = setInterval(fetchLiveData, 30000); // Refresh every 30 seconds
+    // Set up periodic refresh for accurate online status
+    const interval = setInterval(() => {
+      console.log('🔄 Periodic data refresh...');
+      fetchLiveData();
+    }, 30000);
     
-    return () => clearInterval(interval);
+    return () => {
+      console.log('🛑 SuperAdmin Dashboard cleanup');
+      clearInterval(interval);
+    };
   }, []);
 
   const fetchLiveData = async () => {
     try {
-      console.log('🔄 Fetching all user data...');
+      console.log('📊 Fetching ALL user data from database...');
       
-      // Fetch ALL profiles from the database
+      // Fetch ALL profiles from the database - NO FILTERS
       const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
         .select('id, nickname, created_at')
         .order('created_at', { ascending: false });
 
       if (profilesError) {
-        console.error('❌ Error fetching profiles:', profilesError);
+        console.error('❌ CRITICAL ERROR fetching profiles:', profilesError);
         throw profilesError;
       }
 
-      console.log(`✅ Found ${profilesData?.length || 0} total users`);
+      console.log(`✅ PROFILES FOUND: ${profilesData?.length || 0} total users in database`);
 
       // Fetch user roles
-      const { data: rolesData } = await supabase
+      const { data: rolesData, error: rolesError } = await supabase
         .from('user_roles')
         .select('user_id, role');
 
+      if (rolesError) {
+        console.error('❌ Error fetching roles:', rolesError);
+      }
+
+      console.log(`✅ ROLES FOUND: ${rolesData?.length || 0} role assignments`);
+
       // Fetch user locations for online status (last 10 minutes = online)
-      const { data: locationsData } = await supabase
+      const { data: locationsData, error: locationsError } = await supabase
         .from('user_locations')
         .select('user_id, latitude, longitude, updated_at');
+
+      if (locationsError) {
+        console.error('❌ Error fetching locations:', locationsError);
+      }
+
+      console.log(`✅ LOCATIONS FOUND: ${locationsData?.length || 0} location records`);
 
       // Fetch ban status
       const { data: bansData } = await supabase
@@ -113,11 +122,12 @@ const SuperAdminDashboard = () => {
       try {
         const { data: authData } = await supabase.auth.admin.listUsers();
         authUsers = authData?.users || [];
+        console.log(`✅ AUTH USERS FOUND: ${authUsers.length} auth records`);
       } catch (error) {
         console.warn('⚠️ Could not fetch auth users (admin only feature):', error);
       }
 
-      // Combine all user data
+      // Combine all user data with DETAILED LOGGING
       const usersWithStatus: LiveUser[] = profilesData?.map(profile => {
         const userRole = rolesData?.find(role => role.user_id === profile.id);
         const location = locationsData?.find(loc => loc.user_id === profile.id);
@@ -128,6 +138,8 @@ const SuperAdminDashboard = () => {
         // Calculate online status - user is online if they've updated location in last 10 minutes
         const lastSeen = location?.updated_at || profile.created_at;
         const isOnline = lastSeen ? new Date(lastSeen) > new Date(Date.now() - 10 * 60 * 1000) : false;
+
+        console.log(`👤 User ${profile.nickname}: role=${userRole?.role || 'user'}, online=${isOnline}, lastSeen=${lastSeen}`);
 
         return {
           id: profile.id,
@@ -144,7 +156,13 @@ const SuperAdminDashboard = () => {
         };
       }) || [];
 
-      console.log(`📊 Processed users: ${usersWithStatus.length} total, ${usersWithStatus.filter(u => u.is_online).length} online`);
+      console.log(`📊 FINAL PROCESSING RESULT:`);
+      console.log(`- Total users processed: ${usersWithStatus.length}`);
+      console.log(`- Online users: ${usersWithStatus.filter(u => u.is_online).length}`);
+      console.log(`- Offline users: ${usersWithStatus.filter(u => !u.is_online).length}`);
+      console.log(`- Admins: ${usersWithStatus.filter(u => u.role === 'admin').length}`);
+      console.log(`- Merchants: ${usersWithStatus.filter(u => u.role === 'merchant').length}`);
+      console.log(`- Regular users: ${usersWithStatus.filter(u => u.role === 'user').length}`);
       
       setLiveUsers(usersWithStatus);
 
@@ -155,6 +173,8 @@ const SuperAdminDashboard = () => {
         .eq('is_deleted', false)
         .order('created_at', { ascending: false })
         .limit(50);
+
+      console.log(`💬 MESSAGES FOUND: ${messagesData?.length || 0} recent messages`);
 
       // Get user profiles for message authors
       const userIds = messagesData?.map(msg => msg.user_id).filter(Boolean) || [];
@@ -188,16 +208,19 @@ const SuperAdminDashboard = () => {
       setLiveMessages(messagesWithInfo);
 
       // Calculate accurate stats
-      setStats({
+      const newStats = {
         totalUsers: usersWithStatus.length,
         onlineUsers: usersWithStatus.filter(u => u.is_online).length,
         totalMessages: messagesWithInfo.length,
-        activeStores: storeActivity.length
-      });
+        activeStores: places?.length || 0
+      };
+
+      console.log(`📈 STATS UPDATE:`, newStats);
+      setStats(newStats);
 
     } catch (error) {
-      console.error('❌ Error fetching live data:', error);
-      toast.error('Failed to load admin data');
+      console.error('❌ CRITICAL ERROR in fetchLiveData:', error);
+      toast.error('Failed to load admin data - check console for details');
     } finally {
       setLoading(false);
     }
@@ -278,6 +301,7 @@ const SuperAdminDashboard = () => {
       .subscribe();
 
     return () => {
+      console.log('🛑 Cleaning up real-time subscriptions');
       supabase.removeChannel(profilesChannel);
       supabase.removeChannel(rolesChannel);
       supabase.removeChannel(locationsChannel);
@@ -289,6 +313,7 @@ const SuperAdminDashboard = () => {
 
   const banUser = async (userId: string) => {
     try {
+      console.log('🚫 Banning user:', userId);
       const { error } = await supabase
         .from('user_bans')
         .insert({
@@ -301,13 +326,14 @@ const SuperAdminDashboard = () => {
       toast.success('User banned successfully');
       fetchLiveData();
     } catch (error) {
-      console.error('Error banning user:', error);
+      console.error('❌ Error banning user:', error);
       toast.error('Failed to ban user');
     }
   };
 
   const promoteUser = async (userId: string, newRole: 'user' | 'merchant' | 'admin') => {
     try {
+      console.log(`👑 Promoting user ${userId} to ${newRole}`);
       const { error } = await supabase
         .from('user_roles')
         .upsert({
@@ -320,13 +346,14 @@ const SuperAdminDashboard = () => {
       toast.success(`User promoted to ${newRole}`);
       fetchLiveData();
     } catch (error) {
-      console.error('Error promoting user:', error);
+      console.error('❌ Error promoting user:', error);
       toast.error('Failed to promote user');
     }
   };
 
   const deleteMessage = async (messageId: string) => {
     try {
+      console.log('🗑️ Deleting message:', messageId);
       const { error } = await supabase
         .from('chat_messages')
         .update({ is_deleted: true })
@@ -336,7 +363,7 @@ const SuperAdminDashboard = () => {
       toast.success('Message deleted');
       fetchLiveData();
     } catch (error) {
-      console.error('Error deleting message:', error);
+      console.error('❌ Error deleting message:', error);
       toast.error('Failed to delete message');
     }
   };
@@ -379,6 +406,9 @@ const SuperAdminDashboard = () => {
           <p className="text-muted-foreground">Real-time monitoring and control for POP IN</p>
           <p className="text-sm text-green-600 mt-2">
             ✅ Live Data: {stats.totalUsers} total users • {stats.onlineUsers} online now
+          </p>
+          <p className="text-xs text-blue-600 mt-1">
+            🔄 Auto-refresh: Every 30s • Real-time subscriptions active
           </p>
         </div>
 

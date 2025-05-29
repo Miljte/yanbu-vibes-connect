@@ -74,6 +74,8 @@ const RealTimeProximityChat = () => {
     if (!selectedPlace) return;
 
     try {
+      console.log('💬 Fetching messages for place:', selectedPlace.name);
+      
       const { data: messagesData, error: messagesError } = await supabase
         .from('chat_messages')
         .select('*')
@@ -82,7 +84,12 @@ const RealTimeProximityChat = () => {
         .order('created_at', { ascending: true })
         .limit(50);
 
-      if (messagesError) throw messagesError;
+      if (messagesError) {
+        console.error('❌ Error fetching messages:', messagesError);
+        throw messagesError;
+      }
+
+      console.log(`✅ Fetched ${messagesData?.length || 0} messages`);
 
       const userIds = [...new Set(messagesData?.map(msg => msg.user_id).filter(Boolean) || [])];
       
@@ -91,7 +98,10 @@ const RealTimeProximityChat = () => {
         .select('id, nickname')
         .in('id', userIds);
 
-      if (profilesError) throw profilesError;
+      if (profilesError) {
+        console.error('❌ Error fetching profiles:', profilesError);
+        throw profilesError;
+      }
 
       const messagesWithNicknames = messagesData?.map(msg => ({
         ...msg,
@@ -99,14 +109,18 @@ const RealTimeProximityChat = () => {
       })) || [];
 
       setMessages(messagesWithNicknames);
+      setIsConnected(true);
     } catch (error) {
-      console.error('Error fetching messages:', error);
+      console.error('❌ Error fetching messages:', error);
       setIsConnected(false);
+      toast.error('Failed to load messages');
     }
   };
 
   const setupRealtimeSubscription = () => {
     if (!selectedPlace) return;
+
+    console.log('🔄 Setting up real-time chat subscription for:', selectedPlace.name);
 
     const channel = supabase
       .channel(`realtime_chat_${selectedPlace.id}`)
@@ -119,6 +133,7 @@ const RealTimeProximityChat = () => {
           filter: `place_id=eq.${selectedPlace.id}`
         },
         async (payload) => {
+          console.log('📨 New message received:', payload);
           const newMessage = payload.new as Message;
           
           // Fetch user nickname for the new message
@@ -138,24 +153,32 @@ const RealTimeProximityChat = () => {
         }
       )
       .subscribe((status) => {
+        console.log('📡 Chat subscription status:', status);
         setIsConnected(status === 'SUBSCRIBED');
       });
 
     return () => {
+      console.log('🛑 Removing chat subscription');
       supabase.removeChannel(channel);
     };
   };
 
   const sendMessage = async () => {
-    if (!newMessage.trim() || !selectedPlace || !user) return;
+    if (!newMessage.trim() || !selectedPlace || !user) {
+      console.log('❌ Cannot send message - missing data');
+      return;
+    }
 
-    // Check if user is within chat range
+    // STRICT chat activation check
     if (!chatUnlockedPlaces.has(selectedPlace.id)) {
-      toast.error('You must be within 500m to send messages');
+      console.log('🔒 Chat locked - user not within 500m of store');
+      toast.error('🚫 You must be within 500m to send messages');
       return;
     }
 
     try {
+      console.log('📤 Sending message to:', selectedPlace.name);
+      
       const { error } = await supabase
         .from('chat_messages')
         .insert({
@@ -166,13 +189,17 @@ const RealTimeProximityChat = () => {
           is_promotion: isPromotion && isMerchant
         });
 
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Error sending message:', error);
+        throw error;
+      }
 
+      console.log('✅ Message sent successfully');
       setNewMessage('');
       setIsPromotion(false);
       toast.success('Message sent!');
     } catch (error) {
-      console.error('Error sending message:', error);
+      console.error('❌ Error sending message:', error);
       toast.error('Failed to send message');
       setIsConnected(false);
     }
