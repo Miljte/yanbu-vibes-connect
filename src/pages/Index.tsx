@@ -10,8 +10,20 @@ import { useAuth } from "@/hooks/useAuth";
 import { useRoles } from "@/hooks/useRoles";
 
 const Index = () => {
-  const { user } = useAuth();
+  const { user, loading } = useAuth();
   const { hasPermission } = useRoles();
+
+  console.log('Index page - user:', user?.id, 'loading:', loading);
+  console.log('Index page - hasPermission admin_dashboard:', hasPermission('admin_dashboard'));
+  console.log('Index page - hasPermission merchant_dashboard:', hasPermission('merchant_dashboard'));
+
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
+        <div className="text-white">Loading...</div>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen">

@@ -28,6 +28,7 @@ const InteractiveMap = () => {
   const [places, setPlaces] = useState<Place[]>([]);
   const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
   const { location, loading: locationLoading, calculateDistance } = useLocation();
   const { user } = useAuth();
 
@@ -43,6 +44,7 @@ const InteractiveMap = () => {
 
   const fetchPlaces = async () => {
     try {
+      console.log('Fetching places...');
       const { data, error } = await supabase
         .from('places')
         .select('*')
@@ -51,13 +53,16 @@ const InteractiveMap = () => {
 
       if (error) {
         console.error('Error fetching places:', error);
+        setError('Failed to load places');
         toast.error('Failed to load places');
         return;
       }
 
+      console.log('Places fetched:', data);
       setPlaces(data || []);
     } catch (error) {
       console.error('Error fetching places:', error);
+      setError('Failed to load places');
       toast.error('Failed to load places');
     } finally {
       setLoading(false);
@@ -124,6 +129,14 @@ const InteractiveMap = () => {
     return (
       <div id="map" className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-4 flex items-center justify-center">
         <div className="text-white">Loading places...</div>
+      </div>
+    );
+  }
+
+  if (error) {
+    return (
+      <div id="map" className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-4 flex items-center justify-center">
+        <div className="text-white">Error: {error}</div>
       </div>
     );
   }
@@ -259,28 +272,34 @@ const InteractiveMap = () => {
               <CardContent className="p-4 sm:p-6">
                 <h3 className="text-lg font-semibold text-white mb-4">Nearby Places</h3>
                 <div className="space-y-3 max-h-64 overflow-y-auto">
-                  {places.slice(0, 5).map((place) => (
-                    <div 
-                      key={place.id}
-                      className="flex items-center justify-between p-3 bg-slate-700/30 rounded-lg cursor-pointer hover:bg-slate-700/50 transition-colors"
-                      onClick={() => setSelectedPlace(place)}
-                    >
-                      <div className="flex items-center space-x-3 flex-1 min-w-0">
-                        <div className={`w-6 h-6 sm:w-8 sm:h-8 ${getCrowdColor(place.crowd_level)} rounded-full flex items-center justify-center text-white flex-shrink-0`}>
-                          {getLocationIcon(place.type)}
-                        </div>
-                        <div className="min-w-0 flex-1">
-                          <div className="text-white font-medium text-sm truncate">{place.name}</div>
-                          <div className="text-slate-400 text-xs">
-                            {place.distance ? `${(place.distance / 1000).toFixed(1)} km` : 'Distance unknown'}
+                  {places.length === 0 ? (
+                    <div className="text-center text-slate-400 py-4">
+                      No places found
+                    </div>
+                  ) : (
+                    places.slice(0, 5).map((place) => (
+                      <div 
+                        key={place.id}
+                        className="flex items-center justify-between p-3 bg-slate-700/30 rounded-lg cursor-pointer hover:bg-slate-700/50 transition-colors"
+                        onClick={() => setSelectedPlace(place)}
+                      >
+                        <div className="flex items-center space-x-3 flex-1 min-w-0">
+                          <div className={`w-6 h-6 sm:w-8 sm:h-8 ${getCrowdColor(place.crowd_level)} rounded-full flex items-center justify-center text-white flex-shrink-0`}>
+                            {getLocationIcon(place.type)}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="text-white font-medium text-sm truncate">{place.name}</div>
+                            <div className="text-slate-400 text-xs">
+                              {place.distance ? `${(place.distance / 1000).toFixed(1)} km` : 'Distance unknown'}
+                            </div>
                           </div>
                         </div>
+                        <Badge variant="outline" className="border-slate-600 text-slate-300 text-xs">
+                          {place.crowd_level}
+                        </Badge>
                       </div>
-                      <Badge variant="outline" className="border-slate-600 text-slate-300 text-xs">
-                        {place.crowd_level}
-                      </Badge>
-                    </div>
-                  ))}
+                    ))
+                  )}
                 </div>
               </CardContent>
             </Card>
