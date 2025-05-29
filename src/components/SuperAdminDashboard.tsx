@@ -101,23 +101,18 @@ const SuperAdminDashboard = () => {
     try {
       console.log('👥 Fetching ALL users from database...');
       
-      // Get ALL auth users using admin API
-      const { data: { users: authUsers }, error: authError } = await supabase.auth.admin.listUsers();
-      
-      if (authError) {
-        console.error('❌ Error fetching auth users:', authError);
-        throw authError;
-      }
-
-      console.log(`✅ Found ${authUsers?.length || 0} auth users`);
-
-      // Get all profiles
+      // First try to get all profiles (this should work for all authenticated users)
       const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
         .select('*')
         .order('created_at', { ascending: false });
 
-      if (profilesError) throw profilesError;
+      if (profilesError) {
+        console.error('❌ Error fetching profiles:', profilesError);
+        throw profilesError;
+      }
+
+      console.log(`✅ Found ${profilesData?.length || 0} profiles`);
 
       // Get user roles
       const { data: rolesData } = await supabase
@@ -147,24 +142,23 @@ const SuperAdminDashboard = () => {
         .select('user_id')
         .eq('is_active', true);
 
-      // Combine ALL data - prioritize auth users to ensure everyone is shown
-      const usersWithDetails = authUsers?.map(authUser => {
-        const profile = profilesData?.find(p => p.id === authUser.id);
-        const userRole = rolesData?.find(role => role.user_id === authUser.id);
-        const recentLocation = locationsData?.find(loc => loc.user_id === authUser.id);
-        const lastLocation = allLocationsData?.find(loc => loc.user_id === authUser.id);
-        const isBanned = bansData?.some(ban => ban.user_id === authUser.id);
-        const isMuted = mutesData?.some(mute => mute.user_id === authUser.id);
+      // Combine all data from profiles (this ensures we show ALL users)
+      const usersWithDetails = profilesData?.map(profile => {
+        const userRole = rolesData?.find(role => role.user_id === profile.id);
+        const recentLocation = locationsData?.find(loc => loc.user_id === profile.id);
+        const lastLocation = allLocationsData?.find(loc => loc.user_id === profile.id);
+        const isBanned = bansData?.some(ban => ban.user_id === profile.id);
+        const isMuted = mutesData?.some(mute => mute.user_id === profile.id);
         
         // Check if user is online (activity within last 10 minutes)
         const isOnline = !!recentLocation;
-        const lastSeen = lastLocation?.updated_at || authUser.created_at;
+        const lastSeen = lastLocation?.updated_at || profile.created_at;
 
         return {
-          id: authUser.id,
-          nickname: profile?.nickname || authUser.email?.split('@')[0] || 'Unknown User',
-          email: authUser.email || '',
-          created_at: authUser.created_at,
+          id: profile.id,
+          nickname: profile.nickname || 'Unknown User',
+          email: '', // We don't have direct access to auth.users emails from profiles
+          created_at: profile.created_at,
           role: userRole?.role || 'user',
           is_banned: isBanned || false,
           is_muted: isMuted || false,
@@ -174,8 +168,8 @@ const SuperAdminDashboard = () => {
             latitude: recentLocation.latitude, 
             longitude: recentLocation.longitude 
           } : undefined,
-          age: profile?.age,
-          gender: profile?.gender
+          age: profile.age,
+          gender: profile.gender
         };
       }) || [];
 
@@ -185,9 +179,55 @@ const SuperAdminDashboard = () => {
       
       setUsers(usersWithDetails);
       
+      // Also try to fetch auth users if we have admin privileges (fallback)
+      if (usersWithDetails.length === 0) {
+        console.log('⚠️ No profiles found, trying auth users...');
+        await fetchAuthUsersAsFallback();
+      }
+      
     } catch (error) {
       console.error('❌ Error fetching users:', error);
       toast.error('Failed to load users');
+      
+      // Try fallback method
+      await fetchAuthUsersAsFallback();
+    }
+  };
+
+  const fetchAuthUsersAsFallback = async () => {
+    try {
+      console.log('🔄 Attempting to fetch auth users as fallback...');
+      
+      const { data: { users: authUsers }, error: authError } = await supabase.auth.admin.listUsers();
+      
+      if (authError) {
+        console.error('❌ Auth users fetch failed:', authError);
+        return;
+      }
+
+      console.log(`✅ Found ${authUsers?.length || 0} auth users`);
+
+      if (authUsers && authUsers.length > 0) {
+        const authUsersFormatted = authUsers.map(authUser => ({
+          id: authUser.id,
+          nickname: authUser.email?.split('@')[0] || 'Unknown User',
+          email: authUser.email || '',
+          created_at: authUser.created_at,
+          role: 'user',
+          is_banned: false,
+          is_muted: false,
+          last_seen: authUser.created_at,
+          is_online: false,
+          location: undefined,
+          age: undefined,
+          gender: undefined
+        }));
+
+        setUsers(authUsersFormatted);
+        toast.success(`Loaded ${authUsersFormatted.length} users from auth`);
+      }
+    } catch (error) {
+      console.error('❌ Fallback auth fetch failed:', error);
     }
   };
 
@@ -275,6 +315,9 @@ const SuperAdminDashboard = () => {
           target_user_id: targetUserId,
           details: details || {}
         });
+      
+      // Refresh logs after adding new one
+      fetchAdminLogs();
     } catch (error) {
       console.error('❌ Error logging admin action:', error);
     }
@@ -421,7 +464,10 @@ const SuperAdminDashboard = () => {
   if (loading) {
     return (
       <div className="min-h-screen bg-background p-4 flex items-center justify-center">
-        <div className="text-foreground">Loading super admin dashboard...</div>
+        <div className="text-center">
+          <RefreshCw className="w-8 h-8 animate-spin mx-auto mb-4" />
+          <div className="text-foreground">Loading super admin dashboard...</div>
+        </div>
       </div>
     );
   }
@@ -615,7 +661,7 @@ const SuperAdminDashboard = () => {
                           )}
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground">
-                          {userData.email}
+                          {userData.email || 'N/A'}
                         </TableCell>
                         <TableCell className="text-sm text-muted-foreground">
                           {new Date(userData.created_at).toLocaleDateString()}
@@ -757,7 +803,20 @@ const SuperAdminDashboard = () => {
                     <Users className="w-12 h-12 mx-auto mb-4 opacity-50" />
                     <p>No users found matching your criteria</p>
                     {users.length === 0 && (
-                      <p className="text-sm mt-2">Try syncing users or check database connection</p>
+                      <div className="mt-4 space-y-2">
+                        <p className="text-sm">Try syncing users or check database connection</p>
+                        <Button 
+                          onClick={() => {
+                            syncUsersIfNeeded();
+                            fetchAllUsers();
+                          }}
+                          variant="outline"
+                          size="sm"
+                        >
+                          <RefreshCw className="w-4 h-4 mr-2" />
+                          Sync Users Now
+                        </Button>
+                      </div>
                     )}
                   </div>
                 )}
