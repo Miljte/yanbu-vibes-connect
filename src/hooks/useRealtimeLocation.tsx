@@ -110,10 +110,8 @@ export const useRealtimeLocation = () => {
     
     try {
       if (isOnline) {
-        // User is online - update location timestamp
         console.log('🟢 Marking user as ONLINE');
       } else {
-        // User going offline - set timestamp to 11 minutes ago (marks as offline)
         console.log('🔴 Marking user as OFFLINE');
         await supabase
           .from('user_locations')
@@ -144,13 +142,14 @@ export const useRealtimeLocation = () => {
         return;
       }
 
-      console.log('🌍 Starting HIGH-ACCURACY location tracking for user:', user.id);
+      console.log('🌍 Starting optimized real-time tracking for user:', user.id);
       setIsTracking(true);
 
+      // More forgiving options to prevent timeouts
       const options = {
-        enableHighAccuracy: true, // Force GPS for maximum accuracy
-        timeout: 15000,
-        maximumAge: 0, // No cache - always get fresh location
+        enableHighAccuracy: true,
+        timeout: 8000, // Reduced timeout
+        maximumAge: 10000, // Allow 10-second old positions
       };
 
       const updateLocation = async (position: GeolocationPosition) => {
@@ -160,17 +159,16 @@ export const useRealtimeLocation = () => {
           accuracy: position.coords.accuracy,
         };
 
-        console.log('📍 Raw GPS location:', newLocation);
-        console.log('📏 GPS accuracy:', newLocation.accuracy, 'meters');
+        console.log('📍 GPS update:', newLocation, 'accuracy:', newLocation.accuracy + 'm');
 
         // STRICT Yanbu boundary check
         const withinYanbu = isWithinYanbu(newLocation.latitude, newLocation.longitude);
         setIsInYanbu(withinYanbu);
 
         if (!withinYanbu) {
-          const errorMsg = `🚫 Access restricted: You are outside Yanbu city limits. Map access blocked.`;
+          const errorMsg = `🚫 Outside Yanbu city limits - Map access restricted`;
           setError(errorMsg);
-          console.error('❌ User outside Yanbu bounds:', newLocation);
+          console.warn('❌ User outside Yanbu bounds:', newLocation);
           setLocation(newLocation); // Still set location for other features
           return;
         }
@@ -207,50 +205,60 @@ export const useRealtimeLocation = () => {
       };
 
       const handleError = (error: GeolocationPositionError) => {
-        console.error('❌ HIGH-ACCURACY GPS error:', error);
-        let errorMessage = 'Location error: ';
+        console.warn('⚠️ GPS error (continuing with last known location):', error.message);
         
-        switch (error.code) {
-          case error.PERMISSION_DENIED:
-            errorMessage += 'Location access denied. Please enable location permissions.';
-            break;
-          case error.POSITION_UNAVAILABLE:
-            errorMessage += 'Location information unavailable. Please check GPS settings.';
-            break;
-          case error.TIMEOUT:
-            errorMessage += 'Location request timed out. Please try again.';
-            break;
-          default:
-            errorMessage += error.message;
-            break;
-        }
-        
-        setError(errorMessage);
-        setIsTracking(false);
+        // Don't set error state immediately - give it a chance to recover
+        setTimeout(() => {
+          if (!location) {
+            let errorMessage = 'GPS issue: ';
+            switch (error.code) {
+              case error.PERMISSION_DENIED:
+                errorMessage += 'Please enable location permissions.';
+                break;
+              case error.POSITION_UNAVAILABLE:
+                errorMessage += 'GPS signal weak. Trying again...';
+                break;
+              case error.TIMEOUT:
+                errorMessage += 'GPS timeout. Continuing with network location.';
+                break;
+              default:
+                errorMessage += 'Using last known location.';
+                break;
+            }
+            setError(errorMessage);
+          }
+        }, 2000);
       };
 
-      // Start high-accuracy GPS tracking
+      // Get immediate position with progressive enhancement
+      navigator.geolocation.getCurrentPosition(
+        updateLocation,
+        (error) => {
+          console.log('🔄 Initial GPS failed, starting watch anyway...');
+          handleError(error);
+        },
+        options
+      );
+
+      // Start continuous tracking
       watchId = navigator.geolocation.watchPosition(
         updateLocation,
         handleError,
         options
       );
 
-      // Get immediate position
-      navigator.geolocation.getCurrentPosition(
-        updateLocation,
-        handleError,
-        options
-      );
-
-      // Update every 30 seconds to maintain online status
+      // Update every 45 seconds to maintain online status (less frequent to reduce timeouts)
       updateInterval = setInterval(() => {
-        navigator.geolocation.getCurrentPosition(
-          updateLocation,
-          handleError,
-          options
-        );
-      }, 30000);
+        if (location) {
+          // Just update the timestamp to stay online
+          supabase
+            .from('user_locations')
+            .update({ updated_at: new Date().toISOString() })
+            .eq('user_id', user.id)
+            .then(() => console.log('🔄 Online status refreshed'))
+            .catch(err => console.error('❌ Online status update failed:', err));
+        }
+      }, 45000);
     };
 
     const stopTracking = () => {
