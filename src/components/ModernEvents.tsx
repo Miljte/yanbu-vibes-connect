@@ -26,10 +26,10 @@ interface Event {
     name: string;
     latitude: number;
     longitude: number;
-  };
+  } | null;
   organizer?: {
     nickname: string;
-  };
+  } | null;
   user_attending?: boolean;
 }
 
@@ -90,12 +90,20 @@ const ModernEvents = () => {
         
         const eventsWithAttendance = eventsData.map(event => ({
           ...event,
+          current_attendees: event.current_attendees || 0,
+          organizer: Array.isArray(event.organizer) ? event.organizer[0] : event.organizer,
           user_attending: attendingEventIds.has(event.id)
-        }));
+        })) as Event[];
 
         setEvents(eventsWithAttendance);
-      } else {
-        setEvents(eventsData || []);
+      } else if (eventsData) {
+        const processedEvents = eventsData.map(event => ({
+          ...event,
+          current_attendees: event.current_attendees || 0,
+          organizer: Array.isArray(event.organizer) ? event.organizer[0] : event.organizer,
+        })) as Event[];
+
+        setEvents(processedEvents);
       }
     } catch (error) {
       console.error('Error fetching events:', error);
