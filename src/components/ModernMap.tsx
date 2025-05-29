@@ -2,12 +2,17 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Wrapper, Status } from '@googlemaps/react-wrapper';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { MapPin, Navigation, Users, MessageSquare } from 'lucide-react';
+import { MapPin, Navigation, Users, MessageSquare, Lock, Languages } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import RealTimeProximityChat from './RealTimeProximityChat';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
-import { useRealtimeLocation } from '@/hooks/useRealtimeLocation';
+import { useLocation } from '@/hooks/useLocation';
+import { useYanbuLocationCheck } from '@/hooks/useYanbuLocationCheck';
+import { toast } from 'sonner';
+import { useLocalization } from '@/contexts/LocalizationContext';
+import { CategoryFilter } from './CategoryFilter';
+import { LocationRestriction } from './LocationRestriction';
 
 interface Place {
   id: string;
