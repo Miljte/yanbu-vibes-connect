@@ -107,7 +107,6 @@ const SuperAdminDashboard = () => {
     try {
       console.log('🔍 Fetching all users...');
       
-      // Fetch ALL profiles from the database
       const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
         .select('id, nickname, created_at')
@@ -166,13 +165,6 @@ const SuperAdminDashboard = () => {
       }) || [];
 
       console.log('✅ Processed users with details:', usersWithDetails.length);
-      console.log('👥 Users breakdown:', {
-        total: usersWithDetails.length,
-        online: usersWithDetails.filter(u => u.is_online).length,
-        banned: usersWithDetails.filter(u => u.is_banned).length,
-        muted: usersWithDetails.filter(u => u.is_muted).length
-      });
-
       setUsers(usersWithDetails);
     } catch (error) {
       console.error('❌ Error in fetchUsers:', error);

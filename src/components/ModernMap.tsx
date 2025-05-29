@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Wrapper, Status } from '@googlemaps/react-wrapper';
 import { Card, CardContent } from '@/components/ui/card';
@@ -47,6 +48,7 @@ const MapComponent: React.FC<MapComponentProps> = React.memo(({
   const ref = useRef<HTMLDivElement>(null);
   const [map, setMap] = useState<google.maps.Map>();
   const [markers, setMarkers] = useState<google.maps.Marker[]>([]);
+  const markersRef = useRef<Map<string, google.maps.Marker>>(new Map());
 
   // Yanbu city bounds - restricting map movement to Yanbu area only
   const yanbuBounds = new google.maps.LatLngBounds(
@@ -93,6 +95,7 @@ const MapComponent: React.FC<MapComponentProps> = React.memo(({
       strokeColor: '#ffffff',
       strokeWeight: 2,
       scale: 14,
+      anchor: new google.maps.Point(0, 0)
     };
   }, []);
 
@@ -112,7 +115,7 @@ const MapComponent: React.FC<MapComponentProps> = React.memo(({
         zoomControl: true,
         gestureHandling: 'cooperative',
         backgroundColor: '#f8fafc',
-        clickableIcons: false, // Improve performance
+        clickableIcons: false,
       });
       
       setMap(newMap);
@@ -122,56 +125,83 @@ const MapComponent: React.FC<MapComponentProps> = React.memo(({
   useEffect(() => {
     if (!map) return;
 
-    // Clear existing markers efficiently
-    markers.forEach(marker => marker.setMap(null));
-    const newMarkers: google.maps.Marker[] = [];
+    // Smooth marker updates using requestAnimationFrame
+    const updateMarkers = () => {
+      // Add user location marker with enhanced visibility
+      if (userLocation && !markersRef.current.has('user-location')) {
+        const userMarker = new google.maps.Marker({
+          position: { lat: userLocation.latitude, lng: userLocation.longitude },
+          map,
+          title: "Your Location",
+          icon: {
+            path: google.maps.SymbolPath.CIRCLE,
+            fillColor: '#3B82F6',
+            fillOpacity: 1,
+            strokeColor: '#ffffff',
+            strokeWeight: 3,
+            scale: 12,
+            anchor: new google.maps.Point(0, 0)
+          },
+          zIndex: 1000,
+          optimized: true,
+          animation: google.maps.Animation.DROP
+        });
+        
+        markersRef.current.set('user-location', userMarker);
+      }
 
-    // Add user location marker with enhanced visibility
-    if (userLocation) {
-      const userMarker = new google.maps.Marker({
-        position: { lat: userLocation.latitude, lng: userLocation.longitude },
-        map,
-        title: "Your Location",
-        icon: {
-          path: google.maps.SymbolPath.CIRCLE,
-          fillColor: '#3B82F6',
-          fillOpacity: 1,
-          strokeColor: '#ffffff',
-          strokeWeight: 3,
-          scale: 10,
-        },
-        zIndex: 1000,
-        optimized: true, // Improve performance
-      });
-      
-      newMarkers.push(userMarker);
-    }
+      // Filter and add place markers with smooth animations
+      const filteredPlaces = selectedCategory === 'all' 
+        ? places.filter(place => place.is_active)
+        : places.filter(place => place.is_active && place.type === selectedCategory);
 
-    // Filter and add place markers
-    const filteredPlaces = selectedCategory === 'all' 
-      ? places.filter(place => place.is_active)
-      : places.filter(place => place.is_active && place.type === selectedCategory);
-
-    filteredPlaces.forEach(place => {
-      const marker = new google.maps.Marker({
-        position: { lat: place.latitude, lng: place.longitude },
-        map,
-        title: place.name,
-        icon: getMarkerIcon(place.type),
-        zIndex: 500,
-        optimized: true,
+      // Remove markers for places that are no longer visible
+      markersRef.current.forEach((marker, key) => {
+        if (key !== 'user-location' && !filteredPlaces.find(p => p.id === key)) {
+          marker.setMap(null);
+          markersRef.current.delete(key);
+        }
       });
 
-      marker.addListener('click', () => {
-        onPlaceClick(place);
-        map.panTo({ lat: place.latitude, lng: place.longitude });
+      // Add or update markers for visible places
+      filteredPlaces.forEach((place, index) => {
+        if (!markersRef.current.has(place.id)) {
+          // Add delay for smooth sequential animation
+          setTimeout(() => {
+            const marker = new google.maps.Marker({
+              position: { lat: place.latitude, lng: place.longitude },
+              map,
+              title: place.name,
+              icon: getMarkerIcon(place.type),
+              zIndex: 500,
+              optimized: true,
+              animation: google.maps.Animation.DROP
+            });
+
+            marker.addListener('click', () => {
+              onPlaceClick(place);
+              map.panTo({ lat: place.latitude, lng: place.longitude });
+            });
+
+            markersRef.current.set(place.id, marker);
+          }, index * 50); // 50ms delay between each marker
+        }
       });
+    };
 
-      newMarkers.push(marker);
-    });
+    requestAnimationFrame(updateMarkers);
 
-    setMarkers(newMarkers);
+    // Update markers array for cleanup
+    setMarkers(Array.from(markersRef.current.values()));
   }, [map, places, userLocation, onPlaceClick, selectedCategory, getMarkerIcon]);
+
+  // Cleanup on unmount
+  useEffect(() => {
+    return () => {
+      markersRef.current.forEach(marker => marker.setMap(null));
+      markersRef.current.clear();
+    };
+  }, []);
 
   return <div ref={ref} className="w-full h-full" style={{ minHeight: '100vh' }} />;
 });
