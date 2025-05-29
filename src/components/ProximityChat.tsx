@@ -87,22 +87,31 @@ const ProximityChat = () => {
     if (!selectedPlace) return;
 
     try {
-      const { data, error } = await supabase
+      // First get messages
+      const { data: messagesData, error: messagesError } = await supabase
         .from('chat_messages')
-        .select(`
-          *,
-          profiles(nickname)
-        `)
+        .select('*')
         .eq('place_id', selectedPlace.id)
         .eq('is_deleted', false)
         .order('created_at', { ascending: true })
         .limit(50);
 
-      if (error) throw error;
+      if (messagesError) throw messagesError;
 
-      const messagesWithNicknames = data?.map(msg => ({
+      // Then get user profiles separately
+      const userIds = [...new Set(messagesData?.map(msg => msg.user_id).filter(Boolean) || [])];
+      
+      const { data: profilesData, error: profilesError } = await supabase
+        .from('profiles')
+        .select('id, nickname')
+        .in('id', userIds);
+
+      if (profilesError) throw profilesError;
+
+      // Combine messages with nicknames
+      const messagesWithNicknames = messagesData?.map(msg => ({
         ...msg,
-        user_nickname: msg.profiles?.nickname || 'Anonymous'
+        user_nickname: profilesData?.find(profile => profile.id === msg.user_id)?.nickname || 'Anonymous'
       })) || [];
 
       setMessages(messagesWithNicknames);
