@@ -1,4 +1,3 @@
-
 import { useState, useEffect, createContext, useContext } from 'react';
 import { User, Session } from '@supabase/supabase-js';
 import { supabase } from '@/integrations/supabase/client';
@@ -51,18 +50,37 @@ export const AuthProvider = ({ children }: { children: React.ReactNode }) => {
 
   const fetchUserRole = async (userId: string) => {
     try {
+      console.log('Fetching user role for:', userId);
+      
+      // Fetch all roles for the user and prioritize the highest one
       const { data, error } = await supabase
         .from('user_roles')
         .select('role')
         .eq('user_id', userId)
-        .single();
+        .order('role', { ascending: false }); // This will put 'user' before 'admin' alphabetically
       
       if (error) {
         console.error('Error fetching user role:', error);
+        setUserRole('user'); // Default to user role
         return;
       }
       
-      setUserRole(data?.role || 'user');
+      console.log('User roles found:', data);
+      
+      if (!data || data.length === 0) {
+        console.log('No roles found, defaulting to user');
+        setUserRole('user');
+        return;
+      }
+      
+      // Prioritize roles: admin > merchant > user
+      const rolePriority = { 'admin': 3, 'merchant': 2, 'user': 1 };
+      const highestRole = data.reduce((highest, current) => {
+        return (rolePriority[current.role] || 0) > (rolePriority[highest.role] || 0) ? current : highest;
+      });
+      
+      console.log('Setting user role to:', highestRole.role);
+      setUserRole(highestRole.role);
     } catch (error) {
       console.error('Error fetching user role:', error);
       setUserRole('user');
