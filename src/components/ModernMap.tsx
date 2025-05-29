@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Wrapper, Status } from '@googlemaps/react-wrapper';
 import { Card, CardContent } from '@/components/ui/card';
@@ -6,11 +5,13 @@ import { Button } from '@/components/ui/button';
 import { MapPin, Lock, MessageSquare, Navigation, Languages } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { useLocation } from '@/hooks/useLocation';
+import { useYanbuLocationCheck } from '@/hooks/useYanbuLocationCheck';
 import { useAuth } from '@/hooks/useAuth';
 import { useLocalization } from '@/contexts/LocalizationContext';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import CategoryFilter from './CategoryFilter';
+import LocationRestriction from './LocationRestriction';
 
 interface Place {
   id: string;
@@ -219,11 +220,26 @@ const ModernMap = () => {
   const [places, setPlaces] = useState<Place[]>([]);
   const [selectedCategory, setSelectedCategory] = useState('all');
   const { location, calculateDistance } = useLocation();
+  const { isInYanbu, isChecking, recheckLocation } = useYanbuLocationCheck();
   const { user } = useAuth();
   const { t, language, setLanguage, isRTL } = useLocalization();
 
   const googleMapsApiKey = 'AIzaSyCnHJ_b9LBpxdSOdE8jmVMmJd6Vdmm5u8o';
   const yanbuCenter: google.maps.LatLngLiteral = { lat: 24.0892, lng: 38.0618 };
+
+  // If location check is still in progress, show loading
+  if (isChecking) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-foreground text-lg">Checking location...</div>
+      </div>
+    );
+  }
+
+  // If user is outside Yanbu, show restriction message
+  if (isInYanbu === false) {
+    return <LocationRestriction onRetry={recheckLocation} isChecking={isChecking} />;
+  }
 
   useEffect(() => {
     fetchActivePlaces();
