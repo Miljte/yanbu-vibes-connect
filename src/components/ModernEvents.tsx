@@ -1,10 +1,11 @@
 
 import React, { useState, useEffect } from 'react';
+import { Calendar, Clock, MapPin, Users, Heart, UserCheck, Plus } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Calendar, MapPin, Users, Clock } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
+import { useRoles } from '@/hooks/useRoles';
 import { useLocalization } from '@/contexts/LocalizationContext';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -12,30 +13,38 @@ import { toast } from 'sonner';
 interface Event {
   id: string;
   title: string;
-  description: string;
+  description?: string;
   start_time: string;
-  end_time: string;
-  place_id: string;
-  current_attendees: number;
-  max_attendees: number;
+  end_time?: string;
+  place_id?: string;
   organizer_id: string;
+  max_attendees?: number;
+  current_attendees: number;
   is_active: boolean;
+  created_at: string;
   place?: {
     name: string;
     latitude: number;
     longitude: number;
   };
+  organizer?: {
+    nickname: string;
+  };
+  user_attending?: boolean;
 }
 
 const ModernEvents = () => {
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedEvent, setSelectedEvent] = useState<Event | null>(null);
   const { user } = useAuth();
+  const { isMerchant } = useRoles();
   const { t, isRTL } = useLocalization();
 
   useEffect(() => {
     fetchEvents();
     
+    // Set up real-time subscription
     const eventsSubscription = supabase
       .channel('events-changes')
       .on('postgres_changes', 
@@ -49,27 +58,45 @@ const ModernEvents = () => {
     return () => {
       supabase.removeChannel(eventsSubscription);
     };
-  }, []);
+  }, [user]);
 
   const fetchEvents = async () => {
     try {
-      const { data, error } = await supabase
+      let query = supabase
         .from('events')
         .select(`
           *,
-          places:place_id (
-            name,
-            latitude,
-            longitude
-          )
+          place:places(name, latitude, longitude),
+          organizer:profiles!events_organizer_id_fkey(nickname)
         `)
         .eq('is_active', true)
         .gte('start_time', new Date().toISOString())
         .order('start_time', { ascending: true });
 
-      if (error) throw error;
+      const { data: eventsData, error: eventsError } = await query;
 
-      setEvents(data || []);
+      if (eventsError) throw eventsError;
+
+      // Check if user is attending each event
+      if (user && eventsData) {
+        const eventIds = eventsData.map(event => event.id);
+        const { data: attendeeData } = await supabase
+          .from('event_attendees')
+          .select('event_id')
+          .eq('user_id', user.id)
+          .in('event_id', eventIds);
+
+        const attendingEventIds = new Set(attendeeData?.map(a => a.event_id) || []);
+        
+        const eventsWithAttendance = eventsData.map(event => ({
+          ...event,
+          user_attending: attendingEventIds.has(event.id)
+        }));
+
+        setEvents(eventsWithAttendance);
+      } else {
+        setEvents(eventsData || []);
+      }
     } catch (error) {
       console.error('Error fetching events:', error);
       toast.error('Failed to load events');
@@ -78,123 +105,268 @@ const ModernEvents = () => {
     }
   };
 
-  const handleRSVP = async (eventId: string) => {
+  const handleRSVP = async (eventId: string, attending: boolean) => {
     if (!user) {
       toast.error('Please sign in to RSVP');
       return;
     }
 
     try {
-      const { error } = await supabase
-        .from('event_attendees')
-        .insert({
-          event_id: eventId,
-          user_id: user.id,
-        });
-
-      if (error) throw error;
-
-      toast.success('RSVP confirmed!');
-      fetchEvents(); // Refresh to update attendee count
+      if (attending) {
+        const { error } = await supabase
+          .from('event_attendees')
+          .insert({ event_id: eventId, user_id: user.id });
+        
+        if (error) throw error;
+        toast.success('RSVP confirmed!');
+      } else {
+        const { error } = await supabase
+          .from('event_attendees')
+          .delete()
+          .eq('event_id', eventId)
+          .eq('user_id', user.id);
+        
+        if (error) throw error;
+        toast.success('RSVP cancelled');
+      }
+      
+      fetchEvents(); // Refresh to get updated counts
     } catch (error) {
-      console.error('Error RSVPing:', error);
-      toast.error('Failed to RSVP');
+      console.error('Error updating RSVP:', error);
+      toast.error('Failed to update RSVP');
     }
   };
 
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleDateString('en-US', {
-      weekday: 'short',
-      month: 'short',
+      weekday: 'long',
+      year: 'numeric',
+      month: 'long',
       day: 'numeric',
+    });
+  };
+
+  const formatTime = (dateString: string) => {
+    const date = new Date(dateString);
+    return date.toLocaleTimeString('en-US', {
       hour: '2-digit',
       minute: '2-digit',
     });
   };
 
+  const getEventTypeColor = (title: string) => {
+    if (title.toLowerCase().includes('sale') || title.toLowerCase().includes('discount')) {
+      return 'bg-green-100 text-green-800 dark:bg-green-900/30 dark:text-green-300';
+    }
+    if (title.toLowerCase().includes('music') || title.toLowerCase().includes('party')) {
+      return 'bg-purple-100 text-purple-800 dark:bg-purple-900/30 dark:text-purple-300';
+    }
+    if (title.toLowerCase().includes('food') || title.toLowerCase().includes('restaurant')) {
+      return 'bg-orange-100 text-orange-800 dark:bg-orange-900/30 dark:text-orange-300';
+    }
+    return 'bg-blue-100 text-blue-800 dark:bg-blue-900/30 dark:text-blue-300';
+  };
+
   if (loading) {
     return (
-      <div className={`min-h-screen bg-gray-50 p-4 pb-20 flex items-center justify-center ${isRTL ? 'rtl' : 'ltr'}`}>
-        <div className="text-gray-600 text-lg">{t('common.loading')}</div>
+      <div className={`min-h-screen bg-background p-4 flex items-center justify-center pb-20 ${isRTL ? 'rtl' : 'ltr'}`}>
+        <div className="text-foreground text-lg">Loading events...</div>
       </div>
     );
   }
 
   return (
-    <div className={`min-h-screen bg-gray-50 p-4 pb-20 ${isRTL ? 'rtl' : 'ltr'}`}>
+    <div className={`min-h-screen bg-background p-4 pb-20 ${isRTL ? 'rtl' : 'ltr'}`}>
       <div className="container mx-auto max-w-4xl">
-        {/* Header */}
         <div className="mb-8 text-center">
-          <h1 className="text-3xl font-bold text-gray-900 mb-2">{t('events.title')}</h1>
-          <p className="text-gray-600">{t('events.happening')}</p>
+          <h1 className="text-3xl font-bold text-foreground mb-2">What's Happening</h1>
+          <p className="text-muted-foreground">Discover events and activities near you</p>
         </div>
 
-        {/* Events List */}
-        <div className="space-y-6">
-          {events.length === 0 ? (
-            <Card className="bg-white border-0 shadow-lg rounded-2xl">
-              <CardContent className="p-8 text-center">
-                <Calendar className="w-16 h-16 mx-auto text-gray-400 mb-4" />
-                <h3 className="text-xl font-semibold text-gray-900 mb-2">{t('events.noEvents')}</h3>
-                <p className="text-gray-600">Check back later for exciting events!</p>
-              </CardContent>
-            </Card>
-          ) : (
-            events.map((event) => (
-              <Card key={event.id} className="bg-white border-0 shadow-lg rounded-2xl hover:shadow-xl transition-shadow">
-                <CardHeader className="pb-4">
-                  <div className="flex items-start justify-between">
+        {events.length === 0 ? (
+          <div className="text-center py-12">
+            <Calendar className="w-16 h-16 mx-auto text-muted-foreground mb-4" />
+            <h3 className="text-xl font-semibold text-foreground mb-2">No upcoming events</h3>
+            <p className="text-muted-foreground">Check back later for new events and activities</p>
+          </div>
+        ) : (
+          <div className="space-y-6">
+            {events.map((event) => (
+              <Card 
+                key={event.id} 
+                className="bg-card border hover:shadow-lg transition-all cursor-pointer"
+                onClick={() => setSelectedEvent(event)}
+              >
+                <CardContent className="p-6">
+                  <div className="flex items-start justify-between mb-4">
                     <div className="flex-1">
-                      <CardTitle className="text-xl font-bold text-gray-900 mb-2">
-                        {event.title}
-                      </CardTitle>
-                      <div className="flex items-center space-x-4 text-sm text-gray-600">
-                        <div className="flex items-center space-x-1">
-                          <Clock className="w-4 h-4" />
+                      <div className="flex items-center space-x-3 mb-2">
+                        <h3 className="text-xl font-bold text-foreground">{event.title}</h3>
+                        <Badge className={getEventTypeColor(event.title)}>
+                          Event
+                        </Badge>
+                      </div>
+                      
+                      {event.description && (
+                        <p className="text-muted-foreground mb-3">{event.description}</p>
+                      )}
+                      
+                      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm text-muted-foreground">
+                        <div className="flex items-center space-x-2">
+                          <Calendar className="w-4 h-4 text-primary" />
                           <span>{formatDate(event.start_time)}</span>
                         </div>
+                        
+                        <div className="flex items-center space-x-2">
+                          <Clock className="w-4 h-4 text-primary" />
+                          <span>{formatTime(event.start_time)}</span>
+                        </div>
+                        
                         {event.place && (
-                          <div className="flex items-center space-x-1">
-                            <MapPin className="w-4 h-4" />
+                          <div className="flex items-center space-x-2">
+                            <MapPin className="w-4 h-4 text-primary" />
                             <span>{event.place.name}</span>
                           </div>
                         )}
                       </div>
+                      
+                      <div className="flex items-center space-x-4 mt-4">
+                        <div className="flex items-center space-x-2 text-sm text-muted-foreground">
+                          <Users className="w-4 h-4" />
+                          <span>{event.current_attendees} attending</span>
+                          {event.max_attendees && (
+                            <span>/ {event.max_attendees} max</span>
+                          )}
+                        </div>
+                        
+                        {event.organizer && (
+                          <div className="text-sm text-muted-foreground">
+                            by {event.organizer.nickname}
+                          </div>
+                        )}
+                      </div>
                     </div>
-                    <Badge variant="outline" className="bg-blue-50 text-blue-700 border-blue-200">
-                      <Users className="w-3 h-3 mr-1" />
-                      {event.current_attendees} {t('events.attendees')}
-                    </Badge>
                   </div>
-                </CardHeader>
-                <CardContent className="space-y-4">
-                  {event.description && (
-                    <p className="text-gray-700">{event.description}</p>
-                  )}
                   
-                  <div className="flex items-center justify-between">
-                    <div className="text-sm text-gray-500">
-                      {event.max_attendees && (
-                        <span>
-                          {event.current_attendees} / {event.max_attendees} {t('events.attendees')}
-                        </span>
-                      )}
-                    </div>
+                  <div className="flex items-center space-x-3 pt-4 border-t border-border">
                     <Button
-                      onClick={() => handleRSVP(event.id)}
-                      disabled={!user || (event.max_attendees && event.current_attendees >= event.max_attendees)}
-                      className="bg-blue-600 hover:bg-blue-700 text-white rounded-xl px-6"
+                      variant={event.user_attending ? "default" : "outline"}
+                      size="sm"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleRSVP(event.id, !event.user_attending);
+                      }}
+                      className="flex items-center space-x-2"
                     >
-                      {t('events.rsvp')}
+                      <UserCheck className="w-4 h-4" />
+                      <span>{event.user_attending ? 'Going' : 'RSVP'}</span>
                     </Button>
+                    
+                    <Button
+                      variant="outline"
+                      size="sm"
+                      className="flex items-center space-x-2"
+                    >
+                      <Heart className="w-4 h-4" />
+                      <span>Interested</span>
+                    </Button>
+                    
+                    {event.place && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="flex items-center space-x-2 ml-auto"
+                      >
+                        <MapPin className="w-4 h-4" />
+                        <span>View Location</span>
+                      </Button>
+                    )}
                   </div>
                 </CardContent>
               </Card>
-            ))
-          )}
-        </div>
+            ))}
+          </div>
+        )}
       </div>
+
+      {/* Event Detail Modal */}
+      {selectedEvent && (
+        <div className="fixed inset-0 bg-background/80 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+          <Card className="bg-card border max-w-2xl w-full max-h-[80vh] overflow-y-auto">
+            <CardHeader className="border-b border-border">
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-foreground">{selectedEvent.title}</CardTitle>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setSelectedEvent(null)}
+                  className="text-muted-foreground hover:text-foreground"
+                >
+                  ×
+                </Button>
+              </div>
+            </CardHeader>
+            <CardContent className="p-6">
+              {selectedEvent.description && (
+                <p className="text-muted-foreground mb-6">{selectedEvent.description}</p>
+              )}
+              
+              <div className="space-y-4 mb-6">
+                <div className="flex items-center space-x-3">
+                  <Calendar className="w-5 h-5 text-primary" />
+                  <span className="text-foreground">{formatDate(selectedEvent.start_time)}</span>
+                </div>
+                
+                <div className="flex items-center space-x-3">
+                  <Clock className="w-5 h-5 text-primary" />
+                  <span className="text-foreground">{formatTime(selectedEvent.start_time)}</span>
+                </div>
+                
+                {selectedEvent.place && (
+                  <div className="flex items-center space-x-3">
+                    <MapPin className="w-5 h-5 text-primary" />
+                    <span className="text-foreground">{selectedEvent.place.name}</span>
+                  </div>
+                )}
+                
+                <div className="flex items-center space-x-3">
+                  <Users className="w-5 h-5 text-primary" />
+                  <span className="text-foreground">
+                    {selectedEvent.current_attendees} people attending
+                    {selectedEvent.max_attendees && ` (${selectedEvent.max_attendees} max)`}
+                  </span>
+                </div>
+                
+                {selectedEvent.organizer && (
+                  <div className="text-muted-foreground">
+                    Organized by {selectedEvent.organizer.nickname}
+                  </div>
+                )}
+              </div>
+              
+              <div className="flex space-x-3">
+                <Button
+                  variant={selectedEvent.user_attending ? "default" : "outline"}
+                  onClick={() => handleRSVP(selectedEvent.id, !selectedEvent.user_attending)}
+                  className="flex items-center space-x-2 flex-1"
+                >
+                  <UserCheck className="w-4 h-4" />
+                  <span>{selectedEvent.user_attending ? 'Going' : 'RSVP'}</span>
+                </Button>
+                
+                <Button
+                  variant="outline"
+                  className="flex items-center space-x-2 flex-1"
+                >
+                  <Heart className="w-4 h-4" />
+                  <span>Interested</span>
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      )}
     </div>
   );
 };

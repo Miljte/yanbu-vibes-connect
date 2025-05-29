@@ -8,6 +8,7 @@ import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/hooks/useAuth';
 import { useLocation } from '@/hooks/useLocation';
 import { useRoles } from '@/hooks/useRoles';
+import { useLocalization } from '@/contexts/LocalizationContext';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
@@ -42,6 +43,7 @@ const EnhancedProximityChat = () => {
   const { user } = useAuth();
   const { location, calculateDistance } = useLocation();
   const { isMerchant } = useRoles();
+  const { t, isRTL } = useLocalization();
 
   useEffect(() => {
     fetchNearbyPlaces();
@@ -194,15 +196,15 @@ const EnhancedProximityChat = () => {
 
   const getMessageStyle = (messageType: string, isPromotion: boolean) => {
     if (isPromotion) {
-      return 'bg-gradient-to-r from-orange-600/30 to-yellow-600/30 border-l-4 border-orange-500 text-orange-100';
+      return 'bg-gradient-to-r from-orange-100 to-yellow-100 dark:from-orange-900/30 dark:to-yellow-900/30 border-l-4 border-orange-500 text-orange-900 dark:text-orange-100';
     }
     switch (messageType) {
       case 'merchant':
-        return 'bg-purple-600/20 border-l-4 border-purple-500 text-purple-100';
+        return 'bg-purple-100 dark:bg-purple-900/30 border-l-4 border-purple-500 text-purple-900 dark:text-purple-100';
       case 'system':
-        return 'bg-slate-700/30 text-slate-400 text-center text-sm';
+        return 'bg-muted text-muted-foreground text-center text-sm';
       default:
-        return 'bg-slate-700/50 text-white';
+        return 'bg-muted text-foreground';
     }
   };
 
@@ -212,33 +214,33 @@ const EnhancedProximityChat = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-4 flex items-center justify-center pb-20">
-        <div className="text-white text-lg">Loading nearby chats...</div>
+      <div className={`min-h-screen bg-background p-4 flex items-center justify-center pb-20 ${isRTL ? 'rtl' : 'ltr'}`}>
+        <div className="text-foreground text-lg">Loading nearby chats...</div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-4 pb-20">
+    <div className={`min-h-screen bg-background p-4 pb-20 ${isRTL ? 'rtl' : 'ltr'}`}>
       <div className="container mx-auto max-w-6xl">
         <div className="mb-6">
-          <h2 className="text-3xl font-bold text-white mb-2">Store Chats</h2>
-          <p className="text-slate-300">Chat unlocks within 500m of stores • Live GPS tracking</p>
+          <h2 className="text-3xl font-bold text-foreground mb-2">Store Chats</h2>
+          <p className="text-muted-foreground">Chat unlocks within 500m of stores • Live GPS tracking</p>
         </div>
 
         <div className="grid grid-cols-1 lg:grid-cols-4 gap-6">
           {/* Store List */}
           <div className="lg:col-span-1">
-            <Card className="bg-slate-800/50 border-slate-700 backdrop-blur-sm">
+            <Card className="bg-card border">
               <CardHeader>
-                <CardTitle className="text-white text-lg">Nearby Stores</CardTitle>
+                <CardTitle className="text-foreground text-lg">Nearby Stores</CardTitle>
               </CardHeader>
               <CardContent className="space-y-3">
                 {nearbyPlaces.length === 0 ? (
-                  <div className="text-center text-slate-400 py-8">
+                  <div className="text-center text-muted-foreground py-8">
                     <Lock className="w-12 h-12 mx-auto mb-4 opacity-50" />
                     <p className="text-sm">No stores nearby</p>
-                    <p className="text-xs text-slate-500 mt-2">Walk closer to stores to chat</p>
+                    <p className="text-xs text-muted-foreground mt-2">Walk closer to stores to chat</p>
                   </div>
                 ) : (
                   nearbyPlaces.map((place) => (
@@ -246,18 +248,18 @@ const EnhancedProximityChat = () => {
                       key={place.id}
                       className={`p-3 rounded-lg cursor-pointer transition-all ${
                         selectedPlace?.id === place.id
-                          ? 'bg-cyan-600/30 border border-cyan-500'
-                          : 'bg-slate-700/30 hover:bg-slate-700/50'
+                          ? 'bg-primary/10 border border-primary'
+                          : 'bg-muted hover:bg-muted/80'
                       }`}
                       onClick={() => setSelectedPlace(place)}
                     >
                       <div className="flex items-center justify-between mb-2">
-                        <h3 className="text-white font-medium text-sm">{place.name}</h3>
+                        <h3 className="text-foreground font-medium text-sm">{place.name}</h3>
                         <Badge variant="secondary" className="bg-green-600 text-white text-xs">
                           Open
                         </Badge>
                       </div>
-                      <div className="flex items-center space-x-4 text-xs text-slate-400">
+                      <div className="flex items-center space-x-4 text-xs text-muted-foreground">
                         <div className="flex items-center space-x-1">
                           <MapPin className="w-3 h-3" />
                           <span>{Math.round(place.distance || 0)}m</span>
@@ -276,14 +278,14 @@ const EnhancedProximityChat = () => {
 
           {/* Chat Area */}
           <div className="lg:col-span-3">
-            <Card className="bg-slate-800/50 border-slate-700 backdrop-blur-sm h-[600px] flex flex-col">
-              <CardHeader className="border-b border-slate-700">
+            <Card className="bg-card border h-[600px] flex flex-col">
+              <CardHeader className="border-b border-border">
                 <div className="flex items-center justify-between">
                   <div>
-                    <CardTitle className="text-white">
+                    <CardTitle className="text-foreground">
                       {selectedPlace ? selectedPlace.name : 'Select a Store'}
                     </CardTitle>
-                    <p className="text-slate-400 text-sm">
+                    <p className="text-muted-foreground text-sm">
                       {selectedPlace && isNearby(selectedPlace) 
                         ? `Live chat • Within ${Math.round(selectedPlace.distance || 0)}m`
                         : 'Move within 500m to join chat'
@@ -295,8 +297,8 @@ const EnhancedProximityChat = () => {
                       variant="outline" 
                       className={`${
                         selectedPlace && isNearby(selectedPlace)
-                          ? 'border-green-500 text-green-400' 
-                          : 'border-red-500 text-red-400'
+                          ? 'border-green-500 text-green-600 dark:text-green-400' 
+                          : 'border-red-500 text-red-600 dark:text-red-400'
                       }`}
                     >
                       {selectedPlace && isNearby(selectedPlace) ? 'In Range' : 'Out of Range'}
@@ -309,7 +311,7 @@ const EnhancedProximityChat = () => {
               <CardContent className="flex-1 p-4 overflow-y-auto">
                 {!selectedPlace || !isNearby(selectedPlace) ? (
                   <div className="flex items-center justify-center h-full">
-                    <div className="text-center text-slate-400">
+                    <div className="text-center text-muted-foreground">
                       <Lock className="w-12 h-12 mx-auto mb-4 opacity-50" />
                       <h3 className="text-lg font-medium mb-2">Chat Locked</h3>
                       <p className="text-sm">
@@ -323,7 +325,7 @@ const EnhancedProximityChat = () => {
                 ) : (
                   <div className="space-y-4">
                     {messages.length === 0 ? (
-                      <div className="text-center text-slate-400 py-8">
+                      <div className="text-center text-muted-foreground py-8">
                         <p>No messages yet. Start the conversation!</p>
                       </div>
                     ) : (
@@ -332,9 +334,9 @@ const EnhancedProximityChat = () => {
                           {message.message_type !== 'system' && (
                             <div className="flex items-center justify-between mb-1">
                               <span className="font-medium text-sm flex items-center space-x-1">
-                                {message.message_type === 'merchant' && <Crown className="w-3 h-3 text-yellow-400" />}
+                                {message.message_type === 'merchant' && <Crown className="w-3 h-3 text-yellow-500" />}
                                 <span>{message.user_nickname || 'Anonymous'}</span>
-                                {message.is_promotion && <span className="text-xs bg-orange-500 px-2 py-1 rounded">AD</span>}
+                                {message.is_promotion && <span className="text-xs bg-orange-500 text-white px-2 py-1 rounded">AD</span>}
                               </span>
                               <span className="text-xs opacity-70 flex items-center space-x-1">
                                 <Clock className="w-3 h-3" />
@@ -354,10 +356,10 @@ const EnhancedProximityChat = () => {
               </CardContent>
 
               {/* Message Input */}
-              <div className="border-t border-slate-700 p-4">
+              <div className="border-t border-border p-4">
                 {isMerchant && selectedPlace && isNearby(selectedPlace) && (
                   <div className="mb-3">
-                    <label className="flex items-center space-x-2 text-sm text-slate-300">
+                    <label className="flex items-center space-x-2 text-sm text-muted-foreground">
                       <input
                         type="checkbox"
                         checked={isPromotion}
@@ -380,18 +382,18 @@ const EnhancedProximityChat = () => {
                         : "Get closer to chat..."
                     }
                     disabled={!selectedPlace || !isNearby(selectedPlace) || !user}
-                    className="flex-1 bg-slate-700 border-slate-600 text-white placeholder-slate-400"
+                    className="flex-1 bg-background border-border text-foreground placeholder-muted-foreground"
                     onKeyPress={(e) => e.key === 'Enter' && sendMessage()}
                   />
                   <Button
                     onClick={sendMessage}
                     disabled={!newMessage.trim() || !selectedPlace || !isNearby(selectedPlace) || !user}
-                    className="bg-cyan-600 hover:bg-cyan-700"
+                    className="bg-primary hover:bg-primary/90"
                   >
                     <Send className="w-4 h-4" />
                   </Button>
                 </div>
-                <p className="text-xs text-slate-500 mt-2">
+                <p className="text-xs text-muted-foreground mt-2">
                   Live GPS • 500m range • Store-specific chats
                 </p>
               </div>

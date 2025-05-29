@@ -4,6 +4,7 @@ import { Wrapper, Status } from '@googlemaps/react-wrapper';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { MapPin, Lock, MessageSquare, Navigation, Languages } from 'lucide-react';
+import { Badge } from '@/components/ui/badge';
 import { useLocation } from '@/hooks/useLocation';
 import { useAuth } from '@/hooks/useAuth';
 import { useLocalization } from '@/contexts/LocalizationContext';
@@ -19,6 +20,8 @@ interface Place {
   longitude: number;
   is_active: boolean;
   merchant_id: string;
+  description?: string;
+  images?: string[];
   distance?: number;
 }
 
@@ -75,22 +78,22 @@ const MapComponent: React.FC<MapComponentProps> = ({
   ];
 
   const getMarkerIcon = (type: string) => {
-    const iconMap = {
-      'cafe': '☕',
-      'restaurant': '🍽️',
-      'shop': '🛍️',
-      'event': '🎉',
+    const iconConfig = {
+      'cafe': { color: '#8B4513', emoji: '☕' },
+      'restaurant': { color: '#FF6347', emoji: '🍽️' },
+      'shop': { color: '#4169E1', emoji: '🛍️' },
+      'event': { color: '#FF69B4', emoji: '🎉' },
     };
+
+    const config = iconConfig[type] || { color: '#666666', emoji: '📍' };
     
     return {
       path: google.maps.SymbolPath.CIRCLE,
-      fillColor: type === 'cafe' ? '#8B4513' : 
-                 type === 'restaurant' ? '#FF6347' : 
-                 type === 'shop' ? '#4169E1' : '#FF69B4',
+      fillColor: config.color,
       fillOpacity: 1,
       strokeColor: '#ffffff',
       strokeWeight: 3,
-      scale: 20,
+      scale: 18, // Fixed size regardless of zoom
     };
   };
 
@@ -147,7 +150,7 @@ const MapComponent: React.FC<MapComponentProps> = ({
       ? places.filter(place => place.is_active)
       : places.filter(place => place.is_active && place.type === selectedCategory);
 
-    // Add place markers
+    // Add place markers with fixed size
     filteredPlaces.forEach(place => {
       const marker = new google.maps.Marker({
         position: { lat: place.latitude, lng: place.longitude },
@@ -281,6 +284,14 @@ const ModernMap = () => {
     setLanguage(language === 'en' ? 'ar' : 'en');
   };
 
+  const formatDistance = (distance: number) => {
+    if (distance < 1000) {
+      return `${Math.round(distance)}m`;
+    } else {
+      return `${(distance / 1000).toFixed(1)}km`;
+    }
+  };
+
   return (
     <div className={`relative min-h-screen ${isRTL ? 'rtl' : 'ltr'}`}>
       {/* Category Filter */}
@@ -294,14 +305,14 @@ const ModernMap = () => {
         <Button
           onClick={centerOnUser}
           size="sm"
-          className="bg-white hover:bg-gray-50 text-gray-700 shadow-lg border"
+          className="bg-background hover:bg-muted text-foreground shadow-lg border"
         >
           <Navigation className="w-4 h-4" />
         </Button>
         <Button
           onClick={toggleLanguage}
           size="sm"
-          className="bg-white hover:bg-gray-50 text-gray-700 shadow-lg border"
+          className="bg-background hover:bg-muted text-foreground shadow-lg border"
         >
           <Languages className="w-4 h-4" />
           <span className="ml-1 text-xs">{language.toUpperCase()}</span>
@@ -319,25 +330,56 @@ const ModernMap = () => {
         />
       </Wrapper>
 
-      {/* Store Info Popup */}
+      {/* Enhanced Store Info Popup */}
       {selectedPlace && (
         <div className="absolute bottom-20 left-4 right-4 z-10">
-          <Card className="bg-white/95 backdrop-blur-md border-0 shadow-xl rounded-2xl">
+          <Card className="bg-background/95 backdrop-blur-md border-0 shadow-xl rounded-2xl">
             <CardContent className="p-6">
-              <div className="flex items-center justify-between mb-4">
-                <div>
-                  <h3 className="text-xl font-bold text-gray-900">{selectedPlace.name}</h3>
-                  <p className="text-gray-600 text-sm flex items-center">
-                    <MapPin className="w-4 h-4 mr-1" />
-                    {selectedPlace.distance 
-                      ? `${Math.round(selectedPlace.distance)} ${t('map.distance')}`
-                      : 'Distance unknown'
-                    }
-                  </p>
+              <div className="flex items-start justify-between mb-4">
+                <div className="flex-1">
+                  <div className="flex items-center space-x-2 mb-2">
+                    <h3 className="text-xl font-bold text-foreground">{selectedPlace.name}</h3>
+                    <Badge variant="secondary" className="capitalize">
+                      {selectedPlace.type}
+                    </Badge>
+                  </div>
+                  
+                  {selectedPlace.description && (
+                    <p className="text-muted-foreground text-sm mb-3">{selectedPlace.description}</p>
+                  )}
+                  
+                  <div className="flex items-center space-x-4 text-sm text-muted-foreground">
+                    <div className="flex items-center">
+                      <MapPin className="w-4 h-4 mr-1" />
+                      <span>
+                        {selectedPlace.distance 
+                          ? formatDistance(selectedPlace.distance)
+                          : 'Distance unknown'
+                        }
+                      </span>
+                    </div>
+                    <Badge 
+                      variant={isNearby(selectedPlace) ? "default" : "secondary"}
+                      className={isNearby(selectedPlace) ? "bg-green-600" : ""}
+                    >
+                      {isNearby(selectedPlace) ? 'In Range' : 'Out of Range'}
+                    </Badge>
+                  </div>
                 </div>
+                
+                {selectedPlace.images && selectedPlace.images.length > 0 && (
+                  <div className="ml-4">
+                    <img 
+                      src={selectedPlace.images[0]} 
+                      alt={selectedPlace.name}
+                      className="w-16 h-16 rounded-lg object-cover"
+                    />
+                  </div>
+                )}
+                
                 <button
                   onClick={() => setSelectedPlace(null)}
-                  className="text-gray-400 hover:text-gray-600 text-2xl font-light"
+                  className="text-muted-foreground hover:text-foreground text-2xl font-light ml-2"
                 >
                   ×
                 </button>
@@ -354,7 +396,7 @@ const ModernMap = () => {
               ) : (
                 <Button 
                   disabled
-                  className="w-full bg-gray-300 cursor-not-allowed text-gray-600 rounded-xl py-3"
+                  className="w-full bg-muted cursor-not-allowed text-muted-foreground rounded-xl py-3"
                 >
                   <Lock className="w-5 h-5 mr-2" />
                   {t('map.moveCloser')}

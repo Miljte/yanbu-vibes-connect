@@ -21,7 +21,7 @@ const CategoryFilter = ({ selectedCategory, onCategoryChange }: CategoryFilterPr
 
   return (
     <div className={`absolute top-4 left-4 right-4 z-10 ${isRTL ? 'rtl' : 'ltr'}`}>
-      <div className="bg-white/90 backdrop-blur-md rounded-2xl p-2 shadow-lg border border-gray-200">
+      <div className="bg-background/90 backdrop-blur-md rounded-2xl p-2 shadow-lg border border-border">
         <div className="flex space-x-1 overflow-x-auto scrollbar-hide">
           {categories.map((category) => (
             <Button
@@ -31,8 +31,8 @@ const CategoryFilter = ({ selectedCategory, onCategoryChange }: CategoryFilterPr
               onClick={() => onCategoryChange(category.id)}
               className={`flex items-center space-x-2 px-4 py-2 rounded-xl whitespace-nowrap transition-all duration-200 ${
                 selectedCategory === category.id
-                  ? 'bg-primary text-white shadow-md scale-105'
-                  : 'text-gray-700 hover:bg-gray-100'
+                  ? 'bg-primary text-primary-foreground shadow-md scale-105'
+                  : 'text-foreground hover:bg-muted'
               }`}
             >
               <span className="text-lg">{category.emoji}</span>
