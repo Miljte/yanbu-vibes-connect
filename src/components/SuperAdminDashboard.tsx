@@ -13,11 +13,15 @@ import { toast } from 'sonner';
 interface LiveUser {
   id: string;
   nickname: string;
+  email?: string;
   latitude?: number;
   longitude?: number;
   last_seen: string;
   role: string;
   is_online: boolean;
+  created_at: string;
+  is_banned: boolean;
+  is_muted: boolean;
 }
 
 interface LiveMessage {
@@ -50,53 +54,105 @@ const SuperAdminDashboard = () => {
   });
   const [searchFilter, setSearchFilter] = useState('');
   const [selectedStore, setSelectedStore] = useState<string>('all');
+  const [userFilter, setUserFilter] = useState('all'); // all, online, offline, banned, muted
+  const [loading, setLoading] = useState(true);
   const { user } = useAuth();
 
   // Real-time data fetching
   useEffect(() => {
     fetchLiveData();
     setupRealtimeSubscriptions();
+    
+    // Set up periodic refresh for online status
+    const interval = setInterval(fetchLiveData, 30000); // Refresh every 30 seconds
+    
+    return () => clearInterval(interval);
   }, []);
 
   const fetchLiveData = async () => {
     try {
-      // Fetch live users with locations
-      const { data: profilesData } = await supabase
+      console.log('🔄 Fetching all user data...');
+      
+      // Fetch ALL profiles from the database
+      const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
-        .select('id, nickname, created_at');
+        .select('id, nickname, created_at')
+        .order('created_at', { ascending: false });
 
+      if (profilesError) {
+        console.error('❌ Error fetching profiles:', profilesError);
+        throw profilesError;
+      }
+
+      console.log(`✅ Found ${profilesData?.length || 0} total users`);
+
+      // Fetch user roles
       const { data: rolesData } = await supabase
         .from('user_roles')
         .select('user_id, role');
 
+      // Fetch user locations for online status (last 10 minutes = online)
       const { data: locationsData } = await supabase
         .from('user_locations')
         .select('user_id, latitude, longitude, updated_at');
 
-      // Combine user data
-      const usersWithStatus = profilesData?.map(profile => {
+      // Fetch ban status
+      const { data: bansData } = await supabase
+        .from('user_bans')
+        .select('user_id')
+        .eq('is_active', true);
+
+      // Fetch mute status
+      const { data: mutesData } = await supabase
+        .from('user_mutes')
+        .select('user_id')
+        .eq('is_active', true);
+
+      // Get auth users to get email addresses (for admin viewing)
+      let authUsers: any[] = [];
+      try {
+        const { data: authData } = await supabase.auth.admin.listUsers();
+        authUsers = authData?.users || [];
+      } catch (error) {
+        console.warn('⚠️ Could not fetch auth users (admin only feature):', error);
+      }
+
+      // Combine all user data
+      const usersWithStatus: LiveUser[] = profilesData?.map(profile => {
         const userRole = rolesData?.find(role => role.user_id === profile.id);
         const location = locationsData?.find(loc => loc.user_id === profile.id);
+        const authUser = authUsers.find(au => au.id === profile.id);
+        const isBanned = bansData?.some(ban => ban.user_id === profile.id) || false;
+        const isMuted = mutesData?.some(mute => mute.user_id === profile.id) || false;
+        
+        // Calculate online status - user is online if they've updated location in last 10 minutes
         const lastSeen = location?.updated_at || profile.created_at;
-        const isOnline = new Date(lastSeen) > new Date(Date.now() - 10 * 60 * 1000); // 10 minutes
+        const isOnline = lastSeen ? new Date(lastSeen) > new Date(Date.now() - 10 * 60 * 1000) : false;
 
         return {
           id: profile.id,
           nickname: profile.nickname,
+          email: authUser?.email || undefined,
           latitude: location?.latitude,
           longitude: location?.longitude,
           last_seen: lastSeen,
           role: userRole?.role || 'user',
-          is_online: isOnline
+          is_online: isOnline,
+          created_at: profile.created_at,
+          is_banned: isBanned,
+          is_muted: isMuted
         };
       }) || [];
 
+      console.log(`📊 Processed users: ${usersWithStatus.length} total, ${usersWithStatus.filter(u => u.is_online).length} online`);
+      
       setLiveUsers(usersWithStatus);
 
       // Fetch recent messages with user and place info
       const { data: messagesData } = await supabase
         .from('chat_messages')
         .select('id, message, created_at, user_id, place_id')
+        .eq('is_deleted', false)
         .order('created_at', { ascending: false })
         .limit(50);
 
@@ -131,7 +187,7 @@ const SuperAdminDashboard = () => {
 
       setLiveMessages(messagesWithInfo);
 
-      // Calculate stats
+      // Calculate accurate stats
       setStats({
         totalUsers: usersWithStatus.length,
         onlineUsers: usersWithStatus.filter(u => u.is_online).length,
@@ -140,57 +196,113 @@ const SuperAdminDashboard = () => {
       });
 
     } catch (error) {
-      console.error('Error fetching live data:', error);
+      console.error('❌ Error fetching live data:', error);
+      toast.error('Failed to load admin data');
+    } finally {
+      setLoading(false);
     }
   };
 
   const setupRealtimeSubscriptions = () => {
-    // Subscribe to new messages
-    const messagesChannel = supabase
-      .channel('live-messages')
+    console.log('🔗 Setting up real-time subscriptions...');
+    
+    // Subscribe to profile changes
+    const profilesChannel = supabase
+      .channel('admin-profiles')
       .on('postgres_changes', 
-        { event: 'INSERT', schema: 'public', table: 'chat_messages' },
+        { event: '*', schema: 'public', table: 'profiles' },
         (payload) => {
-          console.log('📨 New message detected:', payload);
-          fetchLiveData(); // Refresh data
+          console.log('👤 Profile change detected:', payload);
+          fetchLiveData();
         }
       )
       .subscribe();
 
-    // Subscribe to user location updates
+    // Subscribe to user role changes
+    const rolesChannel = supabase
+      .channel('admin-roles')
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'user_roles' },
+        (payload) => {
+          console.log('🔑 Role change detected:', payload);
+          fetchLiveData();
+        }
+      )
+      .subscribe();
+
+    // Subscribe to location updates (for online status)
     const locationsChannel = supabase
-      .channel('live-locations')
+      .channel('admin-locations')
       .on('postgres_changes',
         { event: '*', schema: 'public', table: 'user_locations' },
         (payload) => {
           console.log('📍 Location update detected:', payload);
-          fetchLiveData(); // Refresh data
+          fetchLiveData();
+        }
+      )
+      .subscribe();
+
+    // Subscribe to new messages
+    const messagesChannel = supabase
+      .channel('admin-messages')
+      .on('postgres_changes', 
+        { event: 'INSERT', schema: 'public', table: 'chat_messages' },
+        (payload) => {
+          console.log('💬 New message detected:', payload);
+          fetchLiveData();
+        }
+      )
+      .subscribe();
+
+    // Subscribe to ban/mute changes
+    const bansChannel = supabase
+      .channel('admin-bans')
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'user_bans' },
+        (payload) => {
+          console.log('🚫 Ban change detected:', payload);
+          fetchLiveData();
+        }
+      )
+      .subscribe();
+
+    const mutesChannel = supabase
+      .channel('admin-mutes')
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'user_mutes' },
+        (payload) => {
+          console.log('🔇 Mute change detected:', payload);
+          fetchLiveData();
         }
       )
       .subscribe();
 
     return () => {
-      supabase.removeChannel(messagesChannel);
+      supabase.removeChannel(profilesChannel);
+      supabase.removeChannel(rolesChannel);
       supabase.removeChannel(locationsChannel);
+      supabase.removeChannel(messagesChannel);
+      supabase.removeChannel(bansChannel);
+      supabase.removeChannel(mutesChannel);
     };
   };
 
   const banUser = async (userId: string) => {
     try {
-      // For now, we'll use user_roles to mark banned users
       const { error } = await supabase
-        .from('user_roles')
-        .upsert({
+        .from('user_bans')
+        .insert({
           user_id: userId,
-          role: 'user' // Keep as user but add ban logic later
+          banned_by: user?.id,
+          reason: 'Admin action'
         });
 
       if (error) throw error;
-      toast.success('User action completed');
+      toast.success('User banned successfully');
       fetchLiveData();
     } catch (error) {
-      console.error('Error updating user:', error);
-      toast.error('Failed to update user');
+      console.error('Error banning user:', error);
+      toast.error('Failed to ban user');
     }
   };
 
@@ -229,6 +341,21 @@ const SuperAdminDashboard = () => {
     }
   };
 
+  // Filter users based on search and status
+  const filteredUsers = liveUsers.filter(user => {
+    const matchesSearch = searchFilter === '' || 
+      user.nickname.toLowerCase().includes(searchFilter.toLowerCase()) ||
+      (user.email && user.email.toLowerCase().includes(searchFilter.toLowerCase()));
+    
+    const matchesFilter = userFilter === 'all' || 
+      (userFilter === 'online' && user.is_online) ||
+      (userFilter === 'offline' && !user.is_online) ||
+      (userFilter === 'banned' && user.is_banned) ||
+      (userFilter === 'muted' && user.is_muted);
+    
+    return matchesSearch && matchesFilter;
+  });
+
   const filteredMessages = liveMessages.filter(msg => 
     searchFilter === '' || 
     msg.message.toLowerCase().includes(searchFilter.toLowerCase()) ||
@@ -236,12 +363,23 @@ const SuperAdminDashboard = () => {
     msg.place_name.toLowerCase().includes(searchFilter.toLowerCase())
   );
 
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-foreground">Loading admin dashboard...</div>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-screen bg-background p-4 pb-20">
       <div className="container mx-auto max-w-7xl">
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-foreground mb-2">🛡️ Super Admin Control Center</h1>
           <p className="text-muted-foreground">Real-time monitoring and control for POP IN</p>
+          <p className="text-sm text-green-600 mt-2">
+            ✅ Live Data: {stats.totalUsers} total users • {stats.onlineUsers} online now
+          </p>
         </div>
 
         {/* Real-time Stats */}
@@ -255,6 +393,7 @@ const SuperAdminDashboard = () => {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-blue-600">{stats.totalUsers}</div>
+              <div className="text-xs text-muted-foreground">All registered</div>
             </CardContent>
           </Card>
           
@@ -267,6 +406,7 @@ const SuperAdminDashboard = () => {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-green-600">{stats.onlineUsers}</div>
+              <div className="text-xs text-muted-foreground">Active in 10min</div>
             </CardContent>
           </Card>
           
@@ -279,6 +419,7 @@ const SuperAdminDashboard = () => {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-purple-600">{stats.totalMessages}</div>
+              <div className="text-xs text-muted-foreground">Recent activity</div>
             </CardContent>
           </Card>
           
@@ -291,6 +432,7 @@ const SuperAdminDashboard = () => {
             </CardHeader>
             <CardContent>
               <div className="text-2xl font-bold text-orange-600">{stats.activeStores}</div>
+              <div className="text-xs text-muted-foreground">With activity</div>
             </CardContent>
           </Card>
         </div>
@@ -298,7 +440,7 @@ const SuperAdminDashboard = () => {
         <Tabs defaultValue="surveillance" className="space-y-6">
           <TabsList className="bg-muted">
             <TabsTrigger value="surveillance">🔍 Live Surveillance</TabsTrigger>
-            <TabsTrigger value="users">👥 User Management</TabsTrigger>
+            <TabsTrigger value="users">👥 All Users ({filteredUsers.length})</TabsTrigger>
             <TabsTrigger value="messages">💬 Message Monitor</TabsTrigger>
             <TabsTrigger value="analytics">📊 Analytics</TabsTrigger>
           </TabsList>
@@ -308,27 +450,36 @@ const SuperAdminDashboard = () => {
               <CardHeader>
                 <CardTitle className="text-foreground flex items-center">
                   <Eye className="w-5 h-5 mr-2" />
-                  Real-Time Surveillance Dashboard
+                  Real-Time Activity Dashboard
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
                   {/* Online Users */}
                   <div>
-                    <h3 className="text-lg font-semibold text-foreground mb-4">🟢 Users Online</h3>
+                    <h3 className="text-lg font-semibold text-foreground mb-4">
+                      🟢 Users Online ({liveUsers.filter(u => u.is_online).length})
+                    </h3>
                     <div className="space-y-2 max-h-64 overflow-y-auto">
                       {liveUsers.filter(u => u.is_online).map(user => (
                         <div key={user.id} className="flex items-center justify-between p-3 bg-muted rounded-lg">
                           <div>
                             <span className="font-medium text-foreground">{user.nickname}</span>
                             <Badge variant="outline" className="ml-2">{user.role}</Badge>
+                            {user.email && <div className="text-xs text-muted-foreground">{user.email}</div>}
                           </div>
                           <div className="flex items-center space-x-2">
-                            <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                            <span className="text-xs text-muted-foreground">Online</span>
+                            <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                            <span className="text-xs text-green-600">Online</span>
                           </div>
                         </div>
                       ))}
+                      {liveUsers.filter(u => u.is_online).length === 0 && (
+                        <div className="text-center text-muted-foreground py-4">
+                          <Eye className="w-8 h-8 mx-auto mb-2 opacity-50" />
+                          <p>No users currently online</p>
+                        </div>
+                      )}
                     </div>
                   </div>
 
@@ -358,44 +509,96 @@ const SuperAdminDashboard = () => {
           <TabsContent value="users">
             <Card className="bg-card border">
               <CardHeader>
-                <CardTitle className="text-foreground">User Management</CardTitle>
+                <CardTitle className="text-foreground">Complete User Management</CardTitle>
+                <div className="flex flex-wrap gap-4">
+                  <Input
+                    placeholder="Search by name or email..."
+                    value={searchFilter}
+                    onChange={(e) => setSearchFilter(e.target.value)}
+                    className="max-w-xs"
+                  />
+                  <select 
+                    value={userFilter} 
+                    onChange={(e) => setUserFilter(e.target.value)}
+                    className="px-3 py-2 border border-border rounded-md bg-background text-foreground"
+                  >
+                    <option value="all">All Users ({liveUsers.length})</option>
+                    <option value="online">Online ({liveUsers.filter(u => u.is_online).length})</option>
+                    <option value="offline">Offline ({liveUsers.filter(u => !u.is_online).length})</option>
+                    <option value="banned">Banned ({liveUsers.filter(u => u.is_banned).length})</option>
+                    <option value="muted">Muted ({liveUsers.filter(u => u.is_muted).length})</option>
+                  </select>
+                </div>
               </CardHeader>
               <CardContent>
-                <div className="space-y-4">
-                  {liveUsers.map(user => (
-                    <div key={user.id} className="flex items-center justify-between p-4 bg-muted rounded-lg">
+                <div className="space-y-4 max-h-96 overflow-y-auto">
+                  {filteredUsers.map((userData) => (
+                    <div key={userData.id} className="flex items-center justify-between p-4 bg-muted/30 rounded-lg">
                       <div className="flex items-center space-x-4">
-                        <div className={`w-3 h-3 rounded-full ${user.is_online ? 'bg-green-500' : 'bg-gray-400'}`}></div>
+                        <div className={`w-3 h-3 rounded-full ${userData.is_online ? 'bg-green-500 animate-pulse' : 'bg-gray-400'}`}></div>
+                        <div className="w-10 h-10 bg-primary rounded-full flex items-center justify-center">
+                          <Users className="w-5 h-5 text-primary-foreground" />
+                        </div>
                         <div>
-                          <div className="text-foreground font-medium">{user.nickname}</div>
+                          <div className="text-foreground font-medium flex items-center space-x-2">
+                            <span>{userData.nickname}</span>
+                            <Badge variant="outline">{userData.role}</Badge>
+                            {userData.is_banned && <Badge variant="destructive" className="text-xs">Banned</Badge>}
+                            {userData.is_muted && <Badge variant="secondary" className="text-xs">Muted</Badge>}
+                          </div>
                           <div className="text-muted-foreground text-sm">
-                            Last seen: {new Date(user.last_seen).toLocaleString()}
+                            {userData.email && <span>{userData.email} • </span>}
+                            Joined {new Date(userData.created_at).toLocaleDateString()}
+                          </div>
+                          <div className="text-muted-foreground text-xs">
+                            {userData.is_online ? (
+                              <span className="text-green-600">🟢 Online now</span>
+                            ) : (
+                              <span>Last seen: {new Date(userData.last_seen).toLocaleString()}</span>
+                            )}
                           </div>
                         </div>
                       </div>
-                      <div className="flex items-center space-x-3">
-                        <Badge variant="outline">{user.role}</Badge>
+                      <div className="flex items-center space-x-2">
                         <Button
                           size="sm"
                           variant="outline"
-                          onClick={() => promoteUser(user.id, 'merchant')}
-                          disabled={user.role === 'admin'}
+                          onClick={() => promoteUser(userData.id, 'merchant')}
+                          disabled={userData.role === 'admin'}
+                          className="text-xs"
                         >
-                          <UserCheck className="w-4 h-4 mr-1" />
-                          Promote
+                          <UserCheck className="w-3 h-3 mr-1" />
+                          Merchant
+                        </Button>
+                        <Button
+                          size="sm"
+                          variant="outline"
+                          onClick={() => promoteUser(userData.id, 'admin')}
+                          disabled={userData.role === 'admin'}
+                          className="text-xs"
+                        >
+                          <Shield className="w-3 h-3 mr-1" />
+                          Admin
                         </Button>
                         <Button
                           size="sm"
                           variant="destructive"
-                          onClick={() => banUser(user.id)}
-                          disabled={user.role === 'admin'}
+                          onClick={() => banUser(userData.id)}
+                          disabled={userData.is_banned || userData.role === 'admin'}
+                          className="text-xs"
                         >
-                          <Ban className="w-4 h-4 mr-1" />
-                          Manage
+                          <Ban className="w-3 h-3 mr-1" />
+                          Ban
                         </Button>
                       </div>
                     </div>
                   ))}
+                  {filteredUsers.length === 0 && (
+                    <div className="text-center text-muted-foreground py-8">
+                      <Users className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                      <p>No users found matching your criteria</p>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>
@@ -445,7 +648,7 @@ const SuperAdminDashboard = () => {
               <CardHeader>
                 <CardTitle className="text-foreground flex items-center">
                   <BarChart3 className="w-5 h-5 mr-2" />
-                  Real-Time Analytics
+                  Real-Time Analytics Dashboard
                 </CardTitle>
               </CardHeader>
               <CardContent>
@@ -462,8 +665,14 @@ const SuperAdminDashboard = () => {
                         <Badge variant="default" className="bg-green-600">{stats.onlineUsers}</Badge>
                       </div>
                       <div className="flex justify-between items-center p-3 bg-muted rounded">
-                        <span className="text-foreground">Messages Today</span>
-                        <Badge variant="secondary">{liveMessages.length}</Badge>
+                        <span className="text-foreground">Online Rate</span>
+                        <Badge variant="secondary">
+                          {stats.totalUsers > 0 ? Math.round((stats.onlineUsers / stats.totalUsers) * 100) : 0}%
+                        </Badge>
+                      </div>
+                      <div className="flex justify-between items-center p-3 bg-muted rounded">
+                        <span className="text-foreground">Banned Users</span>
+                        <Badge variant="destructive">{liveUsers.filter(u => u.is_banned).length}</Badge>
                       </div>
                     </div>
                   </div>
@@ -472,16 +681,20 @@ const SuperAdminDashboard = () => {
                     <h3 className="text-lg font-semibold text-foreground">System Health</h3>
                     <div className="space-y-2">
                       <div className="flex justify-between items-center p-3 bg-muted rounded">
-                        <span className="text-foreground">Active Places</span>
-                        <Badge variant="secondary">{stats.activeStores}</Badge>
-                      </div>
-                      <div className="flex justify-between items-center p-3 bg-muted rounded">
-                        <span className="text-foreground">GPS Accuracy</span>
-                        <Badge variant="default" className="bg-blue-600">High</Badge>
-                      </div>
-                      <div className="flex justify-between items-center p-3 bg-muted rounded">
                         <span className="text-foreground">Real-time Status</span>
-                        <Badge variant="default" className="bg-green-600">Active</Badge>
+                        <Badge variant="default" className="bg-green-600">🟢 Active</Badge>
+                      </div>
+                      <div className="flex justify-between items-center p-3 bg-muted rounded">
+                        <span className="text-foreground">Data Refresh</span>
+                        <Badge variant="secondary">Every 30s</Badge>
+                      </div>
+                      <div className="flex justify-between items-center p-3 bg-muted rounded">
+                        <span className="text-foreground">Live Updates</span>
+                        <Badge variant="default" className="bg-blue-600">Enabled</Badge>
+                      </div>
+                      <div className="flex justify-between items-center p-3 bg-muted rounded">
+                        <span className="text-foreground">Active Messages</span>
+                        <Badge variant="secondary">{liveMessages.length}</Badge>
                       </div>
                     </div>
                   </div>
