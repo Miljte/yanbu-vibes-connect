@@ -1,11 +1,11 @@
 
 import React, { useState } from 'react';
-import SimpleMap from "@/components/SimpleMap";
+import CleanMap from "@/components/CleanMap";
 import EnhancedProximityChat from "@/components/EnhancedProximityChat";
 import EventsSection from "@/components/EventsSection";
 import UserProfile from "@/components/UserProfile";
 import EnhancedAdminDashboard from "@/components/EnhancedAdminDashboard";
-import MerchantDashboard from "@/components/MerchantDashboard";
+import FullMerchantDashboard from "@/components/FullMerchantDashboard";
 import BottomNavigation from "@/components/BottomNavigation";
 import { useAuth } from "@/hooks/useAuth";
 import { useRoles } from "@/hooks/useRoles";
@@ -29,7 +29,7 @@ const Index = () => {
   const renderActiveSection = () => {
     switch (activeSection) {
       case 'map':
-        return <SimpleMap />;
+        return <CleanMap />;
       case 'events':
         return <EventsSection />;
       case 'chat':
@@ -52,7 +52,7 @@ const Index = () => {
                     onClick={() => setActiveSection('merchant')}
                   >
                     <h3 className="text-xl font-semibold text-foreground mb-2">🏪 Merchant Dashboard</h3>
-                    <p className="text-muted-foreground">Manage your stores, post promotions, and track analytics</p>
+                    <p className="text-muted-foreground">Manage your stores, post events, and track analytics</p>
                   </div>
                 )}
                 
@@ -94,11 +94,11 @@ const Index = () => {
           </div>
         );
       case 'merchant':
-        return hasPermission('merchant_dashboard') ? <MerchantDashboard /> : <div className="min-h-screen bg-background p-4 flex items-center justify-center pb-20"><div className="text-foreground">Access denied</div></div>;
+        return hasPermission('merchant_dashboard') ? <FullMerchantDashboard /> : <div className="min-h-screen bg-background p-4 flex items-center justify-center pb-20"><div className="text-foreground">Access denied</div></div>;
       case 'admin':
         return hasPermission('admin_dashboard') ? <EnhancedAdminDashboard /> : <div className="min-h-screen bg-background p-4 flex items-center justify-center pb-20"><div className="text-foreground">Access denied</div></div>;
       default:
-        return <SimpleMap />;
+        return <CleanMap />;
     }
   };
 

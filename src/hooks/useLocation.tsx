@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
@@ -21,14 +22,16 @@ export const useLocation = () => {
       return;
     }
 
-    // High-accuracy GPS options for real-time tracking
-    const gpsOptions = {
+    // Maximum accuracy GPS options for real-time tracking
+    const highAccuracyOptions = {
       enableHighAccuracy: true,
-      timeout: 5000,
+      timeout: 10000,
       maximumAge: 0, // Always get fresh location
     };
 
-    // Get initial position with high accuracy
+    console.log('Initializing high-accuracy GPS tracking...');
+
+    // Get initial position with maximum accuracy
     navigator.geolocation.getCurrentPosition(
       async (position) => {
         const newLocation = {
@@ -72,10 +75,10 @@ export const useLocation = () => {
           accuracy: 1000
         });
       },
-      gpsOptions
+      highAccuracyOptions
     );
 
-    // Set up continuous real-time tracking with high accuracy
+    // Set up continuous real-time tracking with maximum accuracy
     const watchId = navigator.geolocation.watchPosition(
       async (position) => {
         const newLocation = {
@@ -111,10 +114,12 @@ export const useLocation = () => {
       },
       {
         enableHighAccuracy: true,
-        timeout: 10000,
-        maximumAge: 5000, // Fresh location every 5 seconds
+        timeout: 15000,
+        maximumAge: 2000, // Fresh location every 2 seconds for maximum accuracy
       }
     );
+
+    console.log('GPS watch started with ID:', watchId);
 
     // Cleanup function
     return () => {
