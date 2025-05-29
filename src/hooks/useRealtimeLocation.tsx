@@ -16,7 +16,6 @@ interface Place {
   longitude: number;
   distance: number;
   type: string;
-  merchant_id: string;
 }
 
 export const useRealtimeLocation = () => {
@@ -58,21 +57,15 @@ export const useRealtimeLocation = () => {
 
   const fetchNearbyPlaces = async (currentLocation: LocationData) => {
     try {
-      console.log('🏪 Fetching nearby MERCHANT-ONLY places for location:', currentLocation);
+      console.log('🏪 Fetching nearby places for location:', currentLocation);
       
-      // Query to get only places that have valid merchant_id (created by actual merchants)
       const { data: places, error: placesError } = await supabase
         .from('places')
-        .select(`
-          *,
-          user_roles!inner(role)
-        `)
-        .eq('is_active', true)
-        .eq('user_roles.role', 'merchant')
-        .not('merchant_id', 'is', null);
+        .select('*')
+        .eq('is_active', true);
 
       if (placesError) {
-        console.error('❌ Error fetching merchant places:', placesError);
+        console.error('❌ Error fetching places:', placesError);
         return;
       }
 
@@ -89,13 +82,12 @@ export const useRealtimeLocation = () => {
           latitude: place.latitude,
           longitude: place.longitude,
           distance,
-          type: place.type,
-          merchant_id: place.merchant_id
+          type: place.type
         };
       }).filter(place => place.distance <= 2000) // Show places within 2km
       .sort((a, b) => a.distance - b.distance) || [];
 
-      console.log(`✅ Found ${placesWithDistance.length} verified merchant places`);
+      console.log(`✅ Found ${placesWithDistance.length} nearby places`);
       setNearbyPlaces(placesWithDistance);
 
       // Update chat unlocked places (within 500m)
@@ -106,7 +98,7 @@ export const useRealtimeLocation = () => {
       );
       setChatUnlockedPlaces(unlockedPlaceIds);
       
-      console.log(`🔓 Chat unlocked for ${unlockedPlaceIds.size} verified places`);
+      console.log(`🔓 Chat unlocked for ${unlockedPlaceIds.size} places`);
     } catch (error) {
       console.error('❌ Error in fetchNearbyPlaces:', error);
     }
@@ -150,20 +142,14 @@ export const useRealtimeLocation = () => {
         return;
       }
 
-      console.log('🌍 Starting HIGH-ACCURACY GPS tracking for user:', user.id);
+      console.log('🌍 Starting optimized real-time tracking for user:', user.id);
       setIsTracking(true);
 
-      // Progressive accuracy strategy
-      const highAccuracyOptions = {
+      // More forgiving options to prevent timeouts
+      const options = {
         enableHighAccuracy: true,
-        timeout: 15000,
-        maximumAge: 0,
-      };
-
-      const lowAccuracyOptions = {
-        enableHighAccuracy: false,
-        timeout: 8000,
-        maximumAge: 60000, // Accept 1-minute old positions
+        timeout: 8000, // Reduced timeout
+        maximumAge: 10000, // Allow 10-second old positions
       };
 
       const updateLocation = async (position: GeolocationPosition) => {
@@ -173,16 +159,7 @@ export const useRealtimeLocation = () => {
           accuracy: position.coords.accuracy,
         };
 
-        // GPS accuracy warning
-        if (newLocation.accuracy && newLocation.accuracy > 20) {
-          console.warn(`⚠️ GPS accuracy warning: ${newLocation.accuracy}m (>20m threshold)`);
-          setError(`GPS accuracy: ${Math.round(newLocation.accuracy)}m - Consider moving to open area`);
-        } else {
-          console.log('✅ Good GPS accuracy:', newLocation.accuracy + 'm');
-          setError(null);
-        }
-
-        console.log('📍 HIGH-ACCURACY GPS update:', newLocation);
+        console.log('📍 GPS update:', newLocation, 'accuracy:', newLocation.accuracy + 'm');
 
         // STRICT Yanbu boundary check
         const withinYanbu = isWithinYanbu(newLocation.latitude, newLocation.longitude);
@@ -198,6 +175,7 @@ export const useRealtimeLocation = () => {
 
         console.log('✅ Location confirmed within Yanbu bounds');
         setLocation(newLocation);
+        setError(null);
 
         // Fetch nearby places based on current location
         await fetchNearbyPlaces(newLocation);
@@ -227,52 +205,52 @@ export const useRealtimeLocation = () => {
       };
 
       const handleError = (error: GeolocationPositionError) => {
-        console.error('❌ GPS error:', error.message);
+        console.warn('⚠️ GPS error (continuing with last known location):', error.message);
         
-        let errorMessage = 'GPS error: ';
-        switch (error.code) {
-          case error.PERMISSION_DENIED:
-            errorMessage += 'Please enable location permissions and try again.';
-            break;
-          case error.POSITION_UNAVAILABLE:
-            errorMessage += 'GPS signal unavailable. Move to open area.';
-            break;
-          case error.TIMEOUT:
-            errorMessage += 'GPS timeout. Trying fallback method...';
-            // Try low accuracy fallback
-            navigator.geolocation.getCurrentPosition(
-              updateLocation,
-              (fallbackError) => {
-                console.error('❌ Fallback also failed:', fallbackError);
-                setError('Location unavailable. Please check GPS and try again.');
-              },
-              lowAccuracyOptions
-            );
-            return;
-          default:
-            errorMessage += 'Location error occurred.';
-            break;
-        }
-        setError(errorMessage);
+        // Don't set error state immediately - give it a chance to recover
+        setTimeout(() => {
+          if (!location) {
+            let errorMessage = 'GPS issue: ';
+            switch (error.code) {
+              case error.PERMISSION_DENIED:
+                errorMessage += 'Please enable location permissions.';
+                break;
+              case error.POSITION_UNAVAILABLE:
+                errorMessage += 'GPS signal weak. Trying again...';
+                break;
+              case error.TIMEOUT:
+                errorMessage += 'GPS timeout. Continuing with network location.';
+                break;
+              default:
+                errorMessage += 'Using last known location.';
+                break;
+            }
+            setError(errorMessage);
+          }
+        }, 2000);
       };
 
-      // Get immediate high-accuracy position with fallback
+      // Get immediate position with progressive enhancement
       navigator.geolocation.getCurrentPosition(
         updateLocation,
-        handleError,
-        highAccuracyOptions
+        (error) => {
+          console.log('🔄 Initial GPS failed, starting watch anyway...');
+          handleError(error);
+        },
+        options
       );
 
-      // Start continuous high-accuracy tracking
+      // Start continuous tracking
       watchId = navigator.geolocation.watchPosition(
         updateLocation,
         handleError,
-        highAccuracyOptions
+        options
       );
 
-      // Reduced update frequency to every 60 seconds for battery optimization
+      // Update every 45 seconds to maintain online status (less frequent to reduce timeouts)
       updateInterval = setInterval(() => {
         if (location) {
+          // Just update the timestamp to stay online
           supabase
             .from('user_locations')
             .update({ updated_at: new Date().toISOString() })
@@ -280,7 +258,7 @@ export const useRealtimeLocation = () => {
             .then(() => console.log('🔄 Online status refreshed'))
             .catch(err => console.error('❌ Online status update failed:', err));
         }
-      }, 60000);
+      }, 45000);
     };
 
     const stopTracking = () => {
@@ -313,7 +291,7 @@ export const useRealtimeLocation = () => {
     };
 
     // Handle page unload (user closes app)
-    const handleBeforeUnload = () => {
+    const handleBeforeUnload = async () => {
       console.log('👋 User leaving app - marking offline');
       updateOnlineStatus(false);
     };

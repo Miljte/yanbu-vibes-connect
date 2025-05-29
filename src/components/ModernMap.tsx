@@ -3,18 +3,16 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Wrapper, Status } from '@googlemaps/react-wrapper';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { MapPin, Lock, MessageSquare, Navigation, Languages, AlertTriangle, Trash2 } from 'lucide-react';
+import { MapPin, Lock, MessageSquare, Navigation, Languages } from 'lucide-react';
 import { Badge } from '@/components/ui/badge';
 import { useLocation } from '@/hooks/useLocation';
 import { useYanbuLocationCheck } from '@/hooks/useYanbuLocationCheck';
 import { useAuth } from '@/hooks/useAuth';
-import { useRoles } from '@/hooks/useRoles';
 import { useLocalization } from '@/contexts/LocalizationContext';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import CategoryFilter from './CategoryFilter';
 import LocationRestriction from './LocationRestriction';
-import { cleanupMapData, verifyMerchantPlaces } from '@/utils/mapCleanup';
 
 interface Place {
   id: string;
@@ -33,7 +31,7 @@ interface MapComponentProps {
   center: google.maps.LatLngLiteral;
   zoom: number;
   places: Place[];
-  userLocation: { latitude: number; longitude: number; accuracy?: number } | null;
+  userLocation: { latitude: number; longitude: number } | null;
   onPlaceClick: (place: Place) => void;
   selectedCategory: string;
 }
@@ -103,7 +101,7 @@ const MapComponent: React.FC<MapComponentProps> = ({
       fillOpacity: 1,
       strokeColor: '#ffffff',
       strokeWeight: 3,
-      scale: 16,
+      scale: 16, // Fixed size - won't scale with zoom
     };
   }, []);
 
@@ -112,11 +110,11 @@ const MapComponent: React.FC<MapComponentProps> = ({
       const newMap = new google.maps.Map(ref.current, {
         center,
         zoom,
-        minZoom: 12,
-        maxZoom: 18,
+        minZoom: 12, // Prevent zooming too far out
+        maxZoom: 18, // Prevent zooming too close
         restriction: {
           latLngBounds: yanbuBounds,
-          strictBounds: true,
+          strictBounds: true, // Prevent panning outside bounds
         },
         styles: ultraCleanMapStyle,
         disableDefaultUI: true,
@@ -136,7 +134,7 @@ const MapComponent: React.FC<MapComponentProps> = ({
     markers.forEach(marker => marker.setMap(null));
     const newMarkers: google.maps.Marker[] = [];
 
-    // Add user location marker with accuracy circle
+    // Add user location marker
     if (userLocation) {
       const userMarker = new google.maps.Marker({
         position: { lat: userLocation.latitude, lng: userLocation.longitude },
@@ -148,7 +146,7 @@ const MapComponent: React.FC<MapComponentProps> = ({
           fillOpacity: 1,
           strokeColor: '#ffffff',
           strokeWeight: 4,
-          scale: 12,
+          scale: 12, // Fixed size
         },
         zIndex: 1000,
         animation: google.maps.Animation.BOUNCE,
@@ -161,28 +159,12 @@ const MapComponent: React.FC<MapComponentProps> = ({
       }, 2000);
       
       newMarkers.push(userMarker);
-
-      // Add accuracy circle if GPS accuracy is available
-      if (userLocation.accuracy && userLocation.accuracy > 20) {
-        const accuracyCircle = new google.maps.Circle({
-          strokeColor: '#FF0000',
-          strokeOpacity: 0.8,
-          strokeWeight: 2,
-          fillColor: '#FF0000',
-          fillOpacity: 0.35,
-          map,
-          center: { lat: userLocation.latitude, lng: userLocation.longitude },
-          radius: userLocation.accuracy,
-        });
-      }
     }
 
-    // Filter places by category - only show merchant-created places
+    // Filter places by category
     const filteredPlaces = selectedCategory === 'all' 
-      ? places.filter(place => place.is_active && place.merchant_id)
-      : places.filter(place => place.is_active && place.merchant_id && place.type === selectedCategory);
-
-    console.log(`📍 Showing ${filteredPlaces.length} verified merchant places on map`);
+      ? places.filter(place => place.is_active)
+      : places.filter(place => place.is_active && place.type === selectedCategory);
 
     // Add place markers with fixed size
     filteredPlaces.forEach(place => {
@@ -240,13 +222,11 @@ const ModernMap = () => {
   const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
   const [places, setPlaces] = useState<Place[]>([]);
   const [selectedCategory, setSelectedCategory] = useState('all');
-  const [isCleaningUp, setIsCleaningUp] = useState(false);
   
   // Call ALL hooks first, before any conditional logic
   const { location, calculateDistance } = useLocation();
   const { isInYanbu, isChecking, recheckLocation } = useYanbuLocationCheck();
   const { user } = useAuth();
-  const { userRole, isAdmin } = useRoles();
   const { t, language, setLanguage, isRTL } = useLocalization();
 
   const googleMapsApiKey = 'AIzaSyCnHJ_b9LBpxdSOdE8jmVMmJd6Vdmm5u8o';
@@ -255,18 +235,18 @@ const ModernMap = () => {
   // All useEffect hooks must be called consistently
   useEffect(() => {
     if (isInYanbu === true) {
-      fetchVerifiedMerchantPlaces();
+      fetchActivePlaces();
     }
   }, [isInYanbu, location]);
 
   useEffect(() => {
     if (isInYanbu === true) {
       const placesSubscription = supabase
-        .channel('merchant-places-changes')
+        .channel('places-changes')
         .on('postgres_changes', 
           { event: '*', schema: 'public', table: 'places' }, 
           () => {
-            fetchVerifiedMerchantPlaces();
+            fetchActivePlaces();
           }
         )
         .subscribe();
@@ -277,20 +257,12 @@ const ModernMap = () => {
     }
   }, [isInYanbu]);
 
-  const fetchVerifiedMerchantPlaces = async () => {
+  const fetchActivePlaces = async () => {
     try {
-      console.log('🏪 Fetching ONLY verified merchant places...');
-      
-      // Only get places that have a valid merchant_id and belong to users with merchant role
       const { data, error } = await supabase
         .from('places')
-        .select(`
-          *,
-          user_roles!inner(role, user_id)
-        `)
-        .eq('is_active', true)
-        .eq('user_roles.role', 'merchant')
-        .not('merchant_id', 'is', null);
+        .select('*')
+        .eq('is_active', true);
 
       if (error) throw error;
 
@@ -308,35 +280,9 @@ const ModernMap = () => {
       }) || [];
 
       setPlaces(placesWithDistance);
-      console.log(`✅ Loaded ${placesWithDistance.length} verified merchant places`);
     } catch (error) {
-      console.error('❌ Error fetching verified merchant places:', error);
-      toast.error('Failed to load merchant stores');
-    }
-  };
-
-  const handleMapCleanup = async () => {
-    if (!isAdmin) {
-      toast.error('Only admins can perform map cleanup');
-      return;
-    }
-
-    setIsCleaningUp(true);
-    try {
-      const result = await cleanupMapData();
-      
-      if (result.success) {
-        toast.success(`✅ Map cleanup complete! Removed ${result.removed} invalid places, ${result.remaining} merchant places remaining`);
-        // Refresh the map data
-        await fetchVerifiedMerchantPlaces();
-      } else {
-        toast.error(`❌ Cleanup failed: ${result.error}`);
-      }
-    } catch (error) {
-      console.error('❌ Cleanup error:', error);
-      toast.error('Map cleanup failed');
-    } finally {
-      setIsCleaningUp(false);
+      console.error('Error fetching places:', error);
+      toast.error('Failed to load stores');
     }
   };
 
@@ -387,14 +333,6 @@ const ModernMap = () => {
 
   return (
     <div className={`relative min-h-screen ${isRTL ? 'rtl' : 'ltr'}`}>
-      {/* GPS Accuracy Warning */}
-      {location && location.accuracy && location.accuracy > 20 && (
-        <div className="absolute top-4 left-4 right-4 z-20 bg-yellow-100 border border-yellow-400 text-yellow-800 px-4 py-2 rounded-lg flex items-center">
-          <AlertTriangle className="w-4 h-4 mr-2" />
-          <span className="text-sm">GPS accuracy: {Math.round(location.accuracy)}m. Move to open area for better accuracy.</span>
-        </div>
-      )}
-
       {/* Category Filter */}
       <CategoryFilter 
         selectedCategory={selectedCategory} 
@@ -418,17 +356,6 @@ const ModernMap = () => {
           <Languages className="w-4 h-4" />
           <span className="ml-1 text-xs">{language.toUpperCase()}</span>
         </Button>
-        {isAdmin && (
-          <Button
-            onClick={handleMapCleanup}
-            disabled={isCleaningUp}
-            size="sm"
-            className="bg-red-600 hover:bg-red-700 text-white shadow-lg border"
-          >
-            <Trash2 className="w-4 h-4" />
-            {isCleaningUp ? '...' : 'Clean'}
-          </Button>
-        )}
       </div>
 
       <Wrapper apiKey={googleMapsApiKey} render={render} libraries={['places']}>
@@ -453,9 +380,6 @@ const ModernMap = () => {
                     <h3 className="text-xl font-bold text-foreground">{selectedPlace.name}</h3>
                     <Badge variant="secondary" className="capitalize">
                       {selectedPlace.type}
-                    </Badge>
-                    <Badge variant="outline" className="text-xs">
-                      Verified Merchant
                     </Badge>
                   </div>
                   
