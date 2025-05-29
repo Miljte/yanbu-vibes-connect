@@ -50,7 +50,7 @@ const SuperAdminDashboard = () => {
   // Real-time data fetching with enhanced logging
   useEffect(() => {
     console.log('🔄 SuperAdmin Dashboard initializing...');
-    fetchLiveData();
+    syncAndFetchData();
     setupRealtimeSubscriptions();
     
     // Set up periodic refresh for accurate online status
@@ -64,6 +64,30 @@ const SuperAdminDashboard = () => {
       clearInterval(interval);
     };
   }, []);
+
+  const syncAndFetchData = async () => {
+    try {
+      console.log('🔄 Starting user sync process...');
+      
+      // Call the edge function to sync users from auth.users to profiles
+      const { data: syncResult, error: syncError } = await supabase.functions.invoke('sync-users');
+      
+      if (syncError) {
+        console.error('❌ User sync failed:', syncError);
+        toast.error('Failed to sync users from authentication system');
+      } else {
+        console.log('✅ User sync completed:', syncResult);
+        if (syncResult.createdProfiles > 0) {
+          toast.success(`Synced ${syncResult.createdProfiles} new users from authentication system`);
+        }
+      }
+    } catch (error) {
+      console.error('❌ Sync process error:', error);
+    }
+    
+    // Now fetch the updated data
+    await fetchLiveData();
+  };
 
   const fetchLiveData = async () => {
     try {
@@ -98,7 +122,7 @@ const SuperAdminDashboard = () => {
         });
       }
 
-      // 🚨 STEP 3: Fetch ALL profiles from database
+      // 🚨 STEP 3: Fetch ALL profiles from database (should now include synced users)
       console.log('📊 Fetching ALL profiles from database...');
       const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
@@ -117,107 +141,7 @@ const SuperAdminDashboard = () => {
         created_at: p.created_at 
       })));
 
-      // 🚨 STEP 4: Check if current user has a profile, if not create it
-      if (currentUser) {
-        const hasProfile = profilesData?.some(p => p.id === currentUser.id);
-        if (!hasProfile) {
-          console.log('⚠️ Current user missing profile, creating...');
-          try {
-            const newProfile = {
-              id: currentUser.id,
-              nickname: currentUser.email?.split('@')[0] || `User_${currentUser.id.substring(0, 8)}`,
-              created_at: currentUser.created_at,
-              updated_at: new Date().toISOString(),
-              age: null,
-              gender: null,
-              avatar_preset: 'default',
-              interests: [],
-              location_sharing_enabled: true,
-              notifications_enabled: true
-            };
-
-            const { error: insertError } = await supabase
-              .from('profiles')
-              .insert(newProfile);
-            
-            if (!insertError) {
-              console.log('✅ Created profile for current user');
-              // Refresh profiles data
-              const { data: updatedProfiles } = await supabase
-                .from('profiles')
-                .select('*')
-                .order('created_at', { ascending: false });
-              if (updatedProfiles) {
-                profilesData.length = 0;
-                profilesData.push(...updatedProfiles);
-                console.log('✅ Refreshed profiles list');
-              }
-            }
-          } catch (error) {
-            console.error('❌ Failed to create missing profile:', error);
-          }
-        }
-      }
-
-      // 🚨 STEP 5: Use RPC function to get recent sessions/activity
-      console.log('🔍 Checking for additional user activity...');
-      try {
-        // Query user_locations to find users who have been active
-        const { data: locationsData } = await supabase
-          .from('user_locations')
-          .select('user_id, updated_at')
-          .order('updated_at', { ascending: false })
-          .limit(100);
-
-        console.log(`📍 Found ${locationsData?.length || 0} location records`);
-        
-        // Extract unique user IDs from locations
-        const locationUserIds = locationsData?.map(l => l.user_id).filter(Boolean) || [];
-        const uniqueLocationUserIds = [...new Set(locationUserIds)];
-        
-        console.log(`👥 Unique users with location data: ${uniqueLocationUserIds.length}`);
-        console.log('🆔 Location user IDs:', uniqueLocationUserIds);
-
-        // Check if we have profiles for all location users
-        for (const locationUserId of uniqueLocationUserIds) {
-          const hasProfile = profilesData?.some(p => p.id === locationUserId);
-          if (!hasProfile) {
-            console.log(`⚠️ Missing profile for location user: ${locationUserId}`);
-            console.log('🔧 Creating profile for active user...');
-            
-            try {
-              const newProfile = {
-                id: locationUserId,
-                nickname: `User_${locationUserId.substring(0, 8)}`,
-                created_at: new Date().toISOString(),
-                updated_at: new Date().toISOString(),
-                age: null,
-                gender: null,
-                avatar_preset: 'default',
-                interests: [],
-                location_sharing_enabled: true,
-                notifications_enabled: true
-              };
-
-              const { error: insertError } = await supabase
-                .from('profiles')
-                .insert(newProfile);
-              
-              if (!insertError) {
-                console.log('✅ Created profile for active user');
-                // Add to our local data
-                profilesData?.push(newProfile);
-              }
-            } catch (error) {
-              console.error('❌ Failed to create profile for active user:', error);
-            }
-          }
-        }
-      } catch (error) {
-        console.error('❌ Error checking user activity:', error);
-      }
-
-      // 🚨 STEP 6: Fetch user roles, locations, bans, and mutes
+      // 🚨 STEP 4: Fetch user roles, locations, bans, and mutes
       const { data: rolesData } = await supabase.from('user_roles').select('*');
       const { data: locationsData } = await supabase.from('user_locations').select('*');
       const { data: bansData } = await supabase.from('user_bans').select('user_id').eq('is_active', true);
@@ -228,7 +152,7 @@ const SuperAdminDashboard = () => {
       console.log(`✅ BANS: ${bansData?.length || 0}`);
       console.log(`✅ MUTES: ${mutesData?.length || 0}`);
 
-      // 🚨 STEP 7: Build comprehensive user list
+      // 🚨 STEP 5: Build comprehensive user list
       const usersWithStatus: LiveUser[] = (profilesData || []).map(profile => {
         const userRole = rolesData?.find(role => role.user_id === profile.id);
         const location = locationsData?.find(loc => loc.user_id === profile.id);
@@ -339,7 +263,9 @@ const SuperAdminDashboard = () => {
         console.log('  2. Users are in auth.users but not accessible via client');
         console.log('  3. Need to implement server-side user discovery');
         
-        toast.error(`Only ${usersWithStatus.length} users found. Expected more users. Check console for details.`);
+        toast.error(`Only ${usersWithStatus.length} users found. Check if edge function sync worked.`);
+      } else {
+        toast.success(`Successfully loaded ${usersWithStatus.length} users from the system`);
       }
 
     } catch (error) {
