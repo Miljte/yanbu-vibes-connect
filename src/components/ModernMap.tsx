@@ -222,6 +222,8 @@ const ModernMap = () => {
   const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
   const [places, setPlaces] = useState<Place[]>([]);
   const [selectedCategory, setSelectedCategory] = useState('all');
+  
+  // Call ALL hooks first, before any conditional logic
   const { location, calculateDistance } = useLocation();
   const { isInYanbu, isChecking, recheckLocation } = useYanbuLocationCheck();
   const { user } = useAuth();
@@ -230,20 +232,7 @@ const ModernMap = () => {
   const googleMapsApiKey = 'AIzaSyCnHJ_b9LBpxdSOdE8jmVMmJd6Vdmm5u8o';
   const yanbuCenter: google.maps.LatLngLiteral = { lat: 24.0892, lng: 38.0618 };
 
-  // If location check is still in progress, show loading
-  if (isChecking) {
-    return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-foreground text-lg">Checking location...</div>
-      </div>
-    );
-  }
-
-  // If user is outside Yanbu, show restriction message
-  if (isInYanbu === false) {
-    return <LocationRestriction onRetry={recheckLocation} isChecking={isChecking} />;
-  }
-
+  // All useEffect hooks must be called consistently
   useEffect(() => {
     if (isInYanbu === true) {
       fetchActivePlaces();
@@ -328,6 +317,19 @@ const ModernMap = () => {
       return `${(distance / 1000).toFixed(1)}km`;
     }
   };
+
+  // NOW handle conditional rendering AFTER all hooks are called
+  if (isChecking) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-foreground text-lg">Checking location...</div>
+      </div>
+    );
+  }
+
+  if (isInYanbu === false) {
+    return <LocationRestriction onRetry={recheckLocation} isChecking={isChecking} />;
+  }
 
   return (
     <div className={`relative min-h-screen ${isRTL ? 'rtl' : 'ltr'}`}>
