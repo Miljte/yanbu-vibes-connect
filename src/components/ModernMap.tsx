@@ -11,8 +11,8 @@ import { useLocation } from '@/hooks/useLocation';
 import { useYanbuLocationCheck } from '@/hooks/useYanbuLocationCheck';
 import { toast } from 'sonner';
 import { useLocalization } from '@/contexts/LocalizationContext';
-import { CategoryFilter } from './CategoryFilter';
-import { LocationRestriction } from './LocationRestriction';
+import CategoryFilter from './CategoryFilter';
+import LocationRestriction from './LocationRestriction';
 
 interface Place {
   id: string;
