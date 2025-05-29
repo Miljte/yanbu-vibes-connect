@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Shield, Users, Eye, Ban, Crown, Trash2, MessageSquare, MapPin, Settings, UserX, Volume2, VolumeX, UserCheck, RefreshCw } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -101,7 +100,20 @@ const SuperAdminDashboard = () => {
     try {
       console.log('👥 Fetching ALL users from database...');
       
-      // First try to get all profiles (this should work for all authenticated users)
+      // Step 1: Get ALL auth users (this requires admin privileges)
+      console.log('🔓 Attempting to fetch auth users with admin privileges...');
+      const { data: authData, error: authError } = await supabase.auth.admin.listUsers();
+      
+      let allAuthUsers = [];
+      if (authError) {
+        console.error('❌ Auth admin access failed:', authError);
+        console.log('⚠️ Falling back to profiles-only approach...');
+      } else {
+        allAuthUsers = authData.users || [];
+        console.log(`✅ Found ${allAuthUsers.length} auth users via admin API`);
+      }
+
+      // Step 2: Get ALL profiles
       const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
         .select('*')
@@ -114,120 +126,130 @@ const SuperAdminDashboard = () => {
 
       console.log(`✅ Found ${profilesData?.length || 0} profiles`);
 
-      // Get user roles
-      const { data: rolesData } = await supabase
-        .from('user_roles')
-        .select('user_id, role');
+      // Step 3: Get supporting data
+      const [rolesData, locationsData, allLocationsData, bansData, mutesData] = await Promise.all([
+        supabase.from('user_roles').select('user_id, role'),
+        supabase.from('user_locations').select('user_id, latitude, longitude, updated_at').gte('updated_at', new Date(Date.now() - 10 * 60 * 1000).toISOString()),
+        supabase.from('user_locations').select('user_id, updated_at'),
+        supabase.from('user_bans').select('user_id').eq('is_active', true),
+        supabase.from('user_mutes').select('user_id').eq('is_active', true)
+      ]);
 
-      // Get user locations for online status (updated within last 10 minutes = online)
-      const tenMinutesAgo = new Date(Date.now() - 10 * 60 * 1000).toISOString();
-      const { data: locationsData } = await supabase
-        .from('user_locations')
-        .select('user_id, latitude, longitude, updated_at')
-        .gte('updated_at', tenMinutesAgo);
+      console.log('✅ Supporting data fetched');
 
-      // Get ALL user locations for last seen
-      const { data: allLocationsData } = await supabase
-        .from('user_locations')
-        .select('user_id, updated_at');
+      // Step 4: Create a comprehensive user list from both auth users and profiles
+      const userMap = new Map();
 
-      // Get bans and mutes
-      const { data: bansData } = await supabase
-        .from('user_bans')
-        .select('user_id')
-        .eq('is_active', true);
+      // Add all auth users first (if we have admin access)
+      allAuthUsers.forEach(authUser => {
+        const profile = profilesData?.find(p => p.id === authUser.id);
+        const userRole = rolesData.data?.find(role => role.user_id === authUser.id);
+        const recentLocation = locationsData.data?.find(loc => loc.user_id === authUser.id);
+        const lastLocation = allLocationsData.data?.find(loc => loc.user_id === authUser.id);
+        const isBanned = bansData.data?.some(ban => ban.user_id === authUser.id);
+        const isMuted = mutesData.data?.some(mute => mute.user_id === authUser.id);
 
-      const { data: mutesData } = await supabase
-        .from('user_mutes')
-        .select('user_id')
-        .eq('is_active', true);
-
-      // Combine all data from profiles (this ensures we show ALL users)
-      const usersWithDetails = profilesData?.map(profile => {
-        const userRole = rolesData?.find(role => role.user_id === profile.id);
-        const recentLocation = locationsData?.find(loc => loc.user_id === profile.id);
-        const lastLocation = allLocationsData?.find(loc => loc.user_id === profile.id);
-        const isBanned = bansData?.some(ban => ban.user_id === profile.id);
-        const isMuted = mutesData?.some(mute => mute.user_id === profile.id);
-        
-        // Check if user is online (activity within last 10 minutes)
-        const isOnline = !!recentLocation;
-        const lastSeen = lastLocation?.updated_at || profile.created_at;
-
-        return {
-          id: profile.id,
-          nickname: profile.nickname || 'Unknown User',
-          email: '', // We don't have direct access to auth.users emails from profiles
-          created_at: profile.created_at,
+        userMap.set(authUser.id, {
+          id: authUser.id,
+          nickname: profile?.nickname || authUser.email?.split('@')[0] || 'Unknown User',
+          email: authUser.email || '',
+          created_at: authUser.created_at,
           role: userRole?.role || 'user',
           is_banned: isBanned || false,
           is_muted: isMuted || false,
-          last_seen: lastSeen,
-          is_online: isOnline,
+          last_seen: lastLocation?.updated_at || authUser.created_at,
+          is_online: !!recentLocation,
           location: recentLocation ? { 
             latitude: recentLocation.latitude, 
             longitude: recentLocation.longitude 
           } : undefined,
-          age: profile.age,
-          gender: profile.gender
-        };
-      }) || [];
+          age: profile?.age,
+          gender: profile?.gender
+        });
+      });
 
-      console.log(`✅ Processed ${usersWithDetails.length} total users`);
-      console.log(`🟢 Online users: ${usersWithDetails.filter(u => u.is_online).length}`);
-      console.log(`🔴 Offline users: ${usersWithDetails.filter(u => !u.is_online).length}`);
+      // Add any profiles that might not have been in auth users
+      profilesData?.forEach(profile => {
+        if (!userMap.has(profile.id)) {
+          const userRole = rolesData.data?.find(role => role.user_id === profile.id);
+          const recentLocation = locationsData.data?.find(loc => loc.user_id === profile.id);
+          const lastLocation = allLocationsData.data?.find(loc => loc.user_id === profile.id);
+          const isBanned = bansData.data?.some(ban => ban.user_id === profile.id);
+          const isMuted = mutesData.data?.some(mute => mute.user_id === profile.id);
+
+          userMap.set(profile.id, {
+            id: profile.id,
+            nickname: profile.nickname || 'Unknown User',
+            email: '', // No email available from profiles only
+            created_at: profile.created_at,
+            role: userRole?.role || 'user',
+            is_banned: isBanned || false,
+            is_muted: isMuted || false,
+            last_seen: lastLocation?.updated_at || profile.created_at,
+            is_online: !!recentLocation,
+            location: recentLocation ? { 
+              latitude: recentLocation.latitude, 
+              longitude: recentLocation.longitude 
+            } : undefined,
+            age: profile.age,
+            gender: profile.gender
+          });
+        }
+      });
+
+      const allUsers = Array.from(userMap.values());
       
-      setUsers(usersWithDetails);
+      console.log(`✅ Final user count: ${allUsers.length} total users`);
+      console.log(`🟢 Online users: ${allUsers.filter(u => u.is_online).length}`);
+      console.log(`🔴 Offline users: ${allUsers.filter(u => !u.is_online).length}`);
+      console.log(`👤 User breakdown:`, {
+        admins: allUsers.filter(u => u.role === 'admin').length,
+        merchants: allUsers.filter(u => u.role === 'merchant').length,
+        users: allUsers.filter(u => u.role === 'user').length
+      });
       
-      // Also try to fetch auth users if we have admin privileges (fallback)
-      if (usersWithDetails.length === 0) {
-        console.log('⚠️ No profiles found, trying auth users...');
-        await fetchAuthUsersAsFallback();
+      setUsers(allUsers);
+      
+      if (allUsers.length === 0) {
+        console.log('⚠️ No users found - this might indicate a permissions issue');
+        toast.error('No users found. Check admin permissions or run sync.');
       }
       
     } catch (error) {
-      console.error('❌ Error fetching users:', error);
-      toast.error('Failed to load users');
+      console.error('❌ Critical error fetching users:', error);
+      toast.error('Failed to load users: ' + error.message);
       
-      // Try fallback method
-      await fetchAuthUsersAsFallback();
-    }
-  };
+      // Emergency fallback - try to get current user at least
+      try {
+        const { data: { user: currentUser } } = await supabase.auth.getUser();
+        if (currentUser) {
+          const { data: profile } = await supabase
+            .from('profiles')
+            .select('*')
+            .eq('id', currentUser.id)
+            .single();
 
-  const fetchAuthUsersAsFallback = async () => {
-    try {
-      console.log('🔄 Attempting to fetch auth users as fallback...');
-      
-      const { data: { users: authUsers }, error: authError } = await supabase.auth.admin.listUsers();
-      
-      if (authError) {
-        console.error('❌ Auth users fetch failed:', authError);
-        return;
+          if (profile) {
+            setUsers([{
+              id: currentUser.id,
+              nickname: profile.nickname || 'Current User',
+              email: currentUser.email || '',
+              created_at: currentUser.created_at,
+              role: 'admin', // Assume admin since they're accessing this panel
+              is_banned: false,
+              is_muted: false,
+              last_seen: new Date().toISOString(),
+              is_online: true,
+              location: undefined,
+              age: profile.age,
+              gender: profile.gender
+            }]);
+            console.log('✅ Fallback: Loaded current user only');
+          }
+        }
+      } catch (fallbackError) {
+        console.error('❌ Even fallback failed:', fallbackError);
       }
-
-      console.log(`✅ Found ${authUsers?.length || 0} auth users`);
-
-      if (authUsers && authUsers.length > 0) {
-        const authUsersFormatted = authUsers.map(authUser => ({
-          id: authUser.id,
-          nickname: authUser.email?.split('@')[0] || 'Unknown User',
-          email: authUser.email || '',
-          created_at: authUser.created_at,
-          role: 'user',
-          is_banned: false,
-          is_muted: false,
-          last_seen: authUser.created_at,
-          is_online: false,
-          location: undefined,
-          age: undefined,
-          gender: undefined
-        }));
-
-        setUsers(authUsersFormatted);
-        toast.success(`Loaded ${authUsersFormatted.length} users from auth`);
-      }
-    } catch (error) {
-      console.error('❌ Fallback auth fetch failed:', error);
     }
   };
 
