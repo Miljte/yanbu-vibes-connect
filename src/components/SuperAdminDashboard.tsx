@@ -45,6 +45,7 @@ const SuperAdminDashboard = () => {
   const [searchFilter, setSearchFilter] = useState('');
   const [userFilter, setUserFilter] = useState('all');
   const [loading, setLoading] = useState(true);
+  const [syncInProgress, setSyncInProgress] = useState(false);
   const { user } = useAuth();
 
   // Real-time data fetching with enhanced logging
@@ -66,50 +67,52 @@ const SuperAdminDashboard = () => {
   }, []);
 
   const syncAndFetchData = async () => {
+    if (syncInProgress) {
+      console.log('⏳ Sync already in progress, skipping...');
+      return;
+    }
+
+    setSyncInProgress(true);
+    setLoading(true);
+
     try {
-      console.log('🔄 Starting user sync process...');
+      console.log('🔄 Starting comprehensive user sync process...');
       
       // Call the edge function to sync users from auth.users to profiles
+      console.log('📡 Calling sync-users edge function...');
       const { data: syncResult, error: syncError } = await supabase.functions.invoke('sync-users');
       
       if (syncError) {
         console.error('❌ User sync failed:', syncError);
         toast.error('Failed to sync users from authentication system');
       } else {
-        console.log('✅ User sync completed:', syncResult);
-        if (syncResult.createdProfiles > 0) {
+        console.log('✅ User sync completed successfully:', syncResult);
+        if (syncResult?.createdProfiles > 0) {
           toast.success(`Synced ${syncResult.createdProfiles} new users from authentication system`);
         }
+        if (syncResult?.totalAuthUsers) {
+          console.log(`📊 Auth system reports ${syncResult.totalAuthUsers} total users`);
+        }
       }
+
+      // Wait a moment for the sync to propagate
+      await new Promise(resolve => setTimeout(resolve, 2000));
+      
     } catch (error) {
       console.error('❌ Sync process error:', error);
+      toast.error('Error during user sync process');
     }
     
     // Now fetch the updated data
     await fetchLiveData();
+    setSyncInProgress(false);
   };
 
   const fetchLiveData = async () => {
     try {
       console.log('📊 🚨 CRITICAL: Starting comprehensive user detection...');
       
-      // 🚨 STEP 1: Try to fetch auth users (will fail but worth trying)
-      let authUsersFromAdmin: any[] = [];
-      try {
-        console.log('🔍 Attempting auth.admin.listUsers()...');
-        const { data: authResponse, error: authError } = await supabase.auth.admin.listUsers();
-        
-        if (authError) {
-          console.error('❌ Expected auth admin error (no service role):', authError.message);
-        } else {
-          authUsersFromAdmin = authResponse?.users || [];
-          console.log(`✅ AUTH ADMIN SUCCESS: ${authUsersFromAdmin.length} users found`);
-        }
-      } catch (error) {
-        console.log('⚠️ Auth admin failed as expected (client-side limitation)');
-      }
-
-      // 🚨 STEP 2: Get the current session to extract user info
+      // Get the current session to extract user info
       console.log('🔍 Getting current session...');
       const { data: sessionData } = await supabase.auth.getSession();
       const currentUser = sessionData?.session?.user;
@@ -122,7 +125,7 @@ const SuperAdminDashboard = () => {
         });
       }
 
-      // 🚨 STEP 3: Fetch ALL profiles from database (should now include synced users)
+      // Fetch ALL profiles from database (should now include synced users)
       console.log('📊 Fetching ALL profiles from database...');
       const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
@@ -141,7 +144,19 @@ const SuperAdminDashboard = () => {
         created_at: p.created_at 
       })));
 
-      // 🚨 STEP 4: Fetch user roles, locations, bans, and mutes
+      // If we have fewer than expected profiles, force another sync
+      if (profilesData && profilesData.length < 3) {
+        console.log('⚠️ Profile count lower than expected, checking if we need another sync...');
+        
+        // Try to get more detailed info about what we should expect
+        const { data: syncCheckResult } = await supabase.functions.invoke('sync-users');
+        if (syncCheckResult?.totalAuthUsers && syncCheckResult.totalAuthUsers > profilesData.length) {
+          console.log(`🔄 Auth has ${syncCheckResult.totalAuthUsers} users but we only have ${profilesData.length} profiles`);
+          toast.info(`Found ${syncCheckResult.totalAuthUsers} users in auth system, ${profilesData.length} in profiles. Syncing...`);
+        }
+      }
+
+      // Fetch user roles, locations, bans, and mutes
       const { data: rolesData } = await supabase.from('user_roles').select('*');
       const { data: locationsData } = await supabase.from('user_locations').select('*');
       const { data: bansData } = await supabase.from('user_bans').select('user_id').eq('is_active', true);
@@ -152,7 +167,7 @@ const SuperAdminDashboard = () => {
       console.log(`✅ BANS: ${bansData?.length || 0}`);
       console.log(`✅ MUTES: ${mutesData?.length || 0}`);
 
-      // 🚨 STEP 5: Build comprehensive user list
+      // Build comprehensive user list
       const usersWithStatus: LiveUser[] = (profilesData || []).map(profile => {
         const userRole = rolesData?.find(role => role.user_id === profile.id);
         const location = locationsData?.find(loc => loc.user_id === profile.id);
@@ -263,7 +278,7 @@ const SuperAdminDashboard = () => {
         console.log('  2. Users are in auth.users but not accessible via client');
         console.log('  3. Need to implement server-side user discovery');
         
-        toast.error(`Only ${usersWithStatus.length} users found. Check if edge function sync worked.`);
+        toast.error(`Only ${usersWithStatus.length} users found. Try refreshing or check if all users have signed up.`);
       } else {
         toast.success(`Successfully loaded ${usersWithStatus.length} users from the system`);
       }
@@ -438,7 +453,16 @@ const SuperAdminDashboard = () => {
   if (loading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-foreground">Loading admin dashboard...</div>
+        <div className="text-center">
+          <div className="text-foreground mb-4">
+            {syncInProgress ? 'Syncing users from authentication system...' : 'Loading admin dashboard...'}
+          </div>
+          {syncInProgress && (
+            <div className="text-sm text-muted-foreground">
+              This may take a few moments to complete...
+            </div>
+          )}
+        </div>
       </div>
     );
   }
@@ -447,22 +471,42 @@ const SuperAdminDashboard = () => {
     <div className="min-h-screen bg-background p-4 pb-20">
       <div className="container mx-auto max-w-7xl">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-foreground mb-2">🛡️ Super Admin Control Center</h1>
-          <p className="text-muted-foreground">Real-time monitoring and control for POP IN</p>
-          <p className="text-sm text-green-600 mt-2">
-            ✅ Live Data: {stats.totalUsers} total users • {stats.onlineUsers} online now
-          </p>
-          <p className="text-xs text-blue-600 mt-1">
-            🔄 Auto-refresh: Every 30s • Real-time subscriptions active
-          </p>
-          <p className="text-xs text-purple-600 mt-1">
-            📊 Showing {filteredUsers.length} of {liveUsers.length} users in list
-          </p>
-          {liveUsers.length < 3 && (
-            <p className="text-xs text-red-600 mt-1">
-              ⚠️ Expected more users (hak4rgof120876@gmail.com, ahmedsindi200@gmail.com) - Check console logs
+          <div className="flex items-center justify-between mb-4">
+            <div>
+              <h1 className="text-3xl font-bold text-foreground mb-2">🛡️ Super Admin Control Center</h1>
+              <p className="text-muted-foreground">Real-time monitoring and control for POP IN</p>
+            </div>
+            <Button 
+              onClick={syncAndFetchData}
+              disabled={syncInProgress}
+              variant="outline"
+              className="ml-4"
+            >
+              {syncInProgress ? '🔄 Syncing...' : '🔄 Force Sync'}
+            </Button>
+          </div>
+          
+          <div className="space-y-2 text-sm">
+            <p className="text-green-600">
+              ✅ Live Data: {stats.totalUsers} total users • {stats.onlineUsers} online now
             </p>
-          )}
+            <p className="text-blue-600">
+              🔄 Auto-refresh: Every 30s • Real-time subscriptions active
+            </p>
+            <p className="text-purple-600">
+              📊 Showing {filteredUsers.length} of {liveUsers.length} users in list
+            </p>
+            {liveUsers.length < 3 && (
+              <div className="space-y-1">
+                <p className="text-red-600">
+                  ⚠️ Expected more users (hak4rgof120876@gmail.com, ahmedsindi200@gmail.com) - Check console logs
+                </p>
+                <p className="text-xs text-red-500">
+                  💡 If users are missing, they may need to sign up again or profiles weren't created during registration
+                </p>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Real-time Stats */}
