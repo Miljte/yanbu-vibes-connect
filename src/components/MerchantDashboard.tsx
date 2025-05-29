@@ -10,18 +10,22 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
+import type { Database } from '@/integrations/supabase/types';
+
+type PlaceType = Database['public']['Enums']['place_type'];
+type CrowdLevel = Database['public']['Enums']['crowd_level'];
 
 interface Place {
   id?: string;
   name: string;
-  type: string;
+  type: PlaceType;
   latitude: number;
   longitude: number;
   address: string;
   description: string;
   images: string[];
   working_hours: any;
-  crowd_level: string;
+  crowd_level: CrowdLevel;
   male_percentage: number;
   female_percentage: number;
   is_active: boolean;
@@ -127,12 +131,25 @@ const MerchantDashboard = () => {
     }
 
     try {
+      const placeData = {
+        name: newPlace.name,
+        type: newPlace.type as PlaceType,
+        latitude: newPlace.latitude!,
+        longitude: newPlace.longitude!,
+        address: newPlace.address,
+        description: newPlace.description,
+        images: newPlace.images || [],
+        working_hours: newPlace.working_hours,
+        crowd_level: newPlace.crowd_level as CrowdLevel,
+        male_percentage: newPlace.male_percentage,
+        female_percentage: newPlace.female_percentage,
+        is_active: newPlace.is_active,
+        merchant_id: user.id
+      };
+
       const { data, error } = await supabase
         .from('places')
-        .insert({
-          ...newPlace,
-          merchant_id: user.id
-        })
+        .insert(placeData)
         .select()
         .single();
 
@@ -166,9 +183,24 @@ const MerchantDashboard = () => {
     if (!selectedPlace?.id) return;
 
     try {
+      const updateData = {
+        name: selectedPlace.name,
+        type: selectedPlace.type,
+        latitude: selectedPlace.latitude,
+        longitude: selectedPlace.longitude,
+        address: selectedPlace.address,
+        description: selectedPlace.description,
+        images: selectedPlace.images,
+        working_hours: selectedPlace.working_hours,
+        crowd_level: selectedPlace.crowd_level as CrowdLevel,
+        male_percentage: selectedPlace.male_percentage,
+        female_percentage: selectedPlace.female_percentage,
+        is_active: selectedPlace.is_active
+      };
+
       const { error } = await supabase
         .from('places')
-        .update(selectedPlace)
+        .update(updateData)
         .eq('id', selectedPlace.id);
 
       if (error) throw error;
@@ -182,7 +214,7 @@ const MerchantDashboard = () => {
     }
   };
 
-  const placeTypes = [
+  const placeTypes: { value: PlaceType; label: string }[] = [
     { value: 'cafe', label: 'Café' },
     { value: 'restaurant', label: 'Restaurant' },
     { value: 'mall', label: 'Mall' },
@@ -247,7 +279,7 @@ const MerchantDashboard = () => {
                           }`}
                           onClick={() => {
                             setSelectedPlace(place);
-                            fetchAnalytics(place.id!);
+                            if (place.id) fetchAnalytics(place.id);
                           }}
                         >
                           <div className="flex items-center justify-between mb-2">
@@ -276,7 +308,13 @@ const MerchantDashboard = () => {
                     <CardHeader className="flex flex-row items-center justify-between">
                       <CardTitle className="text-white">{selectedPlace.name}</CardTitle>
                       <Button
-                        onClick={() => setIsEditing(!isEditing)}
+                        onClick={() => {
+                          if (isEditing) {
+                            updatePlace();
+                          } else {
+                            setIsEditing(true);
+                          }
+                        }}
                         variant="outline"
                         className="border-slate-600 text-slate-300 hover:text-white"
                       >
@@ -299,7 +337,7 @@ const MerchantDashboard = () => {
                             <label className="block text-sm font-medium text-slate-300 mb-2">Type</label>
                             <select
                               value={selectedPlace.type}
-                              onChange={(e) => setSelectedPlace({...selectedPlace, type: e.target.value})}
+                              onChange={(e) => setSelectedPlace({...selectedPlace, type: e.target.value as PlaceType})}
                               className="w-full bg-slate-700 border-slate-600 text-white p-3 rounded-lg"
                             >
                               {placeTypes.map((type) => (
@@ -342,8 +380,8 @@ const MerchantDashboard = () => {
                               />
                             </div>
                           </div>
-                          <Button onClick={updatePlace} className="w-full bg-cyan-600 hover:bg-cyan-700">
-                            Save Changes
+                          <Button onClick={() => setIsEditing(false)} variant="outline" className="w-full border-slate-600 text-slate-300">
+                            Cancel
                           </Button>
                         </div>
                       ) : (
@@ -468,7 +506,7 @@ const MerchantDashboard = () => {
                     <label className="block text-sm font-medium text-slate-300 mb-2">Type *</label>
                     <select
                       value={newPlace.type}
-                      onChange={(e) => setNewPlace({...newPlace, type: e.target.value})}
+                      onChange={(e) => setNewPlace({...newPlace, type: e.target.value as PlaceType})}
                       className="w-full bg-slate-700 border-slate-600 text-white p-3 rounded-lg"
                     >
                       {placeTypes.map((type) => (

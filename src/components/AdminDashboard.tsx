@@ -57,18 +57,28 @@ const AdminDashboard = () => {
 
   const fetchAdminData = async () => {
     try {
-      // Fetch users with roles
-      const { data: usersData } = await supabase
+      // Fetch users with their roles
+      const { data: profilesData } = await supabase
         .from('profiles')
-        .select(`
-          id,
-          nickname,
-          created_at,
-          user_roles!inner(role)
-        `)
+        .select('id, nickname, created_at')
         .order('created_at', { ascending: false });
 
-      // Fetch messages with place and user info
+      // Get user roles separately
+      const { data: rolesData } = await supabase
+        .from('user_roles')
+        .select('user_id, role');
+
+      // Combine profiles with roles
+      const usersWithRoles = profilesData?.map(profile => {
+        const userRole = rolesData?.find(role => role.user_id === profile.id);
+        return {
+          ...profile,
+          email: '', // Email not accessible from profiles table
+          role: userRole?.role || 'user'
+        };
+      }) || [];
+
+      // Fetch messages with user and place info
       const { data: messagesData } = await supabase
         .from('chat_messages')
         .select(`
@@ -76,11 +86,31 @@ const AdminDashboard = () => {
           message,
           created_at,
           is_deleted,
-          profiles!inner(nickname),
-          places!inner(name)
+          user_id,
+          place_id
         `)
         .order('created_at', { ascending: false })
         .limit(100);
+
+      // Get user nicknames and place names separately
+      const { data: profilesForMessages } = await supabase
+        .from('profiles')
+        .select('id, nickname');
+
+      const { data: placesForMessages } = await supabase
+        .from('places')
+        .select('id, name');
+
+      // Combine messages with user and place info
+      const messagesWithInfo = messagesData?.map(message => {
+        const profile = profilesForMessages?.find(p => p.id === message.user_id);
+        const place = placesForMessages?.find(p => p.id === message.place_id);
+        return {
+          ...message,
+          user_nickname: profile?.nickname || 'Unknown',
+          place_name: place?.name || 'Unknown'
+        };
+      }) || [];
 
       // Fetch places with merchant info
       const { data: placesData } = await supabase
@@ -91,9 +121,31 @@ const AdminDashboard = () => {
           type,
           is_active,
           created_at,
-          profiles!merchant_id(nickname)
+          merchant_id
         `)
         .order('created_at', { ascending: false });
+
+      // Get merchant nicknames
+      const placesWithMerchants = await Promise.all(
+        (placesData || []).map(async (place) => {
+          if (place.merchant_id) {
+            const { data: merchantProfile } = await supabase
+              .from('profiles')
+              .select('nickname')
+              .eq('id', place.merchant_id)
+              .single();
+            
+            return {
+              ...place,
+              merchant_nickname: merchantProfile?.nickname || 'Unknown'
+            };
+          }
+          return {
+            ...place,
+            merchant_nickname: 'No merchant'
+          };
+        })
+      );
 
       // Fetch reports
       const { data: reportsData } = await supabase
@@ -103,22 +155,22 @@ const AdminDashboard = () => {
           reason,
           status,
           created_at,
-          chat_messages!inner(message),
-          profiles!reported_by(nickname)
+          message_id,
+          reported_by
         `)
         .eq('status', 'pending')
         .order('created_at', { ascending: false });
 
-      setUsers(usersData || []);
-      setMessages(messagesData || []);
-      setPlaces(placesData || []);
+      setUsers(usersWithRoles);
+      setMessages(messagesWithInfo);
+      setPlaces(placesWithMerchants);
       setReports(reportsData || []);
 
       setStats({
-        totalUsers: usersData?.length || 0,
-        activeUsers: usersData?.filter(u => new Date(u.created_at) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)).length || 0,
-        totalPlaces: placesData?.length || 0,
-        totalMessages: messagesData?.length || 0
+        totalUsers: usersWithRoles?.length || 0,
+        activeUsers: usersWithRoles?.filter(u => new Date(u.created_at) > new Date(Date.now() - 7 * 24 * 60 * 60 * 1000)).length || 0,
+        totalPlaces: placesWithMerchants?.length || 0,
+        totalMessages: messagesWithInfo?.length || 0
       });
 
     } catch (error) {
@@ -319,7 +371,7 @@ const AdminDashboard = () => {
                         <div>
                           <div className="text-white font-medium">{place.name}</div>
                           <div className="text-slate-400 text-sm">
-                            {place.type} • Merchant: {place.merchant_nickname || 'N/A'}
+                            {place.type} • Merchant: {place.merchant_nickname}
                           </div>
                         </div>
                       </div>
@@ -400,7 +452,7 @@ const AdminDashboard = () => {
                         <div className="flex items-start justify-between mb-2">
                           <div>
                             <span className="text-white font-medium">
-                              Reported by: {report.profiles?.nickname}
+                              Report ID: {report.id}
                             </span>
                             <span className="text-slate-400 text-sm ml-2">
                               {new Date(report.created_at).toLocaleString()}
@@ -414,7 +466,7 @@ const AdminDashboard = () => {
                           Reason: {report.reason}
                         </p>
                         <p className="text-slate-400 text-sm">
-                          Message: "{report.chat_messages?.message}"
+                          Message ID: {report.message_id}
                         </p>
                       </div>
                     ))
