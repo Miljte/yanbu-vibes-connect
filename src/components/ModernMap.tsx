@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Wrapper, Status } from '@googlemaps/react-wrapper';
 import { Card, CardContent } from '@/components/ui/card';
@@ -13,6 +12,7 @@ import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import CategoryFilter from './CategoryFilter';
 import LocationRestriction from './LocationRestriction';
+import RealTimeProximityChat from './RealTimeProximityChat';
 
 interface Place {
   id: string;
@@ -222,6 +222,7 @@ const ModernMap = () => {
   const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
   const [places, setPlaces] = useState<Place[]>([]);
   const [selectedCategory, setSelectedCategory] = useState('all');
+  const [showChat, setShowChat] = useState(false);
   
   // Call ALL hooks first, before any conditional logic
   const { location, calculateDistance } = useLocation();
@@ -292,7 +293,9 @@ const ModernMap = () => {
 
   const handleJoinChat = (place: Place) => {
     if (isNearby(place)) {
-      toast.success(`${t('chat.joinChat')} ${place.name}!`);
+      console.log('🎯 Opening chat for:', place.name);
+      setShowChat(true);
+      toast.success(`Opening chat for ${place.name}!`);
     } else {
       toast.error(t('map.moveCloser'));
     }
@@ -329,6 +332,21 @@ const ModernMap = () => {
 
   if (isInYanbu === false) {
     return <LocationRestriction onRetry={recheckLocation} isChecking={isChecking} />;
+  }
+
+  // Show chat interface when requested
+  if (showChat) {
+    return (
+      <div className="relative">
+        <Button
+          onClick={() => setShowChat(false)}
+          className="absolute top-4 left-4 z-50 bg-background hover:bg-muted text-foreground shadow-lg border"
+        >
+          ← Back to Map
+        </Button>
+        <RealTimeProximityChat />
+      </div>
+    );
   }
 
   return (
