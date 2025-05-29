@@ -36,10 +36,7 @@ serve(async (req) => {
       throw authError
     }
 
-    console.log(`✅ Found ${authUsers.users.length} auth users:`)
-    authUsers.users.forEach(user => {
-      console.log(`  - ${user.email} (${user.id})`)
-    })
+    console.log(`✅ Found ${authUsers.users.length} auth users`)
 
     // Get existing profiles
     const { data: existingProfiles, error: profilesError } = await supabaseAdmin
@@ -58,36 +55,39 @@ serve(async (req) => {
     const missingUsers = authUsers.users.filter(user => !existingProfileIds.has(user.id))
     console.log(`⚠️ Found ${missingUsers.length} users missing profiles`)
 
-    // Create profiles for missing users
-    const newProfiles = missingUsers.map(user => ({
-      id: user.id,
-      nickname: user.email?.split('@')[0] || `User_${user.id.substring(0, 8)}`,
-      created_at: user.created_at,
-      updated_at: new Date().toISOString(),
-      age: null,
-      gender: null,
-      avatar_preset: 'default',
-      interests: [],
-      location_sharing_enabled: true,
-      notifications_enabled: true
-    }))
+    let createdProfiles = 0;
+    let createdRoles = 0;
 
-    if (newProfiles.length > 0) {
-      console.log(`🔧 Creating ${newProfiles.length} missing profiles...`)
-      
-      const { error: insertError } = await supabaseAdmin
-        .from('profiles')
-        .insert(newProfiles)
+    // Create profiles for missing users one by one to handle conflicts
+    for (const user of missingUsers) {
+      try {
+        const { error: insertError } = await supabaseAdmin
+          .from('profiles')
+          .insert({
+            id: user.id,
+            nickname: user.email?.split('@')[0] || `User_${user.id.substring(0, 8)}`,
+            created_at: user.created_at,
+            updated_at: new Date().toISOString(),
+            age: null,
+            gender: null,
+            avatar_preset: 'default',
+            interests: [],
+            location_sharing_enabled: true,
+            notifications_enabled: true
+          })
 
-      if (insertError) {
-        console.error('❌ Error creating profiles:', insertError)
-        throw insertError
+        if (insertError) {
+          console.error(`❌ Error creating profile for ${user.email}:`, insertError)
+        } else {
+          console.log(`✅ Created profile for ${user.email}`)
+          createdProfiles++
+        }
+      } catch (error) {
+        console.error(`❌ Failed to create profile for ${user.email}:`, error)
       }
-
-      console.log('✅ Successfully created missing profiles')
     }
 
-    // Also ensure default user roles exist
+    // Ensure all users have roles
     const { data: existingRoles } = await supabaseAdmin
       .from('user_roles')
       .select('user_id')
@@ -95,23 +95,23 @@ serve(async (req) => {
     const existingRoleIds = new Set(existingRoles?.map(r => r.user_id) || [])
     const usersNeedingRoles = authUsers.users.filter(user => !existingRoleIds.has(user.id))
 
-    if (usersNeedingRoles.length > 0) {
-      console.log(`🔑 Creating roles for ${usersNeedingRoles.length} users...`)
-      
-      const newRoles = usersNeedingRoles.map(user => ({
-        user_id: user.id,
-        role: 'user' as const
-      }))
+    for (const user of usersNeedingRoles) {
+      try {
+        const { error: roleError } = await supabaseAdmin
+          .from('user_roles')
+          .insert({
+            user_id: user.id,
+            role: 'user'
+          })
 
-      const { error: rolesError } = await supabaseAdmin
-        .from('user_roles')
-        .insert(newRoles)
-
-      if (rolesError) {
-        console.error('❌ Error creating roles:', rolesError)
-        // Don't throw here, roles are less critical
-      } else {
-        console.log('✅ Successfully created missing roles')
+        if (roleError) {
+          console.error(`❌ Error creating role for ${user.email}:`, roleError)
+        } else {
+          console.log(`✅ Created role for ${user.email}`)
+          createdRoles++
+        }
+      } catch (error) {
+        console.error(`❌ Failed to create role for ${user.email}:`, error)
       }
     }
 
@@ -119,14 +119,12 @@ serve(async (req) => {
       success: true,
       totalAuthUsers: authUsers.users.length,
       existingProfiles: existingProfiles?.length || 0,
-      createdProfiles: newProfiles.length,
-      createdRoles: usersNeedingRoles.length,
-      users: authUsers.users.map(user => ({
-        id: user.id,
-        email: user.email,
-        created_at: user.created_at
-      }))
+      createdProfiles,
+      createdRoles,
+      message: `Sync completed: ${createdProfiles} profiles and ${createdRoles} roles created`
     }
+
+    console.log('✅ Sync completed:', response)
 
     return new Response(
       JSON.stringify(response),

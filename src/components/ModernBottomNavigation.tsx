@@ -1,94 +1,120 @@
 
 import React from 'react';
-import { MapPin, Calendar, User, ShoppingBag, Shield, Settings } from 'lucide-react';
+import { MapPin, Calendar, User, Settings, Crown, Store } from 'lucide-react';
+
+interface NavigationItem {
+  id: string;
+  label: string;
+  icon: React.ReactNode;
+  show: boolean;
+}
 
 interface ModernBottomNavigationProps {
   activeSection: string;
   onSectionChange: (section: string) => void;
   userRole?: string;
+  isInYanbu?: boolean | null;
 }
 
 const ModernBottomNavigation: React.FC<ModernBottomNavigationProps> = ({ 
-  activeSection,
-  onSectionChange,
-  userRole = 'user' 
+  activeSection, 
+  onSectionChange, 
+  userRole = 'user',
+  isInYanbu = null
 }) => {
-  
-  // Debug logging
   console.log('ModernBottomNavigation - userRole:', userRole);
-  
-  // Navigation items with conditional admin/merchant sections
-  const navItems = [
+
+  const isAdmin = userRole === 'admin';
+  const isMerchant = userRole === 'merchant' || isAdmin;
+
+  const navigationItems: NavigationItem[] = [
     {
       id: 'map',
       label: 'Map',
-      icon: <MapPin className="h-5 w-5" />,
-      show: true
+      icon: <MapPin className="w-5 h-5" />,
+      show: true // Always show, but will handle restriction in main component
     },
     {
       id: 'events',
       label: 'Events',
-      icon: <Calendar className="h-5 w-5" />,
+      icon: <Calendar className="w-5 h-5" />,
       show: true
     },
     {
       id: 'admin',
       label: 'Admin',
-      icon: <Shield className="h-5 w-5" />,
-      show: userRole === 'admin'
+      icon: <Crown className="w-5 h-5" />,
+      show: isAdmin
     },
     {
       id: 'merchant',
-      label: 'Merchant',
-      icon: <ShoppingBag className="h-5 w-5" />,
-      show: userRole === 'merchant' || userRole === 'admin'
+      label: 'Business',
+      icon: <Store className="w-5 h-5" />,
+      show: isMerchant
     },
     {
       id: 'profile',
       label: 'Profile',
-      icon: <User className="h-5 w-5" />,
+      icon: <User className="w-5 h-5" />,
       show: true
     },
     {
       id: 'settings',
       label: 'Settings',
-      icon: <Settings className="h-5 w-5" />,
+      icon: <Settings className="w-5 h-5" />,
       show: true
-    },
+    }
   ];
 
-  // Filter items based on user role and allow up to 6 items for admin users
-  const maxItems = userRole === 'admin' ? 6 : 5;
-  const visibleNavItems = navItems.filter(item => {
+  const visibleItems = navigationItems.filter(item => {
     console.log(`Item ${item.id} - show: ${item.show}, userRole: ${userRole}`);
     return item.show;
-  }).slice(0, maxItems);
+  });
 
-  console.log('Visible nav items:', visibleNavItems.map(item => item.id));
+  console.log('Visible nav items:', visibleItems.map(item => item.id));
 
-  const handleSectionChange = (section: string) => {
-    if (onSectionChange && typeof onSectionChange === 'function') {
-      onSectionChange(section);
+  const handleItemClick = (itemId: string) => {
+    // If trying to access map but outside Yanbu (and not admin), redirect to events
+    if (itemId === 'map' && isInYanbu === false && !isAdmin) {
+      onSectionChange('events');
+      return;
     }
+    
+    onSectionChange(itemId);
   };
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 z-10">
-      <div className="bg-background border-t border-border px-2 py-2 flex justify-between">
-        {visibleNavItems.map((item) => (
-          <button
-            key={item.id}
-            onClick={() => handleSectionChange(item.id)}
-            className={`flex flex-1 flex-col items-center justify-center p-2 rounded-md transition-colors
-              ${activeSection === item.id 
-                ? 'text-primary bg-primary/10' 
-                : 'text-muted-foreground hover:text-foreground'
-              }`}
-          >
-            {item.icon}
-            <span className="text-xs mt-1">{item.label}</span>
-          </button>
-        ))}
+    <div className="fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur-md border-t border-border z-50">
+      <div className="container mx-auto max-w-md">
+        <div className="flex items-center justify-around px-2 py-3">
+          {visibleItems.map((item) => {
+            const isActive = activeSection === item.id;
+            const isMapRestricted = item.id === 'map' && isInYanbu === false && !isAdmin;
+            
+            return (
+              <button
+                key={item.id}
+                onClick={() => handleItemClick(item.id)}
+                className={`flex flex-col items-center space-y-1 px-3 py-2 rounded-lg transition-all duration-200 ${
+                  isActive
+                    ? 'bg-primary text-primary-foreground'
+                    : isMapRestricted
+                    ? 'text-muted-foreground/50 cursor-not-allowed'
+                    : 'text-muted-foreground hover:text-foreground hover:bg-muted'
+                }`}
+                disabled={isMapRestricted}
+              >
+                <div className={`${isActive ? 'scale-110' : ''} transition-transform`}>
+                  {item.icon}
+                </div>
+                <span className="text-xs font-medium">
+                  {item.label}
+                  {isMapRestricted && ' 🔒'}
+                </span>
+              </button>
+            );
+          })}
+        </div>
       </div>
     </div>
   );

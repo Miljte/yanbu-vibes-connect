@@ -10,8 +10,8 @@ import ModernProfile from '@/components/ModernProfile';
 import ModernEvents from '@/components/ModernEvents';
 import ModernSettings from '@/components/ModernSettings';
 import EnhancedMerchantDashboard from '@/components/EnhancedMerchantDashboard';
-import AdvancedAdminPanel from '@/components/AdvancedAdminPanel';
 import SuperAdminDashboard from '@/components/SuperAdminDashboard';
+import LocationRestrictionScreen from '@/components/LocationRestrictionScreen';
 import { useState } from 'react';
 
 const Index = () => {
@@ -20,13 +20,14 @@ const Index = () => {
   const [currentView, setCurrentView] = useState('map');
   
   // Start real-time location tracking for logged-in users
-  const { location, error: locationError, isTracking } = useRealtimeLocation();
+  const { location, error: locationError, isTracking, isInYanbu } = useRealtimeLocation();
 
   // Debug logging
   console.log('Index - userRole:', userRole);
   console.log('Index - isAdmin:', isAdmin);
   console.log('Index - isMerchant:', isMerchant);
   console.log('Index - location tracking:', isTracking, location);
+  console.log('Index - isInYanbu:', isInYanbu);
 
   if (loading) {
     return (
@@ -40,10 +41,32 @@ const Index = () => {
     return <AuthModal isOpen={true} onClose={() => {}} />;
   }
 
+  // Handle location-based restrictions
+  const handleLocationRetry = () => {
+    window.location.reload(); // Force location recheck
+  };
+
+  // If user is outside Yanbu and trying to access map, show restriction screen
+  if (isInYanbu === false && currentView === 'map') {
+    return (
+      <LocationRestrictionScreen
+        onRetry={handleLocationRetry}
+        isChecking={isInYanbu === null}
+        onNavigateToEvents={() => setCurrentView('events')}
+        onNavigateToProfile={() => setCurrentView('profile')}
+      />
+    );
+  }
+
   const renderCurrentView = () => {
     switch (currentView) {
       case 'map':
-        return <ModernMap />;
+        // Only render map if user is in Yanbu or admin override
+        if (isInYanbu === true || isAdmin) {
+          return <ModernMap />;
+        }
+        // Fallback to events if map not accessible
+        return <ModernEvents />;
       case 'events':
         return <ModernEvents />;
       case 'profile':
@@ -51,20 +74,20 @@ const Index = () => {
       case 'settings':
         return <ModernSettings />;
       case 'merchant':
-        return isMerchant ? <EnhancedMerchantDashboard /> : <ModernMap />;
+        return isMerchant ? <EnhancedMerchantDashboard /> : <ModernEvents />;
       case 'admin':
-        return isAdmin ? <SuperAdminDashboard /> : <ModernMap />;
+        return isAdmin ? <SuperAdminDashboard /> : <ModernEvents />;
       case 'super-admin':
-        return isAdmin ? <SuperAdminDashboard /> : <ModernMap />;
+        return isAdmin ? <SuperAdminDashboard /> : <ModernEvents />;
       default:
-        return <ModernMap />;
+        return <ModernEvents />; // Default to events instead of map
     }
   };
 
   return (
     <div className="min-h-screen bg-background">
       {/* Location error notification */}
-      {locationError && (
+      {locationError && isInYanbu !== false && (
         <div className="fixed top-4 left-4 right-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded z-50">
           <span className="block sm:inline">{locationError}</span>
         </div>
@@ -75,6 +98,7 @@ const Index = () => {
         <div className="fixed top-16 left-4 bg-blue-100 border border-blue-400 text-blue-700 px-2 py-1 rounded text-xs z-40">
           {isTracking ? '🟢 Tracking ON' : '🔴 Tracking OFF'}
           {location && ` • ${location.latitude.toFixed(4)}, ${location.longitude.toFixed(4)}`}
+          {isInYanbu !== null && ` • ${isInYanbu ? '✅ In Yanbu' : '❌ Outside Yanbu'}`}
         </div>
       )}
       
@@ -83,6 +107,7 @@ const Index = () => {
         activeSection={currentView} 
         onSectionChange={setCurrentView}
         userRole={userRole}
+        isInYanbu={isInYanbu}
       />
     </div>
   );

@@ -24,6 +24,7 @@ export const useRealtimeLocation = () => {
   const [isTracking, setIsTracking] = useState(false);
   const [nearbyPlaces, setNearbyPlaces] = useState<Place[]>([]);
   const [chatUnlockedPlaces, setChatUnlockedPlaces] = useState<Set<string>>(new Set());
+  const [isInYanbu, setIsInYanbu] = useState<boolean | null>(null);
   const { user } = useAuth();
 
   // Yanbu city boundaries - STRICT enforcement
@@ -140,11 +141,14 @@ export const useRealtimeLocation = () => {
         console.log('📏 GPS accuracy:', newLocation.accuracy, 'meters');
 
         // STRICT Yanbu boundary check
-        if (!isWithinYanbu(newLocation.latitude, newLocation.longitude)) {
-          const errorMsg = `🚫 Access restricted: You are outside Yanbu city limits. Current location: ${newLocation.latitude.toFixed(6)}, ${newLocation.longitude.toFixed(6)}`;
+        const withinYanbu = isWithinYanbu(newLocation.latitude, newLocation.longitude);
+        setIsInYanbu(withinYanbu);
+
+        if (!withinYanbu) {
+          const errorMsg = `🚫 Access restricted: You are outside Yanbu city limits. Map access blocked.`;
           setError(errorMsg);
           console.error('❌ User outside Yanbu bounds:', newLocation);
-          setIsTracking(false);
+          setLocation(newLocation); // Still set location for other features
           return;
         }
 
@@ -156,7 +160,7 @@ export const useRealtimeLocation = () => {
         await fetchNearbyPlaces(newLocation);
 
         try {
-          // Update user location in database (marks as online)
+          // Update/insert user location in database using UPSERT
           const { error: locationError } = await supabase
             .from('user_locations')
             .upsert({
@@ -165,6 +169,8 @@ export const useRealtimeLocation = () => {
               longitude: newLocation.longitude,
               accuracy: newLocation.accuracy,
               updated_at: new Date().toISOString()
+            }, {
+              onConflict: 'user_id'
             });
 
           if (locationError) {
@@ -291,5 +297,6 @@ export const useRealtimeLocation = () => {
     nearbyPlaces,
     chatUnlockedPlaces,
     calculateDistance,
+    isInYanbu,
   };
 };
