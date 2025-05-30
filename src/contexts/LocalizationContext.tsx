@@ -1,4 +1,3 @@
-
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
 interface LocalizationContextType {
@@ -61,6 +60,67 @@ const translations = {
     'events.noEvents': 'No events scheduled',
     'events.attendees': 'attendees',
     'events.rsvp': 'RSVP',
+
+    // Onboarding
+    'onboarding.welcome': 'Welcome to Yanbu Vibes!',
+    'onboarding.welcomeDesc': 'Connect with people and discover amazing places in Yanbu. Your adventure starts here!',
+    'onboarding.discoverPlaces': 'Discover Places',
+    'onboarding.discoverDesc': 'Explore cafes, restaurants, shops and events around you. Find your next favorite spot!',
+    'onboarding.proximityChat': 'Proximity Chat',
+    'onboarding.chatDesc': 'Chat with people when you\'re near the same location. Make real connections!',
+    'onboarding.customize': 'Customize Your Experience',
+    'onboarding.customizeDesc': 'Set your language, theme, and preferences to make the app truly yours.',
+    'onboarding.getStarted': 'Get Started',
+    'onboarding.skip': 'Skip Tutorial',
+
+    // Settings
+    'settings.title': 'Settings',
+    'settings.subtitle': 'Customize your Yanbu Vibes experience',
+    'settings.appearance': 'Appearance',
+    'settings.darkMode': 'Dark Mode',
+    'settings.darkModeDesc': 'Use dark theme for better viewing in low light',
+    'settings.lightMode': 'Light',
+    'settings.language': 'Language',
+    'settings.currentLanguage': 'Current Language',
+    'settings.notifications': 'Notifications',
+    'settings.proximityNotifications': 'Proximity Alerts',
+    'settings.proximityNotificationsDesc': 'Get notified when near interesting places',
+    'settings.soundNotifications': 'Sound Notifications',
+    'settings.soundNotificationsDesc': 'Play sounds for notifications',
+    'settings.hapticFeedback': 'Haptic Feedback',
+    'settings.enableHaptic': 'Enable Vibrations',
+    'settings.hapticDesc': 'Feel tactile feedback for interactions',
+    'settings.testHaptic': 'Test Vibration',
+    'settings.deviceInfo': 'Device Information',
+    'settings.platform': 'Platform',
+    'settings.orientation': 'Text Direction',
+    'settings.version': 'Version',
+    'settings.notificationsEnabled': 'Notifications enabled',
+    'settings.notificationsDisabled': 'Notifications disabled',
+    'settings.notificationsPermissionDenied': 'Notification permission denied',
+    'settings.hapticTested': 'Haptic feedback tested',
+
+    // Gamification
+    'gamification.level': 'Level',
+    'gamification.points': 'Points',
+    'gamification.placesVisited': 'Places',
+    'gamification.messages': 'Messages',
+    'gamification.dayStreak': 'Day Streak',
+    'gamification.achievements': 'Achievements',
+    'gamification.unlocked': 'Unlocked',
+    'gamification.achievementUnlocked': 'Achievement Unlocked!',
+
+    // Achievements
+    'achievements.firstVisit': 'First Step',
+    'achievements.firstVisitDesc': 'Visit your first place in Yanbu',
+    'achievements.explorer': 'Explorer',
+    'achievements.explorerDesc': 'Visit 5 different places',
+    'achievements.socialButterfly': 'Social Butterfly',
+    'achievements.socialButterflyDesc': 'Send 50 messages in chats',
+    'achievements.streakMaster': 'Streak Master',
+    'achievements.streakMasterDesc': 'Use the app for 7 consecutive days',
+    'achievements.yanbuExpert': 'Yanbu Expert',
+    'achievements.yanbuExpertDesc': 'Visit 20 different places',
     
     // Common
     'common.loading': 'Loading...',
@@ -71,6 +131,8 @@ const translations = {
     'common.add': 'Add',
     'common.close': 'Close',
     'common.open': 'Open',
+    'common.back': 'Back',
+    'common.next': 'Next',
   },
   ar: {
     // Navigation
@@ -124,6 +186,67 @@ const translations = {
     'events.noEvents': 'لا توجد فعاليات مجدولة',
     'events.attendees': 'مشارك',
     'events.rsvp': 'تأكيد الحضور',
+
+    // Onboarding
+    'onboarding.welcome': 'مرحباً بك في ينبع فايبز!',
+    'onboarding.welcomeDesc': 'تواصل مع الناس واكتشف أماكن رائعة في ينبع. مغامرتك تبدأ هنا!',
+    'onboarding.discoverPlaces': 'اكتشف الأماكن',
+    'onboarding.discoverDesc': 'استكشف المقاهي والمطاعم والمتاجر والفعاليات حولك. اعثر على مكانك المفضل التالي!',
+    'onboarding.proximityChat': 'محادثة القرب',
+    'onboarding.chatDesc': 'تحدث مع الناس عندما تكون قريباً من نفس الموقع. كوّن علاقات حقيقية!',
+    'onboarding.customize': 'خصص تجربتك',
+    'onboarding.customizeDesc': 'اضبط لغتك وسمتك وتفضيلاتك لجعل التطبيق ملكك حقاً.',
+    'onboarding.getStarted': 'ابدأ',
+    'onboarding.skip': 'تخطي الدليل',
+
+    // Settings
+    'settings.title': 'الإعدادات',
+    'settings.subtitle': 'خصص تجربة ينبع فايبز',
+    'settings.appearance': 'المظهر',
+    'settings.darkMode': 'الوضع الليلي',
+    'settings.darkModeDesc': 'استخدم السمة المظلمة للرؤية الأفضل في الإضاءة المنخفضة',
+    'settings.lightMode': 'فاتح',
+    'settings.language': 'اللغة',
+    'settings.currentLanguage': 'اللغة الحالية',
+    'settings.notifications': 'الإشعارات',
+    'settings.proximityNotifications': 'تنبيهات القرب',
+    'settings.proximityNotificationsDesc': 'احصل على إشعارات عند القرب من أماكن مثيرة',
+    'settings.soundNotifications': 'إشعارات صوتية',
+    'settings.soundNotificationsDesc': 'تشغيل أصوات للإشعارات',
+    'settings.hapticFeedback': 'التغذية الراجعة اللمسية',
+    'settings.enableHaptic': 'تفعيل الاهتزاز',
+    'settings.hapticDesc': 'اشعر بالتغذية الراجعة اللمسية للتفاعلات',
+    'settings.testHaptic': 'اختبر الاهتزاز',
+    'settings.deviceInfo': 'معلومات الجهاز',
+    'settings.platform': 'النظام',
+    'settings.orientation': 'اتجاه النص',
+    'settings.version': 'الإصدار',
+    'settings.notificationsEnabled': 'تم تفعيل الإشعارات',
+    'settings.notificationsDisabled': 'تم إلغاء الإشعارات',
+    'settings.notificationsPermissionDenied': 'تم رفض إذن الإشعارات',
+    'settings.hapticTested': 'تم اختبار التغذية الراجعة اللمسية',
+
+    // Gamification
+    'gamification.level': 'المستوى',
+    'gamification.points': 'النقاط',
+    'gamification.placesVisited': 'الأماكن',
+    'gamification.messages': 'الرسائل',
+    'gamification.dayStreak': 'أيام متتالية',
+    'gamification.achievements': 'الإنجازات',
+    'gamification.unlocked': 'مفتوح',
+    'gamification.achievementUnlocked': 'إنجاز جديد!',
+
+    // Achievements
+    'achievements.firstVisit': 'الخطوة الأولى',
+    'achievements.firstVisitDesc': 'زر أول مكان لك في ينبع',
+    'achievements.explorer': 'مستكشف',
+    'achievements.explorerDesc': 'زر 5 أماكن مختلفة',
+    'achievements.socialButterfly': 'فراشة اجتماعية',
+    'achievements.socialButterflyDesc': 'أرسل 50 رسالة في المحادثات',
+    'achievements.streakMaster': 'سيد التتالي',
+    'achievements.streakMasterDesc': 'استخدم التطبيق لمدة 7 أيام متتالية',
+    'achievements.yanbuExpert': 'خبير ينبع',
+    'achievements.yanbuExpertDesc': 'زر 20 مكان مختلف',
     
     // Common
     'common.loading': 'جاري التحميل...',
@@ -134,6 +257,8 @@ const translations = {
     'common.add': 'إضافة',
     'common.close': 'إغلاق',
     'common.open': 'مفتوح',
+    'common.back': 'رجوع',
+    'common.next': 'التالي',
   }
 };
 
