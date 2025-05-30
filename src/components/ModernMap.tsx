@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Wrapper, Status } from '@googlemaps/react-wrapper';
 import { Card, CardContent } from '@/components/ui/card';
@@ -8,12 +7,11 @@ import { Badge } from '@/components/ui/badge';
 import RealTimeProximityChat from './RealTimeProximityChat';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
-import { useLocation } from '@/hooks/useLocation';
-import { useYanbuLocationCheck } from '@/hooks/useYanbuLocationCheck';
+import { useHighAccuracyLocation } from '@/hooks/useHighAccuracyLocation';
 import { toast } from 'sonner';
 import { useLocalization } from '@/contexts/LocalizationContext';
 import CategoryFilter from './CategoryFilter';
-import LocationRestriction from './LocationRestriction';
+import GeofenceStatus from './GeofenceStatus';
 
 interface Place {
   id: string;
@@ -35,6 +33,7 @@ interface MapComponentProps {
   userLocation: { latitude: number; longitude: number } | null;
   onPlaceClick: (place: Place) => void;
   selectedCategory: string;
+  canAccessChat: (placeLocation: { latitude: number; longitude: number }) => boolean;
 }
 
 const MapComponent: React.FC<MapComponentProps> = React.memo(({
@@ -44,10 +43,10 @@ const MapComponent: React.FC<MapComponentProps> = React.memo(({
   userLocation,
   onPlaceClick,
   selectedCategory,
+  canAccessChat,
 }) => {
   const ref = useRef<HTMLDivElement>(null);
   const [map, setMap] = useState<google.maps.Map>();
-  const [markers, setMarkers] = useState<google.maps.Marker[]>([]);
   const markersRef = useRef<Map<string, google.maps.Marker>>(new Map());
 
   // Yanbu city bounds - restricting map movement to Yanbu area only
@@ -125,75 +124,74 @@ const MapComponent: React.FC<MapComponentProps> = React.memo(({
   useEffect(() => {
     if (!map) return;
 
-    // Smooth marker updates using requestAnimationFrame
-    const updateMarkers = () => {
-      // Add user location marker with enhanced visibility
-      if (userLocation && !markersRef.current.has('user-location')) {
-        const userMarker = new google.maps.Marker({
-          position: { lat: userLocation.latitude, lng: userLocation.longitude },
+    // Clear existing markers
+    markersRef.current.forEach(marker => marker.setMap(null));
+    markersRef.current.clear();
+
+    // Add user location marker with high visibility
+    if (userLocation) {
+      const userMarker = new google.maps.Marker({
+        position: { lat: userLocation.latitude, lng: userLocation.longitude },
+        map,
+        title: "Your Location",
+        icon: {
+          path: google.maps.SymbolPath.CIRCLE,
+          fillColor: '#3B82F6',
+          fillOpacity: 1,
+          strokeColor: '#ffffff',
+          strokeWeight: 3,
+          scale: 15,
+          anchor: new google.maps.Point(0, 0)
+        },
+        zIndex: 1000,
+        optimized: true,
+        animation: google.maps.Animation.BOUNCE
+      });
+      
+      // Stop bounce after 2 seconds
+      setTimeout(() => {
+        userMarker.setAnimation(null);
+      }, 2000);
+      
+      markersRef.current.set('user-location', userMarker);
+    }
+
+    // Filter and add place markers with chat access indication
+    const filteredPlaces = selectedCategory === 'all' 
+      ? places.filter(place => place.is_active)
+      : places.filter(place => place.is_active && place.type === selectedCategory);
+
+    filteredPlaces.forEach((place, index) => {
+      const hasChat = canAccessChat({ latitude: place.latitude, longitude: place.longitude });
+      
+      setTimeout(() => {
+        const marker = new google.maps.Marker({
+          position: { lat: place.latitude, lng: place.longitude },
           map,
-          title: "Your Location",
+          title: place.name,
           icon: {
             path: google.maps.SymbolPath.CIRCLE,
-            fillColor: '#3B82F6',
+            fillColor: hasChat ? '#22c55e' : '#ef4444', // Green if chat accessible, red otherwise
             fillOpacity: 1,
             strokeColor: '#ffffff',
-            strokeWeight: 3,
-            scale: 12,
+            strokeWeight: 2,
+            scale: hasChat ? 18 : 14, // Larger if chat accessible
             anchor: new google.maps.Point(0, 0)
           },
-          zIndex: 1000,
+          zIndex: 500,
           optimized: true,
           animation: google.maps.Animation.DROP
         });
-        
-        markersRef.current.set('user-location', userMarker);
-      }
 
-      // Filter and add place markers with smooth animations
-      const filteredPlaces = selectedCategory === 'all' 
-        ? places.filter(place => place.is_active)
-        : places.filter(place => place.is_active && place.type === selectedCategory);
+        marker.addListener('click', () => {
+          onPlaceClick(place);
+          map.panTo({ lat: place.latitude, lng: place.longitude });
+        });
 
-      // Remove markers for places that are no longer visible
-      markersRef.current.forEach((marker, key) => {
-        if (key !== 'user-location' && !filteredPlaces.find(p => p.id === key)) {
-          marker.setMap(null);
-          markersRef.current.delete(key);
-        }
-      });
-
-      // Add or update markers for visible places
-      filteredPlaces.forEach((place, index) => {
-        if (!markersRef.current.has(place.id)) {
-          // Add delay for smooth sequential animation
-          setTimeout(() => {
-            const marker = new google.maps.Marker({
-              position: { lat: place.latitude, lng: place.longitude },
-              map,
-              title: place.name,
-              icon: getMarkerIcon(place.type),
-              zIndex: 500,
-              optimized: true,
-              animation: google.maps.Animation.DROP
-            });
-
-            marker.addListener('click', () => {
-              onPlaceClick(place);
-              map.panTo({ lat: place.latitude, lng: place.longitude });
-            });
-
-            markersRef.current.set(place.id, marker);
-          }, index * 50); // 50ms delay between each marker
-        }
-      });
-    };
-
-    requestAnimationFrame(updateMarkers);
-
-    // Update markers array for cleanup
-    setMarkers(Array.from(markersRef.current.values()));
-  }, [map, places, userLocation, onPlaceClick, selectedCategory, getMarkerIcon]);
+        markersRef.current.set(place.id, marker);
+      }, index * 50); // Smooth sequential animation
+    });
+  }, [map, places, userLocation, onPlaceClick, selectedCategory, canAccessChat]);
 
   // Cleanup on unmount
   useEffect(() => {
@@ -240,9 +238,17 @@ const ModernMap = () => {
   const [selectedCategory, setSelectedCategory] = useState('all');
   const [showChat, setShowChat] = useState(false);
   
-  // Call ALL hooks first, before any conditional logic
-  const { location, calculateDistance } = useLocation();
-  const { isInYanbu, isChecking, recheckLocation } = useYanbuLocationCheck();
+  // Use new high-accuracy location hook
+  const {
+    location,
+    isTracking,
+    error: locationError,
+    geofenceStatus,
+    canAccessChat,
+    checkProximityToPlace,
+    calculateDistance
+  } = useHighAccuracyLocation();
+  
   const { user } = useAuth();
   const { t, language, setLanguage, isRTL } = useLocalization();
 
@@ -251,13 +257,13 @@ const ModernMap = () => {
 
   // All useEffect hooks must be called consistently
   useEffect(() => {
-    if (isInYanbu === true) {
+    if (geofenceStatus?.isInYanbu) {
       fetchActivePlaces();
     }
-  }, [isInYanbu, location]);
+  }, [geofenceStatus?.isInYanbu, location]);
 
   useEffect(() => {
-    if (isInYanbu === true) {
+    if (geofenceStatus?.isInYanbu) {
       const placesSubscription = supabase
         .channel('places-changes')
         .on('postgres_changes', 
@@ -272,7 +278,7 @@ const ModernMap = () => {
         supabase.removeChannel(placesSubscription);
       };
     }
-  }, [isInYanbu]);
+  }, [geofenceStatus?.isInYanbu]);
 
   const fetchActivePlaces = async () => {
     try {
@@ -303,17 +309,14 @@ const ModernMap = () => {
     }
   };
 
-  const isNearby = (place: Place) => {
-    return place.distance !== null && place.distance <= 1000; // Increased to 1km
-  };
-
   const handleJoinChat = (place: Place) => {
-    if (isNearby(place)) {
+    if (canAccessChat({ latitude: place.latitude, longitude: place.longitude })) {
       console.log('🎯 Opening chat for:', place.name);
       setShowChat(true);
       toast.success(`Opening chat for ${place.name}!`);
     } else {
-      toast.error(t('map.moveCloser'));
+      const distance = checkProximityToPlace({ latitude: place.latitude, longitude: place.longitude });
+      toast.error(`Move closer to join chat (${Math.round(distance)}m away)`);
     }
   };
 
@@ -348,24 +351,46 @@ const ModernMap = () => {
     }));
     
   const chatUnlockedPlaces = new Set(
-    places.filter(place => place.distance !== null && place.distance <= 1000).map(p => p.id)
+    places.filter(place => canAccessChat({ latitude: place.latitude, longitude: place.longitude })).map(p => p.id)
   );
 
   // NOW handle conditional rendering AFTER all hooks are called
-  if (isChecking) {
+  if (geofenceStatus && !geofenceStatus.isInYanbu) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-foreground text-lg">Checking location...</div>
+      <div className="min-h-screen bg-background flex items-center justify-center p-4">
+        <Card className="w-full max-w-md">
+          <CardContent className="p-6 text-center">
+            <h2 className="text-xl font-bold mb-4">Location Restricted</h2>
+            <p className="text-muted-foreground mb-4">
+              This app is only available in Yanbu, Saudi Arabia. You are currently {(geofenceStatus.distanceFromCenter / 1000).toFixed(1)}km from Yanbu city center.
+            </p>
+            <GeofenceStatus 
+              geofenceStatus={geofenceStatus}
+              isTracking={isTracking}
+              error={locationError}
+              accuracy={location?.accuracy}
+            />
+          </CardContent>
+        </Card>
       </div>
     );
   }
 
-  if (isInYanbu === false) {
-    return <LocationRestriction onRetry={recheckLocation} isChecking={isChecking} />;
-  }
-
   // Show chat interface when requested
   if (showChat) {
+    const nearbyPlacesForChat = places
+      .filter(place => place.distance !== null && place.distance <= 5000)
+      .map(place => ({
+        id: place.id,
+        name: place.name,
+        distance: place.distance || 0,
+        type: place.type
+      }));
+      
+    const chatUnlockedPlaces = new Set(
+      places.filter(place => canAccessChat({ latitude: place.latitude, longitude: place.longitude })).map(p => p.id)
+    );
+
     return (
       <div className="min-h-screen bg-background p-4">
         <Button
@@ -386,6 +411,16 @@ const ModernMap = () => {
 
   return (
     <div className={`relative min-h-screen ${isRTL ? 'rtl' : 'ltr'}`}>
+      {/* Geofence Status */}
+      <div className="absolute top-4 left-4 z-20">
+        <GeofenceStatus 
+          geofenceStatus={geofenceStatus}
+          isTracking={isTracking}
+          error={locationError}
+          accuracy={location?.accuracy}
+        />
+      </div>
+
       {/* Category Filter */}
       <CategoryFilter 
         selectedCategory={selectedCategory} 
@@ -395,14 +430,20 @@ const ModernMap = () => {
       {/* Control buttons */}
       <div className="absolute top-20 right-4 z-10 flex flex-col space-y-2">
         <Button
-          onClick={centerOnUser}
+          onClick={() => {
+            if (location) {
+              toast.success('Centered on your location');
+            } else {
+              toast.error('Location not available');
+            }
+          }}
           size="sm"
           className="bg-background hover:bg-muted text-foreground shadow-lg border"
         >
           <Navigation className="w-4 h-4" />
         </Button>
         <Button
-          onClick={toggleLanguage}
+          onClick={() => setLanguage(language === 'en' ? 'ar' : 'en')}
           size="sm"
           className="bg-background hover:bg-muted text-foreground shadow-lg border"
         >
@@ -419,6 +460,7 @@ const ModernMap = () => {
           userLocation={location}
           onPlaceClick={setSelectedPlace}
           selectedCategory={selectedCategory}
+          canAccessChat={canAccessChat}
         />
       </Wrapper>
 
@@ -445,42 +487,19 @@ const ModernMap = () => {
                       <MapPin className="w-4 h-4 mr-1" />
                       <span>
                         {selectedPlace.distance 
-                          ? formatDistance(selectedPlace.distance)
+                          ? `${Math.round(selectedPlace.distance)}m away`
                           : 'Distance unknown'
                         }
                       </span>
                     </div>
                     <Badge 
-                      variant={isNearby(selectedPlace) ? "default" : "secondary"}
-                      className={isNearby(selectedPlace) ? "bg-green-600" : ""}
+                      variant={canAccessChat({ latitude: selectedPlace.latitude, longitude: selectedPlace.longitude }) ? "default" : "secondary"}
+                      className={canAccessChat({ latitude: selectedPlace.latitude, longitude: selectedPlace.longitude }) ? "bg-green-600" : ""}
                     >
-                      {isNearby(selectedPlace) ? 'In Range' : 'Out of Range'}
+                      {canAccessChat({ latitude: selectedPlace.latitude, longitude: selectedPlace.longitude }) ? 'Chat Available' : 'Too Far for Chat'}
                     </Badge>
                   </div>
-
-                  {/* Store Category with emoji */}
-                  <div className="flex items-center space-x-2 mb-3">
-                    <span className="text-lg">
-                      {selectedPlace.type === 'cafe' && '☕'}
-                      {selectedPlace.type === 'restaurant' && '🍽️'}
-                      {selectedPlace.type === 'shop' && '🛍️'}
-                      {selectedPlace.type === 'event' && '🎉'}
-                    </span>
-                    <span className="text-sm font-medium text-foreground capitalize">
-                      {selectedPlace.type}
-                    </span>
-                  </div>
                 </div>
-                
-                {selectedPlace.images && selectedPlace.images.length > 0 && (
-                  <div className="ml-4">
-                    <img 
-                      src={selectedPlace.images[0]} 
-                      alt={selectedPlace.name}
-                      className="w-20 h-20 rounded-lg object-cover border"
-                    />
-                  </div>
-                )}
                 
                 <button
                   onClick={() => setSelectedPlace(null)}
@@ -491,7 +510,7 @@ const ModernMap = () => {
               </div>
               
               <div className="space-y-3">
-                {isNearby(selectedPlace) ? (
+                {canAccessChat({ latitude: selectedPlace.latitude, longitude: selectedPlace.longitude }) ? (
                   <Button 
                     onClick={() => handleJoinChat(selectedPlace)}
                     className="w-full bg-green-600 hover:bg-green-700 text-white rounded-xl py-3"
@@ -505,7 +524,7 @@ const ModernMap = () => {
                     className="w-full bg-muted cursor-not-allowed text-muted-foreground rounded-xl py-3"
                   >
                     <Lock className="w-5 h-5 mr-2" />
-                    Move within 1km to chat
+                    Move within 500m to chat
                   </Button>
                 )}
 
