@@ -10,6 +10,8 @@ interface MarkerData {
   type: string;
   distance?: number;
   isActive: boolean;
+  count?: number;
+  places?: MarkerData[];
 }
 
 interface UseOptimizedMarkersProps {
