@@ -1,3 +1,4 @@
+
 import type { Config } from "tailwindcss";
 
 export default {
@@ -18,6 +19,12 @@ export default {
 			}
 		},
 		extend: {
+			fontFamily: {
+				'sans': ['Poppins', 'Roboto', 'system-ui', '-apple-system', 'sans-serif'],
+				'arabic': ['Noto Kufi Arabic', 'Tajawal', 'Cairo', 'Poppins', 'system-ui', '-apple-system', 'sans-serif'],
+				'streetwear': ['Anton', 'Poppins', 'system-ui', '-apple-system', 'sans-serif'],
+				'display': ['Anton', 'Poppins', 'system-ui', '-apple-system', 'sans-serif'],
+			},
 			colors: {
 				border: 'hsl(var(--border))',
 				input: 'hsl(var(--input))',
