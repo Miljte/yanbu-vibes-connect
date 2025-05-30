@@ -31,15 +31,15 @@ const ModernBottomNavigation: React.FC<ModernBottomNavigationProps> = ({
 
   const navigationItems: NavigationItem[] = [
     {
-      id: 'map',
-      labelKey: 'nav.map',
-      icon: <MapPin className="w-5 h-5" />,
-      show: true
-    },
-    {
       id: 'events',
       labelKey: 'nav.events',
       icon: <Calendar className="w-5 h-5" />,
+      show: true
+    },
+    {
+      id: 'map',
+      labelKey: 'nav.map',
+      icon: <MapPin className="w-5 h-5" />,
       show: true
     },
     {
@@ -49,10 +49,10 @@ const ModernBottomNavigation: React.FC<ModernBottomNavigationProps> = ({
       show: true
     },
     {
-      id: 'admin',
-      labelKey: 'nav.admin',
-      icon: <Crown className="w-5 h-5" />,
-      show: isAdmin
+      id: 'settings',
+      labelKey: 'nav.settings',
+      icon: <Settings className="w-5 h-5" />,
+      show: true
     },
     {
       id: 'merchant',
@@ -61,10 +61,10 @@ const ModernBottomNavigation: React.FC<ModernBottomNavigationProps> = ({
       show: isMerchant
     },
     {
-      id: 'settings',
-      labelKey: 'nav.settings',
-      icon: <Settings className="w-5 h-5" />,
-      show: true
+      id: 'admin',
+      labelKey: 'nav.admin',
+      icon: <Crown className="w-5 h-5" />,
+      show: isAdmin
     }
   ];
 
