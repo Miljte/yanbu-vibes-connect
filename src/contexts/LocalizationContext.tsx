@@ -128,14 +128,14 @@ const translations = {
 
     // Merchant
     'merchant.title': 'Business Dashboard',
-    'merchant.engagement': 'Customer Engagement Hub',
+    'merchant.engagementHub': 'Customer Engagement Hub',
     'merchant.connectNearby': 'Connect with nearby customers in real-time',
     'merchant.selectStore': 'Select Store',
     'merchant.sendPromotion': 'Send Real-time Promotion',
     'merchant.nearbyCustomers': 'Live Nearby Customers',
     'merchant.usersNearby': 'Users Nearby',
     'merchant.messagesToday': 'Messages Today',
-    'merchant.engagement': 'Engagement',
+    'merchant.engagementRate': 'Engagement',
     'merchant.totalVisits': 'Total Visits',
     'merchant.activeOffers': 'Active Offers',
 
@@ -285,14 +285,14 @@ const translations = {
 
     // Merchant
     'merchant.title': 'لوحة الأعمال',
-    'merchant.engagement': 'مركز تفاعل العملاء',
+    'merchant.engagementHub': 'مركز تفاعل العملاء',
     'merchant.connectNearby': 'تواصل مع العملاء القريبين في الوقت الفعلي',
     'merchant.selectStore': 'اختر المتجر',
     'merchant.sendPromotion': 'أرسل عرض فوري',
     'merchant.nearbyCustomers': 'العملاء القريبون مباشرة',
     'merchant.usersNearby': 'المستخدمون القريبون',
     'merchant.messagesToday': 'الرسائل اليوم',
-    'merchant.engagement': 'التفاعل',
+    'merchant.engagementRate': 'التفاعل',
     'merchant.totalVisits': 'إجمالي الزيارات',
     'merchant.activeOffers': 'العروض النشطة',
 
