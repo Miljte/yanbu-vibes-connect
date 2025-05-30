@@ -85,12 +85,31 @@ const translations = {
     'map.searchPlaces': 'Search places...',
     'map.currentLocation': 'Current Location',
     'map.nearbyPlaces': 'Nearby Places',
+    'map.checkingLocation': 'Checking location...',
     
     // Chat
     'chat.title': 'Proximity Chat',
     'chat.subtitle': 'Chat with people nearby',
     'chat.typeMessage': 'Type a message...',
     'chat.send': 'Send',
+    
+    // Location
+    'location.mapRestricted': 'Map Restricted',
+    'location.limitedToYanbu': 'Map features are limited to Yanbu area.',
+    'location.stillAccess': 'You can still access other features.',
+    'location.checkAgain': 'Check Location Again',
+    
+    // Onboarding
+    'onboarding.welcome': 'Welcome to Pop In',
+    'onboarding.welcomeDesc': 'Connect with your community in Yanbu',
+    'onboarding.discoverPlaces': 'Discover Places',
+    'onboarding.discoverDesc': 'Find exciting locations around you',
+    'onboarding.proximityChat': 'Proximity Chat',
+    'onboarding.chatDesc': 'Chat with people nearby',
+    'onboarding.customize': 'Customize',
+    'onboarding.customizeDesc': 'Personalize your experience',
+    'onboarding.getStarted': 'Get Started',
+    'onboarding.skip': 'Skip Tutorial',
     
     // Common
     'common.loading': 'Loading...',
@@ -111,7 +130,9 @@ const translations = {
     'common.sort': 'Sort',
     'common.clear': 'Clear',
     'common.apply': 'Apply',
-    'common.reset': 'Reset'
+    'common.reset': 'Reset',
+    'common.back': 'Back',
+    'common.next': 'Next'
   },
   ar: {
     // Navigation

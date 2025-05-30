@@ -38,7 +38,7 @@ export const useYanbuLocationCheck = () => {
       }
       setIsChecking(false);
     }
-  }, [location, loading]); // Fixed dependency array
+  }, [location, loading]);
 
   const recheckLocation = () => {
     setIsChecking(true);
@@ -53,7 +53,7 @@ export const useYanbuLocationCheck = () => {
 
   return {
     isInYanbu,
-    isChecking: isChecking || loading,
+    loading: isChecking || loading,
     recheckLocation
   };
 };

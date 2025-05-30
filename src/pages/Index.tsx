@@ -18,7 +18,7 @@ const Index = () => {
   const [showAuth, setShowAuth] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const { user, userRole, loading } = useAuth();
-  const { isInYanbu, loading: locationLoading } = useYanbuLocationCheck();
+  const { isInYanbu, loading: locationLoading, recheckLocation } = useYanbuLocationCheck();
 
   useEffect(() => {
     if (!loading && !user) {
@@ -59,11 +59,18 @@ const Index = () => {
   }
 
   if (showOnboarding) {
-    return <OnboardingTutorial onComplete={handleCompleteOnboarding} />;
+    return <OnboardingTutorial onComplete={handleCompleteOnboarding} isOpen={true} />;
   }
 
   if (isInYanbu === false && userRole !== 'admin') {
-    return <LocationRestrictionScreen />;
+    return (
+      <LocationRestrictionScreen 
+        onRetry={recheckLocation}
+        isChecking={locationLoading}
+        onNavigateToEvents={() => setActiveSection('events')}
+        onNavigateToProfile={() => setActiveSection('profile')}
+      />
+    );
   }
 
   const renderActiveSection = () => {

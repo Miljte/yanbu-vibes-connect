@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { 
   Settings, 
@@ -143,8 +142,7 @@ const ModernSettings = () => {
   const handleSignOut = async () => {
     try {
       setLoading(true);
-      const { error } = await signOut();
-      if (error) throw error;
+      await signOut();
       toast.success('Successfully signed out');
     } catch (error) {
       console.error('Error signing out:', error);
