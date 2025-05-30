@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Shield, Users, Eye, Ban, Crown, Trash2, MessageSquare, MapPin, Settings, RefreshCw, UserCheck, UserX, Volume2, VolumeX } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -90,18 +89,31 @@ const EnhancedAdminPanel = () => {
     try {
       console.log('🔍 Fetching enhanced user data...');
       
-      // Fetch all profiles
+      // Fetch ALL profiles without any filtering
       const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
-        .select('id, nickname, created_at')
+        .select('*')
         .order('created_at', { ascending: false });
 
-      if (profilesError) throw profilesError;
+      if (profilesError) {
+        console.error('❌ Error fetching profiles:', profilesError);
+        throw profilesError;
+      }
+
+      console.log(`✅ Found ${profilesData?.length || 0} profiles in database`);
+
+      if (!profilesData || profilesData.length === 0) {
+        console.warn('⚠️ No profiles found in database');
+        setUsers([]);
+        return;
+      }
 
       // Fetch user roles
       const { data: rolesData } = await supabase
         .from('user_roles')
         .select('user_id, role');
+
+      console.log(`👑 Found ${rolesData?.length || 0} role assignments`);
 
       // Fetch user locations for online status
       const { data: locationsData } = await supabase
@@ -132,7 +144,7 @@ const EnhancedAdminPanel = () => {
       }, {} as Record<string, number>) || {};
 
       // Combine all data with enhanced details
-      const usersWithDetails = profilesData?.map(profile => {
+      const usersWithDetails = profilesData.map(profile => {
         const userRole = rolesData?.find(role => role.user_id === profile.id);
         const location = locationsData?.find(loc => loc.user_id === profile.id);
         const isBanned = bansData?.some(ban => ban.user_id === profile.id) || false;
@@ -155,9 +167,11 @@ const EnhancedAdminPanel = () => {
           message_count: messageCounts[profile.id] || 0,
           place_visits: 0 // Could be calculated from user_locations visits
         };
-      }) || [];
+      });
 
       console.log('✅ Enhanced users loaded:', usersWithDetails.length);
+      console.log('👥 User list:', usersWithDetails.map(u => ({ nickname: u.nickname, role: u.role })));
+      
       setUsers(usersWithDetails);
     } catch (error) {
       console.error('❌ Error in fetchUsersWithDetails:', error);
@@ -202,36 +216,20 @@ const EnhancedAdminPanel = () => {
   const setupRealtimeSubscriptions = () => {
     console.log('🔄 Setting up enhanced real-time subscriptions...');
 
-    // Users and profiles changes
-    const profilesChannel = supabase
-      .channel('enhanced_admin_profiles')
+    const adminChannel = supabase
+      .channel('enhanced_admin_panel')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, (payload) => {
         console.log('👤 Profile change:', payload);
         handleRealtimeUpdate('profiles', payload);
       })
-      .subscribe();
-
-    // Role changes
-    const rolesChannel = supabase
-      .channel('enhanced_admin_roles')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'user_roles' }, (payload) => {
         console.log('👑 Role change:', payload);
         handleRealtimeUpdate('user_roles', payload);
       })
-      .subscribe();
-
-    // Location updates for online status
-    const locationsChannel = supabase
-      .channel('enhanced_admin_locations')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'user_locations' }, (payload) => {
         console.log('📍 Location update:', payload);
         handleRealtimeUpdate('user_locations', payload);
       })
-      .subscribe();
-
-    // Ban/mute changes
-    const moderationChannel = supabase
-      .channel('enhanced_admin_moderation')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'user_bans' }, (payload) => {
         console.log('🚫 Ban change:', payload);
         handleRealtimeUpdate('user_bans', payload);
@@ -243,10 +241,7 @@ const EnhancedAdminPanel = () => {
       .subscribe();
 
     return () => {
-      supabase.removeChannel(profilesChannel);
-      supabase.removeChannel(rolesChannel);
-      supabase.removeChannel(locationsChannel);
-      supabase.removeChannel(moderationChannel);
+      supabase.removeChannel(adminChannel);
     };
   };
 
@@ -407,6 +402,11 @@ const EnhancedAdminPanel = () => {
               <span>Online: {stats.onlineUsers}</span>
               <span>New Today: {stats.newUsersToday}</span>
             </div>
+            {users.length === 0 && (
+              <p className="text-sm text-orange-400 mt-1">
+                ⚠️ No users found - Check database and RLS policies
+              </p>
+            )}
           </div>
           <Button onClick={refreshData} disabled={refreshing} variant="outline">
             <RefreshCw className={`w-4 h-4 mr-2 ${refreshing ? 'animate-spin' : ''}`} />
@@ -616,6 +616,16 @@ const EnhancedAdminPanel = () => {
                     <div className="text-center text-muted-foreground py-8">
                       <Users className="w-12 h-12 mx-auto mb-4 opacity-50" />
                       <p>No users found matching your criteria</p>
+                      {users.length === 0 && (
+                        <div className="mt-4 text-sm">
+                          <p className="text-orange-400">Possible issues:</p>
+                          <ul className="text-left list-disc list-inside space-y-1">
+                            <li>No users in profiles table</li>
+                            <li>RLS policies blocking access</li>
+                            <li>Database connection issues</li>
+                          </ul>
+                        </div>
+                      )}
                     </div>
                   )}
                 </div>

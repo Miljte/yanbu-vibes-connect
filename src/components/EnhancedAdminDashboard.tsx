@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Users, MapPin, MessageSquare, BarChart3, Shield, Ban, Eye, Trash2, Crown, Volume2, VolumeX } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -88,26 +87,51 @@ const EnhancedAdminDashboard = () => {
 
   const fetchAdminData = async () => {
     try {
-      // Fetch users with their roles
-      const { data: profilesData } = await supabase
+      console.log('🔍 Fetching admin data...');
+      
+      // Fetch ALL users with their roles - ensuring we get everyone
+      const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
-        .select('id, nickname, created_at')
+        .select('*')
         .order('created_at', { ascending: false });
+
+      if (profilesError) {
+        console.error('❌ Error fetching profiles:', profilesError);
+        throw profilesError;
+      }
+
+      console.log(`✅ Found ${profilesData?.length || 0} total profiles`);
 
       const { data: rolesData } = await supabase
         .from('user_roles')
         .select('user_id, role');
 
+      const { data: bansData } = await supabase
+        .from('user_bans')
+        .select('user_id')
+        .eq('is_active', true);
+
+      const { data: mutesData } = await supabase
+        .from('user_mutes')
+        .select('user_id')
+        .eq('is_active', true);
+
       const usersWithRoles = profilesData?.map(profile => {
         const userRole = rolesData?.find(role => role.user_id === profile.id);
+        const isBanned = bansData?.some(ban => ban.user_id === profile.id) || false;
+        const isMuted = mutesData?.some(mute => mute.user_id === profile.id) || false;
+        
         return {
           ...profile,
           email: '',
           role: userRole?.role || 'user',
-          is_banned: false,
-          is_muted: false
+          is_banned: isBanned,
+          is_muted: isMuted
         };
       }) || [];
+
+      console.log(`👥 Users with roles: ${usersWithRoles.length}`);
+      console.log('Users list:', usersWithRoles.map(u => ({ nickname: u.nickname, role: u.role })));
 
       // Fetch messages with enhanced info
       const { data: messagesData } = await supabase
@@ -207,8 +231,14 @@ const EnhancedAdminDashboard = () => {
         mutedUsers: usersWithRoles?.filter(u => u.is_muted).length || 0
       });
 
+      console.log('📊 Final stats:', {
+        totalUsers: usersWithRoles?.length || 0,
+        totalPlaces: placesWithMerchants?.length || 0,
+        totalMessages: messagesWithInfo?.length || 0
+      });
+
     } catch (error) {
-      console.error('Error fetching admin data:', error);
+      console.error('❌ Error fetching admin data:', error);
       toast.error('Failed to load admin data');
     } finally {
       setLoading(false);
@@ -322,6 +352,9 @@ const EnhancedAdminDashboard = () => {
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-white mb-2">🛠 Admin Control Center</h1>
           <p className="text-slate-300">Full platform management • Real-time monitoring</p>
+          <p className="text-sm text-slate-400 mt-2">
+            Total Users: {stats.totalUsers} | Messages: {stats.totalMessages} | Places: {stats.totalPlaces}
+          </p>
         </div>
 
         {/* Enhanced Stats Cards */}
@@ -385,7 +418,7 @@ const EnhancedAdminDashboard = () => {
           <TabsList className="bg-slate-800 border-slate-700">
             <TabsTrigger value="users" className="data-[state=active]:bg-cyan-600">
               <Users className="w-4 h-4 mr-2" />
-              User Management
+              User Management ({users.length})
             </TabsTrigger>
             <TabsTrigger value="places" className="data-[state=active]:bg-cyan-600">
               <MapPin className="w-4 h-4 mr-2" />
@@ -405,6 +438,7 @@ const EnhancedAdminDashboard = () => {
             <Card className="bg-slate-800/50 border-slate-700">
               <CardHeader>
                 <CardTitle className="text-white">User Management & Moderation</CardTitle>
+                <p className="text-slate-400 text-sm">Showing {users.length} registered users</p>
               </CardHeader>
               <CardContent>
                 <div className="space-y-4">
@@ -467,6 +501,13 @@ const EnhancedAdminDashboard = () => {
                       </div>
                     </div>
                   ))}
+                  {users.length === 0 && (
+                    <div className="text-center text-slate-400 py-8">
+                      <Users className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                      <p>No users found in database</p>
+                      <p className="text-sm mt-2">Check database connection and RLS policies</p>
+                    </div>
+                  )}
                 </div>
               </CardContent>
             </Card>

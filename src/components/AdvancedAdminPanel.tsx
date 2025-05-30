@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Shield, Users, Eye, Ban, Crown, Trash2, MessageSquare, MapPin, Settings } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -51,36 +50,53 @@ const AdvancedAdminPanel = () => {
 
   const fetchUsers = async () => {
     try {
-      console.log('Fetching all users...');
+      console.log('🔍 Fetching ALL users from profiles table...');
       
-      // Fetch ALL profiles first
+      // First, get all profiles
       const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
-        .select('id, nickname, created_at')
+        .select('*')
         .order('created_at', { ascending: false });
 
       if (profilesError) {
-        console.error('Error fetching profiles:', profilesError);
+        console.error('❌ Error fetching profiles:', profilesError);
         throw profilesError;
       }
 
-      console.log('Profiles fetched:', profilesData?.length || 0);
+      console.log(`✅ Found ${profilesData?.length || 0} profiles in database`);
 
-      // Fetch auth users to get email info (admin only)
-      const { data: authData } = await supabase.auth.admin.listUsers();
-      const authUsers = authData?.users || [];
+      if (!profilesData || profilesData.length === 0) {
+        console.warn('⚠️ No profiles found in database');
+        setUsers([]);
+        setLoading(false);
+        return;
+      }
 
-      // Fetch user roles
+      // Get auth users for email information (admin only operation)
+      let authUsersMap = new Map();
+      try {
+        const { data: authData } = await supabase.auth.admin.listUsers();
+        if (authData?.users) {
+          authUsersMap = new Map(authData.users.map(u => [u.id, u.email]));
+          console.log(`📧 Found email data for ${authData.users.length} auth users`);
+        }
+      } catch (authError) {
+        console.warn('⚠️ Could not fetch auth user emails (admin permission needed):', authError);
+      }
+
+      // Get user roles
       const { data: rolesData } = await supabase
         .from('user_roles')
         .select('user_id, role');
 
-      // Fetch user locations for online status
+      console.log(`👑 Found ${rolesData?.length || 0} role assignments`);
+
+      // Get user locations for online status
       const { data: locationsData } = await supabase
         .from('user_locations')
         .select('user_id, latitude, longitude, updated_at');
 
-      // Fetch bans and mutes
+      // Get bans and mutes
       const { data: bansData } = await supabase
         .from('user_bans')
         .select('user_id')
@@ -92,12 +108,12 @@ const AdvancedAdminPanel = () => {
         .eq('is_active', true);
 
       // Combine all data
-      const usersWithDetails = profilesData?.map(profile => {
-        const authUser = authUsers.find(au => au.id === profile.id);
+      const usersWithDetails = profilesData.map(profile => {
+        const email = authUsersMap.get(profile.id);
         const userRole = rolesData?.find(role => role.user_id === profile.id);
         const location = locationsData?.find(loc => loc.user_id === profile.id);
-        const isBanned = bansData?.some(ban => ban.user_id === profile.id);
-        const isMuted = mutesData?.some(mute => mute.user_id === profile.id);
+        const isBanned = bansData?.some(ban => ban.user_id === profile.id) || false;
+        const isMuted = mutesData?.some(mute => mute.user_id === profile.id) || false;
         
         // Check if user is online (activity within last 10 minutes)
         const lastSeen = location?.updated_at || profile.created_at;
@@ -106,21 +122,23 @@ const AdvancedAdminPanel = () => {
         return {
           id: profile.id,
           nickname: profile.nickname,
-          email: authUser?.email,
+          email: email,
           created_at: profile.created_at,
           role: userRole?.role || 'user',
-          is_banned: isBanned || false,
-          is_muted: isMuted || false,
+          is_banned: isBanned,
+          is_muted: isMuted,
           last_seen: lastSeen,
           is_online: isOnline,
           location: location ? { latitude: location.latitude, longitude: location.longitude } : undefined
         };
-      }) || [];
+      });
 
-      console.log('Final users with details:', usersWithDetails.length);
+      console.log(`✅ Final users with details: ${usersWithDetails.length}`);
+      console.log('👥 Users:', usersWithDetails.map(u => ({ nickname: u.nickname, role: u.role, email: u.email })));
+      
       setUsers(usersWithDetails);
     } catch (error) {
-      console.error('Error fetching users:', error);
+      console.error('❌ Error fetching users:', error);
       toast.error('Failed to load users. Check console for details.');
     } finally {
       setLoading(false);
@@ -161,18 +179,10 @@ const AdvancedAdminPanel = () => {
         console.log('Profile change detected, refreshing users...');
         fetchUsers();
       })
-      .subscribe();
-
-    const rolesChannel = supabase
-      .channel('admin-roles')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'user_roles' }, () => {
         console.log('Role change detected, refreshing users...');
         fetchUsers();
       })
-      .subscribe();
-
-    const logsChannel = supabase
-      .channel('admin-logs')
       .on('postgres_changes', { event: '*', schema: 'public', table: 'admin_logs' }, () => {
         fetchAdminLogs();
       })
@@ -180,8 +190,6 @@ const AdvancedAdminPanel = () => {
 
     return () => {
       supabase.removeChannel(profilesChannel);
-      supabase.removeChannel(rolesChannel);
-      supabase.removeChannel(logsChannel);
     };
   };
 
@@ -301,7 +309,14 @@ const AdvancedAdminPanel = () => {
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-foreground mb-2">🛡️ Advanced Admin Control Panel</h1>
           <p className="text-muted-foreground">Complete control over users, content, and system operations</p>
-          <p className="text-sm text-muted-foreground mt-2">Total Users Found: {users.length}</p>
+          <p className="text-sm text-muted-foreground mt-2">
+            Total Users Found: {users.length} | Filtered: {filteredUsers.length}
+          </p>
+          {users.length === 0 && (
+            <p className="text-sm text-orange-400 mt-1">
+              ⚠️ No users found - Check database connection and RLS policies
+            </p>
+          )}
         </div>
 
         <Tabs defaultValue="users" className="space-y-6">
@@ -447,7 +462,14 @@ const AdvancedAdminPanel = () => {
                       <Users className="w-12 h-12 mx-auto mb-4 opacity-50" />
                       <p>No users found matching your criteria</p>
                       {users.length === 0 && (
-                        <p className="text-sm mt-2">Check database connection and permissions</p>
+                        <div className="mt-4 text-sm">
+                          <p className="text-orange-400">Possible issues:</p>
+                          <ul className="text-left list-disc list-inside space-y-1">
+                            <li>No users registered in the database</li>
+                            <li>RLS policies blocking admin access</li>
+                            <li>Database connection issues</li>
+                          </ul>
+                        </div>
                       )}
                     </div>
                   )}
