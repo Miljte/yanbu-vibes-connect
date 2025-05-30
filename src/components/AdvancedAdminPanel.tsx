@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect } from 'react';
 import { Shield, Users, Eye, Ban, Crown, Trash2, MessageSquare, MapPin, Settings } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -50,9 +51,9 @@ const AdvancedAdminPanel = () => {
 
   const fetchUsers = async () => {
     try {
-      console.log('🔍 Fetching ALL users from profiles table...');
+      console.log('🔍 Fetching users from profiles table...');
       
-      // First, get all profiles
+      // Fetch all profiles
       const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
         .select('*')
@@ -70,20 +71,6 @@ const AdvancedAdminPanel = () => {
         setUsers([]);
         setLoading(false);
         return;
-      }
-
-      // Get auth users for email information (admin only operation)
-      let authUsersMap = new Map<string, string>();
-      try {
-        const { data: authData } = await supabase.auth.admin.listUsers();
-        if (authData?.users) {
-          authData.users.forEach((authUser: any) => {
-            authUsersMap.set(authUser.id, authUser.email || '');
-          });
-          console.log(`📧 Found email data for ${authData.users.length} auth users`);
-        }
-      } catch (authError) {
-        console.warn('⚠️ Could not fetch auth user emails (admin permission needed):', authError);
       }
 
       // Get user roles
@@ -111,7 +98,6 @@ const AdvancedAdminPanel = () => {
 
       // Combine all data
       const usersWithDetails = profilesData.map(profile => {
-        const email = authUsersMap.get(profile.id);
         const userRole = rolesData?.find(role => role.user_id === profile.id);
         const location = locationsData?.find(loc => loc.user_id === profile.id);
         const isBanned = bansData?.some(ban => ban.user_id === profile.id) || false;
@@ -124,7 +110,7 @@ const AdvancedAdminPanel = () => {
         return {
           id: profile.id,
           nickname: profile.nickname,
-          email: email,
+          email: undefined, // Remove email fetching for now to avoid admin permission issues
           created_at: profile.created_at,
           role: userRole?.role || 'user',
           is_banned: isBanned,
@@ -136,7 +122,7 @@ const AdvancedAdminPanel = () => {
       });
 
       console.log(`✅ Final users with details: ${usersWithDetails.length}`);
-      console.log('👥 Users:', usersWithDetails.map(u => ({ nickname: u.nickname, role: u.role, email: u.email })));
+      console.log('👥 Users:', usersWithDetails.map(u => ({ nickname: u.nickname, role: u.role })));
       
       setUsers(usersWithDetails);
     } catch (error) {
@@ -291,8 +277,7 @@ const AdvancedAdminPanel = () => {
   };
 
   const filteredUsers = users.filter(user => {
-    const matchesSearch = user.nickname.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                         (user.email && user.email.toLowerCase().includes(searchQuery.toLowerCase()));
+    const matchesSearch = user.nickname.toLowerCase().includes(searchQuery.toLowerCase());
     const matchesRole = roleFilter === 'all' || user.role === roleFilter;
     return matchesSearch && matchesRole;
   });
@@ -343,7 +328,7 @@ const AdvancedAdminPanel = () => {
                 <CardTitle className="text-foreground">User Management & Control</CardTitle>
                 <div className="flex space-x-4">
                   <Input
-                    placeholder="Search users by name or email..."
+                    placeholder="Search users by name..."
                     value={searchQuery}
                     onChange={(e) => setSearchQuery(e.target.value)}
                     className="max-w-xs"
@@ -379,7 +364,6 @@ const AdvancedAdminPanel = () => {
                             {userData.is_muted && <Badge variant="secondary" className="text-xs">Muted</Badge>}
                           </div>
                           <div className="text-muted-foreground text-sm">
-                            {userData.email && <span>{userData.email} • </span>}
                             Joined {new Date(userData.created_at).toLocaleDateString()} • {userData.role}
                             {userData.last_seen && (
                               <span className="ml-2">
@@ -493,7 +477,6 @@ const AdvancedAdminPanel = () => {
                         <div>
                           <span className="text-foreground font-medium">{user.nickname}</span>
                           <div className="text-muted-foreground text-sm">{user.role}</div>
-                          {user.email && <div className="text-muted-foreground text-xs">{user.email}</div>}
                         </div>
                         <div className="flex items-center space-x-2">
                           <div className="w-2 h-2 bg-green-500 rounded-full"></div>
