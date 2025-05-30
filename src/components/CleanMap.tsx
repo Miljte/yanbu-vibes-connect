@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Wrapper, Status } from '@googlemaps/react-wrapper';
 import { Card, CardContent } from '@/components/ui/card';
@@ -8,6 +7,7 @@ import { useLocation } from '@/hooks/useLocation';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
+import { ModernMarker } from '@/components/map/ModernMarkers';
 
 interface Place {
   id: string;
@@ -114,8 +114,24 @@ const MapComponent: React.FC<MapComponentProps> = ({
     markers.forEach(marker => marker.setMap(null));
     const newMarkers: google.maps.Marker[] = [];
 
-    // Add user location marker (bright blue pulsing dot)
+    // Add modern user location marker with ripple effects
     if (userLocation) {
+      const userMarkerDiv = document.createElement('div');
+      userMarkerDiv.innerHTML = `
+        <div class="relative w-12 h-12">
+          <div class="absolute inset-0 rounded-full bg-blue-500/20 animate-ripple"></div>
+          <div class="absolute inset-0 rounded-full bg-blue-500/15 animate-ripple" style="animation-delay: 0.5s;"></div>
+          <div class="absolute inset-2 rounded-full bg-gradient-to-br from-blue-400 to-blue-600 border-4 border-white shadow-lg">
+            <div class="absolute inset-0 flex items-center justify-center">
+              <svg class="w-4 h-4 text-white" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"></path>
+              </svg>
+            </div>
+          </div>
+          <div class="absolute inset-3 rounded-full bg-blue-300 animate-pulse"></div>
+        </div>
+      `;
+      
       const userMarker = new google.maps.Marker({
         position: { lat: userLocation.latitude, lng: userLocation.longitude },
         map,
@@ -129,30 +145,41 @@ const MapComponent: React.FC<MapComponentProps> = ({
           scale: 12,
         },
         zIndex: 1000,
-        animation: google.maps.Animation.BOUNCE,
       });
-      
-      // Stop animation after 2 seconds
-      setTimeout(() => {
-        userMarker.setAnimation(null);
-      }, 2000);
       
       newMarkers.push(userMarker);
     }
 
-    // Add only active merchant store markers
+    // Add modern store markers with distance-based styling
     places.filter(place => place.is_active).forEach(place => {
+      const distance = place.distance;
+      let iconColor = '#FF6B35';
+      let iconScale = 18;
+      
+      if (distance !== undefined) {
+        if (distance <= 100) {
+          iconColor = '#FF0000'; // Red for very close
+          iconScale = 22;
+        } else if (distance <= 200) {
+          iconColor = '#FFA500'; // Orange for close
+          iconScale = 20;
+        } else if (distance <= 500) {
+          iconColor = '#FFFF00'; // Yellow for nearby
+          iconScale = 18;
+        }
+      }
+      
       const marker = new google.maps.Marker({
         position: { lat: place.latitude, lng: place.longitude },
         map,
         title: place.name,
         icon: {
           path: google.maps.SymbolPath.CIRCLE,
-          fillColor: '#FF6B35',
+          fillColor: iconColor,
           fillOpacity: 1,
           strokeColor: '#ffffff',
           strokeWeight: 3,
-          scale: 18,
+          scale: iconScale,
         },
         zIndex: 500,
       });
@@ -166,7 +193,7 @@ const MapComponent: React.FC<MapComponentProps> = ({
     });
 
     setMarkers(newMarkers);
-    console.log('Added', newMarkers.length, 'markers to clean map');
+    console.log('Added', newMarkers.length, 'modern markers to clean map');
   }, [map, places, userLocation, onPlaceClick]);
 
   return <div ref={ref} className="w-full h-full" style={{ minHeight: '100vh' }} />;

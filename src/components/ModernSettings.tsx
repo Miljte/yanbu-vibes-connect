@@ -7,17 +7,17 @@ import {
   Globe, 
   User, 
   Bell, 
-  MapPin, 
   Shield, 
   Palette,
   Smartphone,
   Languages,
   Volume2,
   Vibrate,
-  Eye,
-  EyeOff,
   Check,
-  X
+  X,
+  ChevronRight,
+  Edit3,
+  Save
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -61,6 +61,7 @@ const ModernSettings = () => {
   const [hapticEnabled, setHapticEnabled] = useState(true);
   const [showPasswordReset, setShowPasswordReset] = useState(false);
   const [resetEmail, setResetEmail] = useState('');
+  const [editingNickname, setEditingNickname] = useState(false);
 
   useEffect(() => {
     if (user) {
@@ -115,7 +116,8 @@ const ModernSettings = () => {
         .eq('id', user.id);
 
       if (error) throw error;
-      toast.success(t('common.success'));
+      toast.success('Profile updated successfully!');
+      setEditingNickname(false);
     } catch (error) {
       console.error('Error updating profile:', error);
       toast.error(t('common.error'));
@@ -137,7 +139,7 @@ const ModernSettings = () => {
   const handleSignOut = async () => {
     try {
       await signOut();
-      toast.success(t('auth.signOut'));
+      toast.success('Signed out successfully');
     } catch (error) {
       console.error('Error signing out:', error);
       toast.error(t('common.error'));
@@ -187,195 +189,244 @@ const ModernSettings = () => {
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/20 pb-20">
-      <div className="container mx-auto max-w-4xl px-4 py-6 space-y-6">
-        {/* Header */}
-        <div className="text-center space-y-3 animate-fade-in-up">
-          <div className="inline-flex items-center justify-center w-16 h-16 bg-primary/10 rounded-full mb-4">
-            <Settings className="w-8 h-8 text-primary" />
+    <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/10 pb-20">
+      <div className="container mx-auto max-w-4xl px-4 py-8 space-y-8">
+        {/* Modern Header */}
+        <div className="text-center space-y-4">
+          <div className="inline-flex items-center justify-center w-20 h-20 bg-gradient-to-br from-primary/20 to-primary/10 rounded-2xl mb-6">
+            <Settings className="w-10 h-10 text-primary" />
           </div>
-          <h1 className="text-responsive-xl font-bold text-foreground">{t('settings.title')}</h1>
-          <p className="text-muted-foreground max-w-md mx-auto">{t('settings.subtitle')}</p>
+          <h1 className="text-responsive-xl font-bold text-foreground">Settings</h1>
+          <p className="text-muted-foreground text-responsive-base max-w-md mx-auto">
+            Customize your experience and manage your preferences
+          </p>
         </div>
 
-        {/* Quick Actions */}
-        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 animate-slide-in-right">
+        {/* Quick Actions Grid */}
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <Button
             onClick={toggleTheme}
             variant="outline"
-            className="h-20 flex-col space-y-2 card-modern"
+            className="h-24 flex-col space-y-3 card-modern group hover:scale-105 transition-all duration-300"
           >
-            {isDark ? <Sun className="w-5 h-5" /> : <Moon className="w-5 h-5" />}
-            <span className="text-xs">{isDark ? t('settings.lightMode') : t('settings.darkMode')}</span>
+            <div className="p-2 rounded-lg bg-primary/10 group-hover:bg-primary/20 transition-colors">
+              {isDark ? <Sun className="w-5 h-5 text-primary" /> : <Moon className="w-5 h-5 text-primary" />}
+            </div>
+            <span className="text-xs font-medium">{isDark ? 'Light Mode' : 'Dark Mode'}</span>
           </Button>
           
           <Button
             onClick={handleLanguageSwitch}
             variant="outline"
-            className="h-20 flex-col space-y-2 card-modern"
+            className="h-24 flex-col space-y-3 card-modern group hover:scale-105 transition-all duration-300"
           >
-            <Languages className="w-5 h-5" />
-            <span className="text-xs">{language === 'en' ? 'العربية' : 'English'}</span>
+            <div className="p-2 rounded-lg bg-primary/10 group-hover:bg-primary/20 transition-colors">
+              <Languages className="w-5 h-5 text-primary" />
+            </div>
+            <span className="text-xs font-medium">{language === 'en' ? 'العربية' : 'English'}</span>
           </Button>
           
           <Button
             onClick={saveProfile}
             disabled={loading}
-            className="h-20 flex-col space-y-2 card-modern bg-primary text-primary-foreground"
+            className="h-24 flex-col space-y-3 bg-gradient-to-br from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white border-0 hover:scale-105 transition-all duration-300"
           >
-            <Check className="w-5 h-5" />
-            <span className="text-xs">{loading ? t('common.loading') : t('common.save')}</span>
+            <div className="p-2 rounded-lg bg-white/20">
+              {loading ? (
+                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              ) : (
+                <Save className="w-5 h-5" />
+              )}
+            </div>
+            <span className="text-xs font-medium">{loading ? 'Saving...' : 'Save Changes'}</span>
           </Button>
           
           <Button
             onClick={handleSignOut}
             variant="outline"
-            className="h-20 flex-col space-y-2 card-modern border-destructive/20 hover:bg-destructive/10"
+            className="h-24 flex-col space-y-3 border-red-200 hover:bg-red-50 dark:border-red-800 dark:hover:bg-red-900/20 hover:scale-105 transition-all duration-300"
           >
-            <X className="w-5 h-5 text-destructive" />
-            <span className="text-xs text-destructive">{t('auth.signOut')}</span>
+            <div className="p-2 rounded-lg bg-red-100 dark:bg-red-900/20">
+              <X className="w-5 h-5 text-red-600 dark:text-red-400" />
+            </div>
+            <span className="text-xs font-medium text-red-600 dark:text-red-400">Sign Out</span>
           </Button>
         </div>
 
-        {/* Profile Section */}
-        <Card className="card-modern animate-fade-in-up">
-          <CardHeader className="pb-4">
-            <CardTitle className="flex items-center text-responsive-lg">
-              <User className="w-5 h-5 mr-3 text-primary" />
-              {t('profile.title')}
-            </CardTitle>
-          </CardHeader>
-          <CardContent className="space-y-6">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-              <div className="space-y-2">
-                <Label htmlFor="nickname" className="text-sm font-medium">
-                  {t('profile.nickname')}
-                </Label>
-                <Input
-                  id="nickname"
-                  value={profile.nickname}
-                  onChange={(e) => setProfile(prev => ({ ...prev, nickname: e.target.value }))}
-                  placeholder={t('profile.nickname')}
-                  className="h-12"
-                />
-              </div>
-              
-              <div className="space-y-2">
-                <Label htmlFor="age" className="text-sm font-medium">
-                  {t('profile.age')}
-                </Label>
-                <Input
-                  id="age"
-                  type="number"
-                  value={profile.age || ''}
-                  onChange={(e) => setProfile(prev => ({ 
-                    ...prev, 
-                    age: e.target.value ? parseInt(e.target.value) : undefined 
-                  }))}
-                  placeholder={t('profile.age')}
-                  className="h-12"
-                />
-              </div>
-            </div>
-            
-            <div className="space-y-2">
-              <Label htmlFor="gender" className="text-sm font-medium">
-                {t('profile.gender')}
-              </Label>
-              <Select value={profile.gender} onValueChange={(value) => setProfile(prev => ({ ...prev, gender: value }))}>
-                <SelectTrigger className="h-12">
-                  <SelectValue placeholder={t('profile.gender')} />
-                </SelectTrigger>
-                <SelectContent>
-                  <SelectItem value="male">{t('profile.male')}</SelectItem>
-                  <SelectItem value="female">{t('profile.female')}</SelectItem>
-                  <SelectItem value="other">Other</SelectItem>
-                  <SelectItem value="prefer-not-to-say">Prefer not to say</SelectItem>
-                </SelectContent>
-              </Select>
-            </div>
-
-            <div className="space-y-3">
-              <Label className="text-sm font-medium">{t('profile.interests')}</Label>
-              <div className="flex flex-wrap gap-2">
-                {profile.interests.map(interest => (
-                  <Badge
-                    key={interest}
-                    variant="secondary"
-                    className="cursor-pointer hover:bg-destructive/20 transition-colors px-3 py-1"
-                    onClick={() => removeInterest(interest)}
-                  >
-                    {interest} <X className="w-3 h-3 ml-1" />
-                  </Badge>
-                ))}
-              </div>
-              <div className="flex flex-wrap gap-2">
-                {suggestedInterests
-                  .filter(interest => !profile.interests.includes(interest))
-                  .map(interest => (
-                    <Badge
-                      key={interest}
-                      variant="outline"
-                      className="cursor-pointer hover:bg-primary/10 transition-colors px-3 py-1"
-                      onClick={() => addInterest(interest)}
-                    >
-                      + {interest}
-                    </Badge>
-                  ))}
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        {/* Preferences Section */}
+        {/* Settings Sections */}
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-          {/* Appearance */}
-          <Card className="card-modern animate-fade-in-up">
+          {/* Profile Settings */}
+          <Card className="card-modern">
             <CardHeader className="pb-4">
-              <CardTitle className="flex items-center text-lg">
-                <Palette className="w-5 h-5 mr-3 text-primary" />
-                {t('settings.appearance')}
+              <CardTitle className="flex items-center justify-between text-lg">
+                <div className="flex items-center space-x-3">
+                  <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/20">
+                    <User className="w-5 h-5 text-blue-600 dark:text-blue-400" />
+                  </div>
+                  <span>Profile</span>
+                </div>
+                <ChevronRight className="w-4 h-4 text-muted-foreground" />
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="flex items-center justify-between">
-                <div className="space-y-1">
-                  <div className="font-medium">{t('settings.darkMode')}</div>
-                  <div className="text-sm text-muted-foreground">
-                    {t('settings.darkModeDesc')}
+              <div className="space-y-4">
+                <div className="space-y-2">
+                  <Label className="text-sm font-medium text-muted-foreground">Nickname</Label>
+                  <div className="flex items-center space-x-2">
+                    {editingNickname ? (
+                      <>
+                        <Input
+                          value={profile.nickname}
+                          onChange={(e) => setProfile(prev => ({ ...prev, nickname: e.target.value }))}
+                          placeholder="Enter your nickname"
+                          className="flex-1 h-11"
+                        />
+                        <Button size="sm" onClick={() => setEditingNickname(false)} variant="outline">
+                          <Check className="w-4 h-4" />
+                        </Button>
+                      </>
+                    ) : (
+                      <>
+                        <div className="flex-1 h-11 px-3 py-2 bg-muted/50 rounded-md flex items-center">
+                          <span className="text-foreground">{profile.nickname || 'Not set'}</span>
+                        </div>
+                        <Button size="sm" onClick={() => setEditingNickname(true)} variant="outline">
+                          <Edit3 className="w-4 h-4" />
+                        </Button>
+                      </>
+                    )}
+                  </div>
+                </div>
+                
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium text-muted-foreground">Age</Label>
+                    <Input
+                      type="number"
+                      value={profile.age || ''}
+                      onChange={(e) => setProfile(prev => ({ 
+                        ...prev, 
+                        age: e.target.value ? parseInt(e.target.value) : undefined 
+                      }))}
+                      placeholder="Age"
+                      className="h-11"
+                    />
+                  </div>
+                  
+                  <div className="space-y-2">
+                    <Label className="text-sm font-medium text-muted-foreground">Gender</Label>
+                    <Select value={profile.gender} onValueChange={(value) => setProfile(prev => ({ ...prev, gender: value }))}>
+                      <SelectTrigger className="h-11">
+                        <SelectValue placeholder="Select" />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="male">Male</SelectItem>
+                        <SelectItem value="female">Female</SelectItem>
+                        <SelectItem value="other">Other</SelectItem>
+                        <SelectItem value="prefer-not-to-say">Prefer not to say</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  </div>
+                </div>
+
+                <div className="space-y-3">
+                  <Label className="text-sm font-medium text-muted-foreground">Interests</Label>
+                  <div className="flex flex-wrap gap-2">
+                    {profile.interests.map(interest => (
+                      <Badge
+                        key={interest}
+                        variant="secondary"
+                        className="cursor-pointer hover:bg-red-100 dark:hover:bg-red-900/20 transition-colors px-3 py-1"
+                        onClick={() => removeInterest(interest)}
+                      >
+                        {interest} <X className="w-3 h-3 ml-1" />
+                      </Badge>
+                    ))}
+                  </div>
+                  <div className="flex flex-wrap gap-2">
+                    {suggestedInterests
+                      .filter(interest => !profile.interests.includes(interest))
+                      .slice(0, 6)
+                      .map(interest => (
+                        <Badge
+                          key={interest}
+                          variant="outline"
+                          className="cursor-pointer hover:bg-primary/10 transition-colors px-3 py-1"
+                          onClick={() => addInterest(interest)}
+                        >
+                          + {interest}
+                        </Badge>
+                      ))}
+                  </div>
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+
+          {/* Appearance Settings */}
+          <Card className="card-modern">
+            <CardHeader className="pb-4">
+              <CardTitle className="flex items-center justify-between text-lg">
+                <div className="flex items-center space-x-3">
+                  <div className="p-2 rounded-lg bg-purple-100 dark:bg-purple-900/20">
+                    <Palette className="w-5 h-5 text-purple-600 dark:text-purple-400" />
+                  </div>
+                  <span>Appearance</span>
+                </div>
+                <ChevronRight className="w-4 h-4 text-muted-foreground" />
+              </CardTitle>
+            </CardHeader>
+            <CardContent className="space-y-6">
+              <div className="flex items-center justify-between p-4 bg-muted/30 rounded-lg">
+                <div className="flex items-center space-x-3">
+                  <div className="p-2 rounded-lg bg-background">
+                    {isDark ? <Moon className="w-4 h-4" /> : <Sun className="w-4 h-4" />}
+                  </div>
+                  <div>
+                    <div className="font-medium">Theme</div>
+                    <div className="text-sm text-muted-foreground">
+                      {isDark ? 'Dark mode' : 'Light mode'}
+                    </div>
                   </div>
                 </div>
                 <Switch checked={isDark} onCheckedChange={toggleTheme} />
               </div>
 
-              <Separator />
-
-              <div className="flex items-center justify-between">
-                <div className="space-y-1">
-                  <div className="font-medium">{t('settings.language')}</div>
-                  <div className="text-sm text-muted-foreground">
-                    {language === 'en' ? 'English' : 'العربية'}
+              <div className="flex items-center justify-between p-4 bg-muted/30 rounded-lg">
+                <div className="flex items-center space-x-3">
+                  <div className="p-2 rounded-lg bg-background">
+                    <Globe className="w-4 h-4" />
+                  </div>
+                  <div>
+                    <div className="font-medium">Language</div>
+                    <div className="text-sm text-muted-foreground">
+                      {language === 'en' ? 'English' : 'العربية'}
+                    </div>
                   </div>
                 </div>
-                <Badge variant="secondary" className="flex items-center space-x-1">
-                  <Globe className="w-3 h-3" />
-                  <span>{language.toUpperCase()}</span>
+                <Badge variant="secondary">
+                  {language.toUpperCase()}
                 </Badge>
               </div>
             </CardContent>
           </Card>
 
           {/* Privacy & Security */}
-          <Card className="card-modern animate-fade-in-up">
+          <Card className="card-modern">
             <CardHeader className="pb-4">
-              <CardTitle className="flex items-center text-lg">
-                <Shield className="w-5 h-5 mr-3 text-primary" />
-                Privacy & Security
+              <CardTitle className="flex items-center justify-between text-lg">
+                <div className="flex items-center space-x-3">
+                  <div className="p-2 rounded-lg bg-green-100 dark:bg-green-900/20">
+                    <Shield className="w-5 h-5 text-green-600 dark:text-green-400" />
+                  </div>
+                  <span>Privacy & Security</span>
+                </div>
+                <ChevronRight className="w-4 h-4 text-muted-foreground" />
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-6">
-              <div className="flex items-center justify-between">
-                <div className="space-y-1">
+              <div className="flex items-center justify-between p-4 bg-muted/30 rounded-lg">
+                <div>
                   <div className="font-medium">Location Sharing</div>
                   <div className="text-sm text-muted-foreground">
                     Allow others to see your location
@@ -387,13 +438,11 @@ const ModernSettings = () => {
                 />
               </div>
 
-              <Separator />
-
               {!showPasswordReset ? (
                 <Button 
                   variant="outline" 
                   onClick={() => setShowPasswordReset(true)}
-                  className="w-full"
+                  className="w-full h-12"
                 >
                   Reset Password
                 </Button>
@@ -407,12 +456,13 @@ const ModernSettings = () => {
                     className="h-12"
                   />
                   <div className="flex space-x-2">
-                    <Button onClick={sendPasswordReset} className="flex-1">
+                    <Button onClick={sendPasswordReset} className="flex-1 h-12">
                       Send Reset Email
                     </Button>
                     <Button 
                       variant="outline" 
                       onClick={() => setShowPasswordReset(false)}
+                      className="h-12"
                     >
                       Cancel
                     </Button>
@@ -422,20 +472,26 @@ const ModernSettings = () => {
             </CardContent>
           </Card>
 
-          {/* Notifications */}
-          <Card className="card-modern animate-fade-in-up">
+          {/* Notifications & Sound */}
+          <Card className="card-modern">
             <CardHeader className="pb-4">
-              <CardTitle className="flex items-center text-lg">
-                <Bell className="w-5 h-5 mr-3 text-primary" />
-                {t('settings.notifications')}
+              <CardTitle className="flex items-center justify-between text-lg">
+                <div className="flex items-center space-x-3">
+                  <div className="p-2 rounded-lg bg-orange-100 dark:bg-orange-900/20">
+                    <Bell className="w-5 h-5 text-orange-600 dark:text-orange-400" />
+                  </div>
+                  <span>Notifications</span>
+                </div>
+                <ChevronRight className="w-4 h-4 text-muted-foreground" />
               </CardTitle>
             </CardHeader>
-            <CardContent className="space-y-6">
-              <div className="flex items-center justify-between">
-                <div className="space-y-1">
-                  <div className="font-medium">Push Notifications</div>
-                  <div className="text-sm text-muted-foreground">
-                    Receive notifications for events and messages
+            <CardContent className="space-y-4">
+              <div className="flex items-center justify-between p-4 bg-muted/30 rounded-lg">
+                <div className="flex items-center space-x-3">
+                  <Bell className="w-4 h-4" />
+                  <div>
+                    <div className="font-medium">Push Notifications</div>
+                    <div className="text-sm text-muted-foreground">Proximity alerts</div>
                   </div>
                 </div>
                 <Switch
@@ -444,60 +500,62 @@ const ModernSettings = () => {
                 />
               </div>
 
-              <Separator />
-
-              <div className="flex items-center justify-between">
-                <div className="space-y-1">
-                  <div className="font-medium">Sound Notifications</div>
-                  <div className="text-sm text-muted-foreground">
-                    Play sounds for notifications
+              <div className="flex items-center justify-between p-4 bg-muted/30 rounded-lg">
+                <div className="flex items-center space-x-3">
+                  <Volume2 className="w-4 h-4" />
+                  <div>
+                    <div className="font-medium">Sound Effects</div>
+                    <div className="text-sm text-muted-foreground">Audio feedback</div>
                   </div>
                 </div>
                 <Switch checked={soundEnabled} onCheckedChange={setSoundEnabled} />
               </div>
 
-              <Separator />
-
-              <div className="flex items-center justify-between">
-                <div className="space-y-1">
-                  <div className="font-medium">Haptic Feedback</div>
-                  <div className="text-sm text-muted-foreground">
-                    Feel vibrations for interactions
+              <div className="flex items-center justify-between p-4 bg-muted/30 rounded-lg">
+                <div className="flex items-center space-x-3">
+                  <Vibrate className="w-4 h-4" />
+                  <div>
+                    <div className="font-medium">Haptic Feedback</div>
+                    <div className="text-sm text-muted-foreground">Touch vibrations</div>
                   </div>
                 </div>
                 <Switch checked={hapticEnabled} onCheckedChange={setHapticEnabled} />
               </div>
             </CardContent>
           </Card>
+        </div>
 
-          {/* Device Info */}
-          <Card className="card-modern animate-fade-in-up">
-            <CardHeader className="pb-4">
-              <CardTitle className="flex items-center text-lg">
-                <Smartphone className="w-5 h-5 mr-3 text-primary" />
-                Device Information
-              </CardTitle>
-            </CardHeader>
-            <CardContent className="space-y-4">
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">Platform</span>
-                <Badge variant="outline">
+        {/* Device Info */}
+        <Card className="card-modern">
+          <CardHeader className="pb-4">
+            <CardTitle className="flex items-center space-x-3 text-lg">
+              <div className="p-2 rounded-lg bg-gray-100 dark:bg-gray-800">
+                <Smartphone className="w-5 h-5 text-gray-600 dark:text-gray-400" />
+              </div>
+              <span>Device Information</span>
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+              <div className="text-center p-4 bg-muted/30 rounded-lg">
+                <div className="text-sm text-muted-foreground">Platform</div>
+                <Badge variant="outline" className="mt-2">
                   {navigator.userAgent.includes('Mobile') ? 'Mobile' : 'Desktop'}
                 </Badge>
               </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">Text Direction</span>
-                <Badge variant="outline">
+              <div className="text-center p-4 bg-muted/30 rounded-lg">
+                <div className="text-sm text-muted-foreground">Text Direction</div>
+                <Badge variant="outline" className="mt-2">
                   {isRTL ? 'RTL' : 'LTR'}
                 </Badge>
               </div>
-              <div className="flex items-center justify-between text-sm">
-                <span className="text-muted-foreground">Version</span>
-                <Badge variant="outline">v1.0.0</Badge>
+              <div className="text-center p-4 bg-muted/30 rounded-lg">
+                <div className="text-sm text-muted-foreground">Version</div>
+                <Badge variant="outline" className="mt-2">v1.0.0</Badge>
               </div>
-            </CardContent>
-          </Card>
-        </div>
+            </div>
+          </CardContent>
+        </Card>
       </div>
     </div>
   );

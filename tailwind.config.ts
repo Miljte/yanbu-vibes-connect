@@ -22,8 +22,8 @@ export default {
 			fontFamily: {
 				'sans': ['Inter', 'Poppins', 'system-ui', '-apple-system', 'sans-serif'],
 				'arabic': ['Noto Kufi Arabic', 'Tajawal', 'Cairo', 'Inter', 'system-ui', '-apple-system', 'sans-serif'],
-				'streetwear': ['Anton', 'Inter', 'system-ui', '-apple-system', 'sans-serif'],
 				'display': ['Anton', 'Inter', 'system-ui', '-apple-system', 'sans-serif'],
+				'body': ['Inter', 'system-ui', '-apple-system', 'sans-serif'],
 			},
 			colors: {
 				border: 'hsl(var(--border))',
@@ -131,8 +131,26 @@ export default {
 						transform: 'scale(1)'
 					},
 					'50%': {
-						opacity: '0.7',
-						transform: 'scale(1.1)'
+						opacity: '0.6',
+						transform: 'scale(1.3)'
+					}
+				},
+				'ripple': {
+					'0%': {
+						transform: 'scale(0.8)',
+						opacity: '1'
+					},
+					'100%': {
+						transform: 'scale(2.5)',
+						opacity: '0'
+					}
+				},
+				'bounce-soft': {
+					'0%, 100%': {
+						transform: 'translateY(0)'
+					},
+					'50%': {
+						transform: 'translateY(-4px)'
 					}
 				}
 			},
@@ -141,7 +159,9 @@ export default {
 				'accordion-up': 'accordion-up 0.2s ease-out',
 				'fade-in-up': 'fade-in-up 0.5s ease-out',
 				'slide-in-right': 'slide-in-right 0.3s ease-out',
-				'pulse-gps': 'pulse-gps 2s infinite'
+				'pulse-gps': 'pulse-gps 2s infinite',
+				'ripple': 'ripple 2s infinite',
+				'bounce-soft': 'bounce-soft 1s ease-in-out infinite'
 			}
 		}
 	},

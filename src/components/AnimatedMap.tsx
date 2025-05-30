@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Wrapper, Status } from '@googlemaps/react-wrapper';
 import { Card, CardContent } from '@/components/ui/card';
@@ -9,6 +8,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 import { proximityNotifications } from '@/services/ProximityNotifications';
+import { ModernMarker } from '@/components/map/ModernMarkers';
 
 interface Place {
   id: string;
@@ -84,7 +84,7 @@ const MapComponent: React.FC<MapComponentProps> = ({
     }
   }, [ref, map, center, zoom]);
 
-  // Enhanced marker management with animations
+  // Enhanced marker management with modern GPS markers
   useEffect(() => {
     if (!map) return;
 
@@ -92,7 +92,7 @@ const MapComponent: React.FC<MapComponentProps> = ({
     markers.forEach(marker => marker.setMap(null));
     const newMarkers: google.maps.Marker[] = [];
 
-    // Add animated user location marker
+    // Add modern animated user location marker with multiple ripple effects
     if (userLocation) {
       const userMarker = new google.maps.Marker({
         position: { lat: userLocation.latitude, lng: userLocation.longitude },
@@ -101,42 +101,53 @@ const MapComponent: React.FC<MapComponentProps> = ({
         icon: {
           path: google.maps.SymbolPath.CIRCLE,
           fillColor: '#00BFFF',
-          fillOpacity: 0.8,
+          fillOpacity: 0.9,
           strokeColor: '#ffffff',
           strokeWeight: 4,
           scale: 15,
         },
         zIndex: 1000,
-        animation: google.maps.Animation.BOUNCE,
       });
       
-      // Create pulsing effect around user
-      const pulseMarker = new google.maps.Marker({
-        position: { lat: userLocation.latitude, lng: userLocation.longitude },
-        map,
-        icon: {
-          path: google.maps.SymbolPath.CIRCLE,
-          fillColor: '#00BFFF',
-          fillOpacity: 0.2,
-          strokeColor: '#00BFFF',
-          strokeWeight: 2,
-          scale: 30,
-        },
-        zIndex: 999,
-      });
+      // Create multiple pulsing rings around user
+      for (let i = 0; i < 3; i++) {
+        const pulseMarker = new google.maps.Marker({
+          position: { lat: userLocation.latitude, lng: userLocation.longitude },
+          map,
+          icon: {
+            path: google.maps.SymbolPath.CIRCLE,
+            fillColor: '#00BFFF',
+            fillOpacity: 0.1 - (i * 0.03),
+            strokeColor: '#00BFFF',
+            strokeWeight: 2,
+            scale: 30 + (i * 10),
+          },
+          zIndex: 999 - i,
+        });
+        newMarkers.push(pulseMarker);
+      }
       
-      // Stop user marker animation after 3 seconds
-      setTimeout(() => {
-        userMarker.setAnimation(null);
-      }, 3000);
-      
-      newMarkers.push(userMarker, pulseMarker);
+      newMarkers.push(userMarker);
     }
 
-    // Add enhanced store markers with proximity animations
+    // Add enhanced store markers with modern GPS styling
     places.filter(place => place.is_active).forEach(place => {
       const isNearby = place.distance !== undefined && place.distance <= 200;
       const isCloseBy = place.distance !== undefined && place.distance <= 500;
+      
+      let iconColor = '#FF6B35';
+      let iconScale = 18;
+      let strokeWeight = 3;
+      
+      if (isNearby) {
+        iconColor = '#00FF00';
+        iconScale = 25;
+        strokeWeight = 5;
+      } else if (isCloseBy) {
+        iconColor = '#FFA500';
+        iconScale = 22;
+        strokeWeight = 4;
+      }
       
       const marker = new google.maps.Marker({
         position: { lat: place.latitude, lng: place.longitude },
@@ -144,32 +155,31 @@ const MapComponent: React.FC<MapComponentProps> = ({
         title: place.name,
         icon: {
           path: google.maps.SymbolPath.CIRCLE,
-          fillColor: isNearby ? '#00FF00' : isCloseBy ? '#FFA500' : '#FF6B35',
-          fillOpacity: isNearby ? 1 : 0.8,
+          fillColor: iconColor,
+          fillOpacity: 1,
           strokeColor: '#ffffff',
-          strokeWeight: isNearby ? 4 : 3,
-          scale: isNearby ? 22 : isCloseBy ? 20 : 18,
+          strokeWeight: strokeWeight,
+          scale: iconScale,
         },
         zIndex: isNearby ? 800 : isCloseBy ? 700 : 500,
       });
 
       // Add pulsing animation for nearby places
       if (isNearby) {
-        marker.setAnimation(google.maps.Animation.BOUNCE);
         setPulsingMarkers(prev => new Set(prev).add(place.id));
         
         // Trigger proximity notification
         proximityNotifications.checkNearbyPlaces([place], userLocation!);
       }
 
-      // Enhanced click interaction
+      // Enhanced click interaction with haptic feedback
       marker.addListener('click', () => {
         onPlaceClick(place);
         
         // Animate map to center on clicked place
         map.panTo({ lat: place.latitude, lng: place.longitude });
         
-        // Temporary highlight effect
+        // Temporary highlight effect with modern styling
         const originalIcon = marker.getIcon();
         marker.setIcon({
           path: google.maps.SymbolPath.CIRCLE,
@@ -177,7 +187,7 @@ const MapComponent: React.FC<MapComponentProps> = ({
           fillOpacity: 1,
           strokeColor: '#ffffff',
           strokeWeight: 6,
-          scale: 25,
+          scale: 28,
         });
         
         setTimeout(() => {
@@ -192,7 +202,7 @@ const MapComponent: React.FC<MapComponentProps> = ({
     });
 
     setMarkers(newMarkers);
-    console.log('Added', newMarkers.length, 'enhanced markers to map');
+    console.log('Added', newMarkers.length, 'enhanced modern markers to map');
   }, [map, places, userLocation, onPlaceClick]);
 
   return <div ref={ref} className="w-full h-full" style={{ minHeight: '100vh' }} />;
