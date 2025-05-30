@@ -1,3 +1,4 @@
+
 import React, { createContext, useContext, useState, useEffect } from 'react';
 
 interface LocalizationContextType {
@@ -11,20 +12,32 @@ const translations = {
   en: {
     // Navigation
     'nav.home': 'Home',
+    'nav.map': 'Map',
     'nav.categories': 'Categories',
     'nav.events': 'Events',
     'nav.chat': 'Chat',
     'nav.profile': 'Profile',
+    'nav.settings': 'Settings',
+    'nav.admin': 'Admin',
+    'nav.merchant': 'Business',
     'nav.more': 'More',
     
     // Map
     'map.title': 'Discover Yanbu',
+    'map.explore': 'Explore Yanbu',
     'map.nearbyPlaces': 'Nearby Places',
     'map.joinChat': 'Join Chat',
     'map.moveCloser': 'Move closer to join chat',
     'map.distance': 'm away',
     'map.open': 'Open',
     'map.closed': 'Closed',
+    'map.yourLocation': 'Your Location',
+    'map.getCloserToChat': 'Get Closer to Chat',
+    'map.signInToChat': 'Sign In to Chat',
+    'map.inRange': 'In Range',
+    'map.tooFar': 'Too Far',
+    'map.checkLocationAgain': 'Check Location Again',
+    'map.checkingLocation': 'Checking Location...',
     
     // Categories
     'categories.all': 'All',
@@ -32,9 +45,12 @@ const translations = {
     'categories.restaurants': 'Restaurants',
     'categories.shops': 'Shops',
     'categories.events': 'Events',
+    'categories.malls': 'Malls',
+    'categories.beaches': 'Beaches',
     
     // Chat
     'chat.title': 'Store Chats',
+    'chat.locationChats': 'Location Chats',
     'chat.locked': 'Chat Locked',
     'chat.unlocked': 'In Range',
     'chat.typeMessage': 'Type your message...',
@@ -42,6 +58,9 @@ const translations = {
     'chat.getCloserToChat': 'Get closer to chat...',
     'chat.noMessages': 'No messages yet. Start the conversation!',
     'chat.liveGPS': 'Live GPS • 500m range • Store-specific chats',
+    'chat.nearbyLocations': 'Nearby Locations',
+    'chat.available': 'Available',
+    'chat.send': 'Send',
     
     // Profile
     'profile.title': 'Profile',
@@ -53,6 +72,7 @@ const translations = {
     'profile.female': 'Female',
     'profile.updateProfile': 'Update Profile',
     'profile.signOut': 'Sign Out',
+    'profile.editProfile': 'Edit Profile',
     
     // Events
     'events.title': 'Events',
@@ -60,22 +80,12 @@ const translations = {
     'events.noEvents': 'No events scheduled',
     'events.attendees': 'attendees',
     'events.rsvp': 'RSVP',
-
-    // Onboarding
-    'onboarding.welcome': 'Welcome to Yanbu Vibes!',
-    'onboarding.welcomeDesc': 'Connect with people and discover amazing places in Yanbu. Your adventure starts here!',
-    'onboarding.discoverPlaces': 'Discover Places',
-    'onboarding.discoverDesc': 'Explore cafes, restaurants, shops and events around you. Find your next favorite spot!',
-    'onboarding.proximityChat': 'Proximity Chat',
-    'onboarding.chatDesc': 'Chat with people when you\'re near the same location. Make real connections!',
-    'onboarding.customize': 'Customize Your Experience',
-    'onboarding.customizeDesc': 'Set your language, theme, and preferences to make the app truly yours.',
-    'onboarding.getStarted': 'Get Started',
-    'onboarding.skip': 'Skip Tutorial',
+    'events.createEvent': 'Create Event',
+    'events.eventDetails': 'Event Details',
 
     // Settings
     'settings.title': 'Settings',
-    'settings.subtitle': 'Customize your Yanbu Vibes experience',
+    'settings.subtitle': 'Customize your POP IN experience',
     'settings.appearance': 'Appearance',
     'settings.darkMode': 'Dark Mode',
     'settings.darkModeDesc': 'Use dark theme for better viewing in low light',
@@ -95,33 +105,48 @@ const translations = {
     'settings.platform': 'Platform',
     'settings.orientation': 'Text Direction',
     'settings.version': 'Version',
-    'settings.notificationsEnabled': 'Notifications enabled',
-    'settings.notificationsDisabled': 'Notifications disabled',
-    'settings.notificationsPermissionDenied': 'Notification permission denied',
-    'settings.hapticTested': 'Haptic feedback tested',
 
-    // Gamification
-    'gamification.level': 'Level',
-    'gamification.points': 'Points',
-    'gamification.placesVisited': 'Places',
-    'gamification.messages': 'Messages',
-    'gamification.dayStreak': 'Day Streak',
-    'gamification.achievements': 'Achievements',
-    'gamification.unlocked': 'Unlocked',
-    'gamification.achievementUnlocked': 'Achievement Unlocked!',
+    // Auth
+    'auth.signIn': 'Sign In',
+    'auth.signUp': 'Sign Up',
+    'auth.signOut': 'Sign Out',
+    'auth.email': 'Email',
+    'auth.password': 'Password',
+    'auth.confirmPassword': 'Confirm Password',
+    'auth.forgotPassword': 'Forgot Password?',
+    'auth.dontHaveAccount': "Don't have an account?",
+    'auth.alreadyHaveAccount': 'Already have an account?',
 
-    // Achievements
-    'achievements.firstVisit': 'First Step',
-    'achievements.firstVisitDesc': 'Visit your first place in Yanbu',
-    'achievements.explorer': 'Explorer',
-    'achievements.explorerDesc': 'Visit 5 different places',
-    'achievements.socialButterfly': 'Social Butterfly',
-    'achievements.socialButterflyDesc': 'Send 50 messages in chats',
-    'achievements.streakMaster': 'Streak Master',
-    'achievements.streakMasterDesc': 'Use the app for 7 consecutive days',
-    'achievements.yanbuExpert': 'Yanbu Expert',
-    'achievements.yanbuExpertDesc': 'Visit 20 different places',
-    
+    // Admin
+    'admin.title': 'Admin Dashboard',
+    'admin.userManagement': 'User Management',
+    'admin.placeManagement': 'Place Management',
+    'admin.analytics': 'Analytics',
+    'admin.totalUsers': 'Total Users',
+    'admin.activePlaces': 'Active Places',
+    'admin.totalMessages': 'Total Messages',
+
+    // Merchant
+    'merchant.title': 'Business Dashboard',
+    'merchant.engagement': 'Customer Engagement Hub',
+    'merchant.connectNearby': 'Connect with nearby customers in real-time',
+    'merchant.selectStore': 'Select Store',
+    'merchant.sendPromotion': 'Send Real-time Promotion',
+    'merchant.nearbyCustomers': 'Live Nearby Customers',
+    'merchant.usersNearby': 'Users Nearby',
+    'merchant.messagesToday': 'Messages Today',
+    'merchant.engagement': 'Engagement',
+    'merchant.totalVisits': 'Total Visits',
+    'merchant.activeOffers': 'Active Offers',
+
+    // Location Restriction
+    'location.restricted': 'Location Restricted',
+    'location.mapRestricted': 'Map Access Restricted',
+    'location.onlyYanbu': 'This app is only available in Yanbu, Saudi Arabia.',
+    'location.limitedToYanbu': 'Map access is limited to users inside Yanbu.',
+    'location.checkAgain': 'Check Location Again',
+    'location.stillAccess': 'You can still access events and your profile.',
+
     // Common
     'common.loading': 'Loading...',
     'common.save': 'Save',
@@ -133,24 +158,43 @@ const translations = {
     'common.open': 'Open',
     'common.back': 'Back',
     'common.next': 'Next',
+    'common.yes': 'Yes',
+    'common.no': 'No',
+    'common.ok': 'OK',
+    'common.error': 'Error',
+    'common.success': 'Success',
+    'common.warning': 'Warning',
+    'common.info': 'Info',
   },
   ar: {
     // Navigation
     'nav.home': 'الرئيسية',
+    'nav.map': 'الخريطة',
     'nav.categories': 'الفئات',
     'nav.events': 'الفعاليات',
     'nav.chat': 'المحادثة',
     'nav.profile': 'الملف الشخصي',
+    'nav.settings': 'الإعدادات',
+    'nav.admin': 'الإدارة',
+    'nav.merchant': 'الأعمال',
     'nav.more': 'المزيد',
     
     // Map
     'map.title': 'اكتشف ينبع',
+    'map.explore': 'استكشف ينبع',
     'map.nearbyPlaces': 'الأماكن القريبة',
     'map.joinChat': 'انضم للمحادثة',
     'map.moveCloser': 'اقترب أكثر للانضمام للمحادثة',
     'map.distance': 'متر',
     'map.open': 'مفتوح',
     'map.closed': 'مغلق',
+    'map.yourLocation': 'موقعك',
+    'map.getCloserToChat': 'اقترب أكثر للمحادثة',
+    'map.signInToChat': 'سجل الدخول للمحادثة',
+    'map.inRange': 'في النطاق',
+    'map.tooFar': 'بعيد جداً',
+    'map.checkLocationAgain': 'تحقق من الموقع مرة أخرى',
+    'map.checkingLocation': 'جاري فحص الموقع...',
     
     // Categories
     'categories.all': 'الكل',
@@ -158,9 +202,12 @@ const translations = {
     'categories.restaurants': 'المطاعم',
     'categories.shops': 'المتاجر',
     'categories.events': 'الفعاليات',
+    'categories.malls': 'المولات',
+    'categories.beaches': 'الشواطئ',
     
     // Chat
     'chat.title': 'محادثات المتاجر',
+    'chat.locationChats': 'محادثات الأماكن',
     'chat.locked': 'المحادثة مقفلة',
     'chat.unlocked': 'في النطاق',
     'chat.typeMessage': 'اكتب رسالتك...',
@@ -168,6 +215,9 @@ const translations = {
     'chat.getCloserToChat': 'اقترب أكثر للمحادثة...',
     'chat.noMessages': 'لا توجد رسائل بعد. ابدأ المحادثة!',
     'chat.liveGPS': 'GPS مباشر • نطاق 500 متر • محادثات خاصة بالمتاجر',
+    'chat.nearbyLocations': 'الأماكن القريبة',
+    'chat.available': 'متاح',
+    'chat.send': 'إرسال',
     
     // Profile
     'profile.title': 'الملف الشخصي',
@@ -179,6 +229,7 @@ const translations = {
     'profile.female': 'أنثى',
     'profile.updateProfile': 'تحديث الملف الشخصي',
     'profile.signOut': 'تسجيل الخروج',
+    'profile.editProfile': 'تعديل الملف الشخصي',
     
     // Events
     'events.title': 'الفعاليات',
@@ -186,22 +237,12 @@ const translations = {
     'events.noEvents': 'لا توجد فعاليات مجدولة',
     'events.attendees': 'مشارك',
     'events.rsvp': 'تأكيد الحضور',
-
-    // Onboarding
-    'onboarding.welcome': 'مرحباً بك في ينبع فايبز!',
-    'onboarding.welcomeDesc': 'تواصل مع الناس واكتشف أماكن رائعة في ينبع. مغامرتك تبدأ هنا!',
-    'onboarding.discoverPlaces': 'اكتشف الأماكن',
-    'onboarding.discoverDesc': 'استكشف المقاهي والمطاعم والمتاجر والفعاليات حولك. اعثر على مكانك المفضل التالي!',
-    'onboarding.proximityChat': 'محادثة القرب',
-    'onboarding.chatDesc': 'تحدث مع الناس عندما تكون قريباً من نفس الموقع. كوّن علاقات حقيقية!',
-    'onboarding.customize': 'خصص تجربتك',
-    'onboarding.customizeDesc': 'اضبط لغتك وسمتك وتفضيلاتك لجعل التطبيق ملكك حقاً.',
-    'onboarding.getStarted': 'ابدأ',
-    'onboarding.skip': 'تخطي الدليل',
+    'events.createEvent': 'إنشاء فعالية',
+    'events.eventDetails': 'تفاصيل الفعالية',
 
     // Settings
     'settings.title': 'الإعدادات',
-    'settings.subtitle': 'خصص تجربة ينبع فايبز',
+    'settings.subtitle': 'خصص تجربة بوب إن الخاصة بك',
     'settings.appearance': 'المظهر',
     'settings.darkMode': 'الوضع الليلي',
     'settings.darkModeDesc': 'استخدم السمة المظلمة للرؤية الأفضل في الإضاءة المنخفضة',
@@ -221,33 +262,48 @@ const translations = {
     'settings.platform': 'النظام',
     'settings.orientation': 'اتجاه النص',
     'settings.version': 'الإصدار',
-    'settings.notificationsEnabled': 'تم تفعيل الإشعارات',
-    'settings.notificationsDisabled': 'تم إلغاء الإشعارات',
-    'settings.notificationsPermissionDenied': 'تم رفض إذن الإشعارات',
-    'settings.hapticTested': 'تم اختبار التغذية الراجعة اللمسية',
 
-    // Gamification
-    'gamification.level': 'المستوى',
-    'gamification.points': 'النقاط',
-    'gamification.placesVisited': 'الأماكن',
-    'gamification.messages': 'الرسائل',
-    'gamification.dayStreak': 'أيام متتالية',
-    'gamification.achievements': 'الإنجازات',
-    'gamification.unlocked': 'مفتوح',
-    'gamification.achievementUnlocked': 'إنجاز جديد!',
+    // Auth
+    'auth.signIn': 'تسجيل الدخول',
+    'auth.signUp': 'إنشاء حساب',
+    'auth.signOut': 'تسجيل الخروج',
+    'auth.email': 'البريد الإلكتروني',
+    'auth.password': 'كلمة المرور',
+    'auth.confirmPassword': 'تأكيد كلمة المرور',
+    'auth.forgotPassword': 'نسيت كلمة المرور؟',
+    'auth.dontHaveAccount': 'ليس لديك حساب؟',
+    'auth.alreadyHaveAccount': 'لديك حساب بالفعل؟',
 
-    // Achievements
-    'achievements.firstVisit': 'الخطوة الأولى',
-    'achievements.firstVisitDesc': 'زر أول مكان لك في ينبع',
-    'achievements.explorer': 'مستكشف',
-    'achievements.explorerDesc': 'زر 5 أماكن مختلفة',
-    'achievements.socialButterfly': 'فراشة اجتماعية',
-    'achievements.socialButterflyDesc': 'أرسل 50 رسالة في المحادثات',
-    'achievements.streakMaster': 'سيد التتالي',
-    'achievements.streakMasterDesc': 'استخدم التطبيق لمدة 7 أيام متتالية',
-    'achievements.yanbuExpert': 'خبير ينبع',
-    'achievements.yanbuExpertDesc': 'زر 20 مكان مختلف',
-    
+    // Admin
+    'admin.title': 'لوحة الإدارة',
+    'admin.userManagement': 'إدارة المستخدمين',
+    'admin.placeManagement': 'إدارة الأماكن',
+    'admin.analytics': 'التحليلات',
+    'admin.totalUsers': 'إجمالي المستخدمين',
+    'admin.activePlaces': 'الأماكن النشطة',
+    'admin.totalMessages': 'إجمالي الرسائل',
+
+    // Merchant
+    'merchant.title': 'لوحة الأعمال',
+    'merchant.engagement': 'مركز تفاعل العملاء',
+    'merchant.connectNearby': 'تواصل مع العملاء القريبين في الوقت الفعلي',
+    'merchant.selectStore': 'اختر المتجر',
+    'merchant.sendPromotion': 'أرسل عرض فوري',
+    'merchant.nearbyCustomers': 'العملاء القريبون مباشرة',
+    'merchant.usersNearby': 'المستخدمون القريبون',
+    'merchant.messagesToday': 'الرسائل اليوم',
+    'merchant.engagement': 'التفاعل',
+    'merchant.totalVisits': 'إجمالي الزيارات',
+    'merchant.activeOffers': 'العروض النشطة',
+
+    // Location Restriction
+    'location.restricted': 'الموقع مقيد',
+    'location.mapRestricted': 'الوصول للخريطة مقيد',
+    'location.onlyYanbu': 'هذا التطبيق متاح فقط في ينبع، المملكة العربية السعودية.',
+    'location.limitedToYanbu': 'الوصول للخريطة مقتصر على المستخدمين داخل ينبع.',
+    'location.checkAgain': 'تحقق من الموقع مرة أخرى',
+    'location.stillAccess': 'لا يزال بإمكانك الوصول إلى الفعاليات وملفك الشخصي.',
+
     // Common
     'common.loading': 'جاري التحميل...',
     'common.save': 'حفظ',
@@ -259,6 +315,13 @@ const translations = {
     'common.open': 'مفتوح',
     'common.back': 'رجوع',
     'common.next': 'التالي',
+    'common.yes': 'نعم',
+    'common.no': 'لا',
+    'common.ok': 'موافق',
+    'common.error': 'خطأ',
+    'common.success': 'نجح',
+    'common.warning': 'تحذير',
+    'common.info': 'معلومات',
   }
 };
 
@@ -267,13 +330,23 @@ const LocalizationContext = createContext<LocalizationContextType | undefined>(u
 export const LocalizationProvider = ({ children }: { children: React.ReactNode }) => {
   const [language, setLanguage] = useState<'en' | 'ar'>(() => {
     const saved = localStorage.getItem('language');
-    return (saved as 'en' | 'ar') || 'en';
+    return (saved as 'en' | 'ar') || 'ar'; // Default to Arabic
   });
 
   useEffect(() => {
     localStorage.setItem('language', language);
     document.documentElement.lang = language;
     document.documentElement.dir = language === 'ar' ? 'rtl' : 'ltr';
+    
+    // Apply appropriate font classes to body
+    const body = document.body;
+    if (language === 'ar') {
+      body.className = body.className.replace(/font-\w+/g, '');
+      body.classList.add('font-arabic');
+    } else {
+      body.className = body.className.replace(/font-\w+/g, '');
+      body.classList.add('font-streetwear');
+    }
   }, [language]);
 
   const t = (key: string): string => {
@@ -284,7 +357,9 @@ export const LocalizationProvider = ({ children }: { children: React.ReactNode }
 
   return (
     <LocalizationContext.Provider value={{ language, setLanguage, t, isRTL }}>
-      {children}
+      <div className={language === 'ar' ? 'font-arabic' : 'font-streetwear'}>
+        {children}
+      </div>
     </LocalizationContext.Provider>
   );
 };

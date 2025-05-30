@@ -1,10 +1,11 @@
 
 import React from 'react';
 import { MapPin, Calendar, Settings, Crown, Store } from 'lucide-react';
+import { useLocalization } from '@/contexts/LocalizationContext';
 
 interface NavigationItem {
   id: string;
-  label: string;
+  labelKey: string;
   icon: React.ReactNode;
   show: boolean;
 }
@@ -22,6 +23,7 @@ const ModernBottomNavigation: React.FC<ModernBottomNavigationProps> = ({
   userRole = 'user',
   isInYanbu = null
 }) => {
+  const { t, isRTL } = useLocalization();
   console.log('ModernBottomNavigation - userRole:', userRole);
 
   const isAdmin = userRole === 'admin';
@@ -30,31 +32,31 @@ const ModernBottomNavigation: React.FC<ModernBottomNavigationProps> = ({
   const navigationItems: NavigationItem[] = [
     {
       id: 'map',
-      label: 'Map',
+      labelKey: 'nav.map',
       icon: <MapPin className="w-5 h-5" />,
-      show: true // Always show, but will handle restriction in main component
+      show: true
     },
     {
       id: 'events',
-      label: 'Events',
+      labelKey: 'nav.events',
       icon: <Calendar className="w-5 h-5" />,
       show: true
     },
     {
       id: 'admin',
-      label: 'Admin',
+      labelKey: 'nav.admin',
       icon: <Crown className="w-5 h-5" />,
       show: isAdmin
     },
     {
       id: 'merchant',
-      label: 'Business',
+      labelKey: 'nav.merchant',
       icon: <Store className="w-5 h-5" />,
       show: isMerchant
     },
     {
       id: 'settings',
-      label: 'Settings',
+      labelKey: 'nav.settings',
       icon: <Settings className="w-5 h-5" />,
       show: true
     }
@@ -68,7 +70,6 @@ const ModernBottomNavigation: React.FC<ModernBottomNavigationProps> = ({
   console.log('Visible nav items:', visibleItems.map(item => item.id));
 
   const handleItemClick = (itemId: string) => {
-    // If trying to access map but outside Yanbu (and not admin), redirect to events
     if (itemId === 'map' && isInYanbu === false && !isAdmin) {
       onSectionChange('events');
       return;
@@ -78,7 +79,7 @@ const ModernBottomNavigation: React.FC<ModernBottomNavigationProps> = ({
   };
 
   return (
-    <div className="fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur-md border-t border-border z-50">
+    <div className={`fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur-md border-t border-border z-50 ${isRTL ? 'font-arabic' : 'font-streetwear'}`}>
       <div className="container mx-auto max-w-md">
         <div className="flex items-center justify-around px-2 py-3">
           {visibleItems.map((item) => {
@@ -102,7 +103,7 @@ const ModernBottomNavigation: React.FC<ModernBottomNavigationProps> = ({
                   {item.icon}
                 </div>
                 <span className="text-xs font-medium">
-                  {item.label}
+                  {t(item.labelKey)}
                   {isMapRestricted && ' 🔒'}
                 </span>
               </button>

@@ -3,6 +3,7 @@ import React from 'react';
 import { MapPin, RefreshCw, Calendar, User } from 'lucide-react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
+import { useLocalization } from '@/contexts/LocalizationContext';
 
 interface LocationRestrictionScreenProps {
   onRetry: () => void;
@@ -17,24 +18,26 @@ const LocationRestrictionScreen: React.FC<LocationRestrictionScreenProps> = ({
   onNavigateToEvents, 
   onNavigateToProfile 
 }) => {
+  const { t, isRTL } = useLocalization();
+
   return (
-    <div className="min-h-screen bg-background flex items-center justify-center p-4">
+    <div className={`min-h-screen bg-background flex items-center justify-center p-4 ${isRTL ? 'font-arabic' : 'font-streetwear'}`}>
       <Card className="max-w-md w-full bg-card border">
         <CardContent className="p-8 text-center">
           <div className="mb-6">
             <div className="w-16 h-16 bg-red-100 rounded-full flex items-center justify-center mx-auto mb-4">
               <MapPin className="w-8 h-8 text-red-600" />
             </div>
-            <h2 className="text-2xl font-bold text-foreground mb-2">Map Access Restricted</h2>
+            <h2 className="text-2xl font-bold text-foreground mb-2">{t('location.mapRestricted')}</h2>
             <p className="text-muted-foreground">
-              Map access is limited to users inside Yanbu. You can still access events and your profile.
+              {t('location.limitedToYanbu')} {t('location.stillAccess')}
             </p>
           </div>
           
           <div className="space-y-4">
             <div className="p-4 bg-muted rounded-lg">
               <p className="text-sm text-muted-foreground">
-                POP IN map features are currently available only within Yanbu city limits for the best local experience.
+                تم تقييد ميزات خريطة بوب إن حالياً داخل حدود مدينة ينبع فقط للحصول على أفضل تجربة محلية.
               </p>
             </div>
 
@@ -45,7 +48,7 @@ const LocationRestrictionScreen: React.FC<LocationRestrictionScreenProps> = ({
                 className="w-full"
               >
                 <Calendar className="w-4 h-4 mr-2" />
-                Events
+                {t('nav.events')}
               </Button>
               <Button 
                 onClick={onNavigateToProfile}
@@ -53,7 +56,7 @@ const LocationRestrictionScreen: React.FC<LocationRestrictionScreenProps> = ({
                 className="w-full"
               >
                 <User className="w-4 h-4 mr-2" />
-                Profile
+                {t('nav.profile')}
               </Button>
             </div>
             
@@ -65,18 +68,18 @@ const LocationRestrictionScreen: React.FC<LocationRestrictionScreenProps> = ({
               {isChecking ? (
                 <>
                   <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
-                  Checking Location...
+                  {t('map.checkingLocation')}
                 </>
               ) : (
                 <>
                   <MapPin className="w-4 h-4 mr-2" />
-                  Check Location Again
+                  {t('location.checkAgain')}
                 </>
               )}
             </Button>
             
             <p className="text-xs text-muted-foreground">
-              Make sure location services are enabled and you're physically in Yanbu.
+              تأكد من تمكين خدمات الموقع وأنك موجود فعلياً في ينبع.
             </p>
           </div>
         </CardContent>

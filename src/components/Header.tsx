@@ -4,14 +4,15 @@ import { MapPin, MessageCircle, Calendar, User, Menu, X, LogIn, LogOut } from 'l
 import { Button } from '@/components/ui/button';
 import { useAuth } from '@/hooks/useAuth';
 import { useRoles } from '@/hooks/useRoles';
+import { useLocalization } from '@/contexts/LocalizationContext';
 import AuthModal from './AuthModal';
 
 const Header = () => {
   const [isMenuOpen, setIsMenuOpen] = useState(false);
   const [isAuthModalOpen, setIsAuthModalOpen] = useState(false);
-  const [language, setLanguage] = useState<'ar' | 'en'>('en');
   const { user, signOut } = useAuth();
   const { hasPermission } = useRoles();
+  const { language, setLanguage, t, isRTL } = useLocalization();
 
   const toggleLanguage = () => {
     setLanguage(language === 'en' ? 'ar' : 'en');
@@ -24,7 +25,7 @@ const Header = () => {
 
   return (
     <>
-      <header className="bg-slate-900/95 backdrop-blur-sm border-b border-slate-800 sticky top-0 z-50">
+      <header className={`bg-slate-900/95 backdrop-blur-sm border-b border-slate-800 sticky top-0 z-50 ${isRTL ? 'font-arabic' : 'font-streetwear'}`}>
         <div className="container mx-auto px-4">
           <div className="flex items-center justify-between h-16">
             {/* Logo */}
@@ -32,8 +33,8 @@ const Header = () => {
               <div className="w-8 h-8 bg-gradient-to-br from-cyan-500 to-blue-600 rounded-lg flex items-center justify-center">
                 <MapPin className="w-5 h-5 text-white" />
               </div>
-              <h1 className="text-xl font-bold text-white">
-                {language === 'ar' ? 'بوب إن' : 'POP IN'}
+              <h1 className="text-xl font-bold text-white font-display">
+                بوب إن
               </h1>
             </div>
 
@@ -42,35 +43,35 @@ const Header = () => {
               {hasPermission('view_map') && (
                 <a href="#map" className="flex items-center space-x-2 text-slate-300 hover:text-cyan-400 transition-colors">
                   <MapPin className="w-4 h-4" />
-                  <span>{language === 'ar' ? 'الخريطة' : 'Map'}</span>
+                  <span>{t('nav.map')}</span>
                 </a>
               )}
               {hasPermission('access_chat') && (
                 <a href="#chat" className="flex items-center space-x-2 text-slate-300 hover:text-cyan-400 transition-colors">
                   <MessageCircle className="w-4 h-4" />
-                  <span>{language === 'ar' ? 'المحادثة' : 'Chat'}</span>
+                  <span>{t('nav.chat')}</span>
                 </a>
               )}
               {hasPermission('rsvp_events') && (
                 <a href="#events" className="flex items-center space-x-2 text-slate-300 hover:text-cyan-400 transition-colors">
                   <Calendar className="w-4 h-4" />
-                  <span>{language === 'ar' ? 'الأحداث' : 'Events'}</span>
+                  <span>{t('nav.events')}</span>
                 </a>
               )}
               {user && (
                 <a href="#profile" className="flex items-center space-x-2 text-slate-300 hover:text-cyan-400 transition-colors">
                   <User className="w-4 h-4" />
-                  <span>{language === 'ar' ? 'الملف الشخصي' : 'Profile'}</span>
+                  <span>{t('nav.profile')}</span>
                 </a>
               )}
               {hasPermission('merchant_dashboard') && (
                 <a href="#merchant" className="flex items-center space-x-2 text-slate-300 hover:text-cyan-400 transition-colors">
-                  <span>{language === 'ar' ? 'لوحة التاجر' : 'Merchant'}</span>
+                  <span>{t('nav.merchant')}</span>
                 </a>
               )}
               {hasPermission('admin_dashboard') && (
                 <a href="#admin" className="flex items-center space-x-2 text-slate-300 hover:text-cyan-400 transition-colors">
-                  <span>{language === 'ar' ? 'لوحة الإدارة' : 'Admin'}</span>
+                  <span>{t('nav.admin')}</span>
                 </a>
               )}
             </nav>
@@ -94,7 +95,7 @@ const Header = () => {
                   className="hidden md:flex border-slate-700 text-slate-300 hover:text-white hover:border-red-500"
                 >
                   <LogOut className="w-4 h-4 mr-2" />
-                  {language === 'ar' ? 'تسجيل خروج' : 'Sign Out'}
+                  {t('auth.signOut')}
                 </Button>
               ) : (
                 <Button
@@ -104,7 +105,7 @@ const Header = () => {
                   className="hidden md:flex border-slate-700 text-slate-300 hover:text-white hover:border-cyan-500"
                 >
                   <LogIn className="w-4 h-4 mr-2" />
-                  {language === 'ar' ? 'تسجيل دخول' : 'Sign In'}
+                  {t('auth.signIn')}
                 </Button>
               )}
               
@@ -124,35 +125,35 @@ const Header = () => {
                 {hasPermission('view_map') && (
                   <a href="#map" className="flex items-center space-x-2 text-slate-300 hover:text-cyan-400 transition-colors">
                     <MapPin className="w-4 h-4" />
-                    <span>{language === 'ar' ? 'الخريطة' : 'Map'}</span>
+                    <span>{t('nav.map')}</span>
                   </a>
                 )}
                 {hasPermission('access_chat') && (
                   <a href="#chat" className="flex items-center space-x-2 text-slate-300 hover:text-cyan-400 transition-colors">
                     <MessageCircle className="w-4 h-4" />
-                    <span>{language === 'ar' ? 'المحادثة' : 'Chat'}</span>
+                    <span>{t('nav.chat')}</span>
                   </a>
                 )}
                 {hasPermission('rsvp_events') && (
                   <a href="#events" className="flex items-center space-x-2 text-slate-300 hover:text-cyan-400 transition-colors">
                     <Calendar className="w-4 h-4" />
-                    <span>{language === 'ar' ? 'الأحداث' : 'Events'}</span>
+                    <span>{t('nav.events')}</span>
                   </a>
                 )}
                 {user && (
                   <a href="#profile" className="flex items-center space-x-2 text-slate-300 hover:text-cyan-400 transition-colors">
                     <User className="w-4 h-4" />
-                    <span>{language === 'ar' ? 'الملف الشخصي' : 'Profile'}</span>
+                    <span>{t('nav.profile')}</span>
                   </a>
                 )}
                 {hasPermission('merchant_dashboard') && (
                   <a href="#merchant" className="flex items-center space-x-2 text-slate-300 hover:text-cyan-400 transition-colors">
-                    <span>{language === 'ar' ? 'لوحة التاجر' : 'Merchant'}</span>
+                    <span>{t('nav.merchant')}</span>
                   </a>
                 )}
                 {hasPermission('admin_dashboard') && (
                   <a href="#admin" className="flex items-center space-x-2 text-slate-300 hover:text-cyan-400 transition-colors">
-                    <span>{language === 'ar' ? 'لوحة الإدارة' : 'Admin'}</span>
+                    <span>{t('nav.admin')}</span>
                   </a>
                 )}
                 
@@ -165,7 +166,7 @@ const Header = () => {
                       className="w-full border-slate-700 text-slate-300 hover:text-white hover:border-red-500"
                     >
                       <LogOut className="w-4 h-4 mr-2" />
-                      {language === 'ar' ? 'تسجيل خروج' : 'Sign Out'}
+                      {t('auth.signOut')}
                     </Button>
                   ) : (
                     <Button
@@ -178,7 +179,7 @@ const Header = () => {
                       className="w-full border-slate-700 text-slate-300 hover:text-white hover:border-cyan-500"
                     >
                       <LogIn className="w-4 h-4 mr-2" />
-                      {language === 'ar' ? 'تسجيل دخول' : 'Sign In'}
+                      {t('auth.signIn')}
                     </Button>
                   )}
                 </div>
