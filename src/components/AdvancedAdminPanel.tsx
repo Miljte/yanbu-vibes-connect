@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Shield, Users, Eye, Ban, Crown, Trash2, MessageSquare, MapPin, Settings } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -51,9 +50,22 @@ const AdvancedAdminPanel = () => {
 
   const fetchUsers = async () => {
     try {
-      console.log('🔍 Fetching users from profiles table...');
+      console.log('🔍 Fetching ALL users from profiles table...');
       
-      // Fetch all profiles
+      // First, let's try to get a simple count to see if there's a basic access issue
+      const { count: totalProfilesCount, error: countError } = await supabase
+        .from('profiles')
+        .select('*', { count: 'exact', head: true });
+
+      console.log(`📊 Total profiles count: ${totalProfilesCount}`);
+      
+      if (countError) {
+        console.error('❌ Error counting profiles:', countError);
+        toast.error('Error accessing profiles table: ' + countError.message);
+        return;
+      }
+
+      // Fetch ALL profiles without any filtering
       const { data: profilesData, error: profilesError } = await supabase
         .from('profiles')
         .select('*')
@@ -61,29 +73,57 @@ const AdvancedAdminPanel = () => {
 
       if (profilesError) {
         console.error('❌ Error fetching profiles:', profilesError);
+        console.error('❌ Profile error details:', {
+          code: profilesError.code,
+          message: profilesError.message,
+          details: profilesError.details,
+          hint: profilesError.hint
+        });
+        toast.error('Failed to fetch profiles: ' + profilesError.message);
         throw profilesError;
       }
 
-      console.log(`✅ Found ${profilesData?.length || 0} profiles in database`);
+      console.log(`✅ Raw profiles data:`, profilesData);
+      console.log(`📋 Found ${profilesData?.length || 0} profiles in database`);
 
       if (!profilesData || profilesData.length === 0) {
         console.warn('⚠️ No profiles found in database');
+        toast.warning('No user profiles found in the database');
         setUsers([]);
         setLoading(false);
         return;
       }
 
+      // Log each profile for debugging
+      profilesData.forEach((profile, index) => {
+        console.log(`👤 Profile ${index + 1}:`, {
+          id: profile.id,
+          nickname: profile.nickname,
+          created_at: profile.created_at
+        });
+      });
+
       // Get user roles
-      const { data: rolesData } = await supabase
+      const { data: rolesData, error: rolesError } = await supabase
         .from('user_roles')
         .select('user_id, role');
 
-      console.log(`👑 Found ${rolesData?.length || 0} role assignments`);
+      if (rolesError) {
+        console.error('❌ Error fetching roles:', rolesError);
+      } else {
+        console.log(`👑 Found ${rolesData?.length || 0} role assignments:`, rolesData);
+      }
 
       // Get user locations for online status
-      const { data: locationsData } = await supabase
+      const { data: locationsData, error: locationsError } = await supabase
         .from('user_locations')
         .select('user_id, latitude, longitude, updated_at');
+
+      if (locationsError) {
+        console.error('❌ Error fetching locations:', locationsError);
+      } else {
+        console.log(`📍 Found ${locationsData?.length || 0} location records`);
+      }
 
       // Get bans and mutes
       const { data: bansData } = await supabase
@@ -96,6 +136,8 @@ const AdvancedAdminPanel = () => {
         .select('user_id')
         .eq('is_active', true);
 
+      console.log(`🚫 Active bans: ${bansData?.length || 0}, mutes: ${mutesData?.length || 0}`);
+
       // Combine all data
       const usersWithDetails = profilesData.map(profile => {
         const userRole = rolesData?.find(role => role.user_id === profile.id);
@@ -107,7 +149,7 @@ const AdvancedAdminPanel = () => {
         const lastSeen = location?.updated_at || profile.created_at;
         const isOnline = lastSeen ? new Date(lastSeen) > new Date(Date.now() - 10 * 60 * 1000) : false;
 
-        return {
+        const userDetails = {
           id: profile.id,
           nickname: profile.nickname,
           email: undefined, // Remove email fetching for now to avoid admin permission issues
@@ -119,14 +161,21 @@ const AdvancedAdminPanel = () => {
           is_online: isOnline,
           location: location ? { latitude: location.latitude, longitude: location.longitude } : undefined
         };
+
+        console.log(`👤 Processing user ${profile.nickname}:`, userDetails);
+        return userDetails;
       });
 
       console.log(`✅ Final users with details: ${usersWithDetails.length}`);
-      console.log('👥 Users:', usersWithDetails.map(u => ({ nickname: u.nickname, role: u.role })));
+      console.log('👥 Complete user list:', usersWithDetails.map(u => ({ nickname: u.nickname, role: u.role, id: u.id })));
+      
+      if (usersWithDetails.length !== totalProfilesCount) {
+        console.warn(`⚠️ Mismatch: Expected ${totalProfilesCount} users but processed ${usersWithDetails.length}`);
+      }
       
       setUsers(usersWithDetails);
     } catch (error) {
-      console.error('❌ Error fetching users:', error);
+      console.error('❌ Critical error in fetchUsers:', error);
       toast.error('Failed to load users. Check console for details.');
     } finally {
       setLoading(false);
