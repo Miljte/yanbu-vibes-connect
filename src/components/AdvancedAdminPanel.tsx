@@ -77,7 +77,7 @@ const AdvancedAdminPanel = () => {
       try {
         const { data: authData } = await supabase.auth.admin.listUsers();
         if (authData?.users) {
-          authData.users.forEach(authUser => {
+          authData.users.forEach((authUser: any) => {
             authUsersMap.set(authUser.id, authUser.email || '');
           });
           console.log(`📧 Found email data for ${authData.users.length} auth users`);
