@@ -20,10 +20,10 @@ export default {
 		},
 		extend: {
 			fontFamily: {
-				'sans': ['Poppins', 'Roboto', 'system-ui', '-apple-system', 'sans-serif'],
-				'arabic': ['Noto Kufi Arabic', 'Tajawal', 'Cairo', 'Poppins', 'system-ui', '-apple-system', 'sans-serif'],
-				'streetwear': ['Anton', 'Poppins', 'system-ui', '-apple-system', 'sans-serif'],
-				'display': ['Anton', 'Poppins', 'system-ui', '-apple-system', 'sans-serif'],
+				'sans': ['Inter', 'Poppins', 'system-ui', '-apple-system', 'sans-serif'],
+				'arabic': ['Noto Kufi Arabic', 'Tajawal', 'Cairo', 'Inter', 'system-ui', '-apple-system', 'sans-serif'],
+				'streetwear': ['Anton', 'Inter', 'system-ui', '-apple-system', 'sans-serif'],
+				'display': ['Anton', 'Inter', 'system-ui', '-apple-system', 'sans-serif'],
 			},
 			colors: {
 				border: 'hsl(var(--border))',
@@ -75,6 +75,19 @@ export default {
 				md: 'calc(var(--radius) - 2px)',
 				sm: 'calc(var(--radius) - 4px)'
 			},
+			borderWidth: {
+				'3': '3px',
+			},
+			fontSize: {
+				'2xs': ['0.625rem', { lineHeight: '0.75rem' }],
+			},
+			spacing: {
+				'18': '4.5rem',
+				'88': '22rem',
+			},
+			backdropBlur: {
+				xs: '2px',
+			},
 			keyframes: {
 				'accordion-down': {
 					from: {
@@ -91,11 +104,44 @@ export default {
 					to: {
 						height: '0'
 					}
+				},
+				'fade-in-up': {
+					'0%': {
+						opacity: '0',
+						transform: 'translateY(20px)'
+					},
+					'100%': {
+						opacity: '1',
+						transform: 'translateY(0)'
+					}
+				},
+				'slide-in-right': {
+					'0%': {
+						opacity: '0',
+						transform: 'translateX(20px)'
+					},
+					'100%': {
+						opacity: '1',
+						transform: 'translateX(0)'
+					}
+				},
+				'pulse-gps': {
+					'0%, 100%': {
+						opacity: '1',
+						transform: 'scale(1)'
+					},
+					'50%': {
+						opacity: '0.7',
+						transform: 'scale(1.1)'
+					}
 				}
 			},
 			animation: {
 				'accordion-down': 'accordion-down 0.2s ease-out',
-				'accordion-up': 'accordion-up 0.2s ease-out'
+				'accordion-up': 'accordion-up 0.2s ease-out',
+				'fade-in-up': 'fade-in-up 0.5s ease-out',
+				'slide-in-right': 'slide-in-right 0.3s ease-out',
+				'pulse-gps': 'pulse-gps 2s infinite'
 			}
 		}
 	},

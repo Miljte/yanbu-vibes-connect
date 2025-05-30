@@ -3,7 +3,7 @@
 @tailwind components;
 @tailwind utilities;
 
-@import url('https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500;600;700&family=Roboto:wght@300;400;500;700&family=Anton:wght@400&family=Noto+Kufi+Arabic:wght@100;200;300;400;500;600;700;800;900&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Poppins:wght@300;400;500;600;700&family=Anton:wght@400&family=Noto+Kufi+Arabic:wght@100;200;300;400;500;600;700;800;900&display=swap');
 @import url('https://fonts.googleapis.com/css2?family=Tajawal:wght@300;400;500;700&family=Cairo:wght@300;400;600;700&display=swap');
 
 @layer base {
@@ -94,134 +94,53 @@
 
   body {
     @apply bg-background text-foreground;
-    font-family: 'Poppins', 'Roboto', system-ui, -apple-system, sans-serif;
+    font-family: 'Inter', 'Poppins', system-ui, -apple-system, sans-serif;
+    font-feature-settings: 'cv11', 'ss01';
+    font-variation-settings: 'opsz' 32;
+    line-height: 1.6;
   }
 
-  /* Arabic font support */
-  [dir="rtl"] {
-    font-family: 'Noto Kufi Arabic', 'Tajawal', 'Cairo', 'Poppins', system-ui, -apple-system, sans-serif;
-  }
-
-  /* Font classes for easy usage */
+  /* Enhanced font classes */
   .font-arabic {
-    font-family: 'Noto Kufi Arabic', 'Tajawal', 'Cairo', 'Poppins', system-ui, -apple-system, sans-serif;
+    font-family: 'Noto Kufi Arabic', 'Tajawal', 'Cairo', 'Inter', system-ui, -apple-system, sans-serif;
+    font-feature-settings: 'cv11', 'ss01';
   }
 
   .font-streetwear {
-    font-family: 'Anton', 'Poppins', system-ui, -apple-system, sans-serif;
+    font-family: 'Anton', 'Inter', system-ui, -apple-system, sans-serif;
+    font-weight: 400;
+    letter-spacing: 0.02em;
   }
 
   .font-display {
-    font-family: 'Anton', 'Poppins', system-ui, -apple-system, sans-serif;
+    font-family: 'Anton', 'Inter', system-ui, -apple-system, sans-serif;
+    font-weight: 400;
+    letter-spacing: 0.02em;
+  }
+
+  /* Typography improvements */
+  h1, h2, h3, h4, h5, h6 {
+    font-weight: 600;
+    line-height: 1.25;
+    letter-spacing: -0.025em;
+  }
+
+  .text-sm {
+    font-size: 0.875rem;
+    line-height: 1.5;
+  }
+
+  .text-xs {
+    font-size: 0.75rem;
+    line-height: 1.4;
   }
 
   /* RTL support */
-  .rtl {
-    direction: rtl;
+  [dir="rtl"] {
+    font-family: 'Noto Kufi Arabic', 'Tajawal', 'Cairo', 'Inter', system-ui, -apple-system, sans-serif;
   }
 
-  .ltr {
-    direction: ltr;
-  }
-
-  /* Safe area support for mobile devices */
-  .safe-area-pt {
-    padding-top: env(safe-area-inset-top);
-  }
-
-  .safe-area-pb {
-    padding-bottom: env(safe-area-inset-bottom);
-  }
-
-  .safe-area-pl {
-    padding-left: env(safe-area-inset-left);
-  }
-
-  .safe-area-pr {
-    padding-right: env(safe-area-inset-right);
-  }
-
-  /* Smooth scrolling */
-  html {
-    scroll-behavior: smooth;
-  }
-
-  /* Hide scrollbar but keep functionality */
-  .scrollbar-hide {
-    -ms-overflow-style: none;
-    scrollbar-width: none;
-  }
-
-  .scrollbar-hide::-webkit-scrollbar {
-    display: none;
-  }
-
-  /* Custom scrollbar for regular elements */
-  ::-webkit-scrollbar {
-    width: 8px;
-  }
-
-  ::-webkit-scrollbar-track {
-    @apply bg-gray-100;
-  }
-
-  ::-webkit-scrollbar-thumb {
-    @apply bg-gray-300 rounded-lg;
-  }
-
-  ::-webkit-scrollbar-thumb:hover {
-    @apply bg-gray-400;
-  }
-
-  /* Modern button animations */
-  .btn-modern {
-    @apply transition-all duration-200 ease-in-out;
-  }
-
-  .btn-modern:hover {
-    @apply scale-105 shadow-lg;
-  }
-
-  .btn-modern:active {
-    @apply scale-95;
-  }
-
-  /* Card hover effects */
-  .card-hover {
-    @apply transition-all duration-300 ease-in-out;
-  }
-
-  .card-hover:hover {
-    @apply transform -translate-y-1 shadow-xl;
-  }
-
-  /* Glassmorphism effect */
-  .glass {
-    background: rgba(255, 255, 255, 0.8);
-    backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.2);
-  }
-
-  .glass-dark {
-    background: rgba(0, 0, 0, 0.7);
-    backdrop-filter: blur(10px);
-    border: 1px solid rgba(255, 255, 255, 0.1);
-  }
-
-  /* Modern gradients */
-  .gradient-primary {
-    background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  }
-
-  .gradient-secondary {
-    background: linear-gradient(135deg, #f093fb 0%, #f5576c 100%);
-  }
-
-  .gradient-success {
-    background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
-  }
-
-  /* Animation utilities */
+  /* Modern animations */
   @keyframes fadeInUp {
     from {
       opacity: 0;
@@ -244,12 +163,14 @@
     }
   }
 
-  @keyframes pulse-custom {
+  @keyframes pulse-gps {
     0%, 100% {
       opacity: 1;
+      transform: scale(1);
     }
     50% {
       opacity: 0.7;
+      transform: scale(1.1);
     }
   }
 
@@ -261,36 +182,77 @@
     animation: slideInRight 0.3s ease-out;
   }
 
-  .animate-pulse-custom {
-    animation: pulse-custom 2s infinite;
+  .animate-pulse-gps {
+    animation: pulse-gps 2s infinite;
   }
 
-  /* Mobile optimizations */
-  @media (max-width: 768px) {
-    body {
-      font-size: 14px;
+  /* Modern card effects */
+  .card-modern {
+    @apply bg-card/50 backdrop-blur-sm border border-border/50 shadow-lg hover:shadow-xl transition-all duration-300;
+  }
+
+  .card-modern:hover {
+    @apply transform -translate-y-1 shadow-2xl border-border;
+  }
+
+  /* Responsive utilities */
+  @media (max-width: 640px) {
+    .container {
+      @apply px-4;
     }
     
-    .container {
-      padding-left: 1rem;
-      padding-right: 1rem;
+    .text-responsive-xl {
+      @apply text-2xl;
+    }
+    
+    .text-responsive-lg {
+      @apply text-lg;
     }
   }
 
-  /* High contrast mode support */
-  @media (prefers-contrast: high) {
-    .glass {
-      background: rgba(255, 255, 255, 0.95);
-      border: 2px solid rgba(0, 0, 0, 0.3);
+  @media (min-width: 641px) {
+    .text-responsive-xl {
+      @apply text-4xl;
+    }
+    
+    .text-responsive-lg {
+      @apply text-xl;
     }
   }
 
-  /* Reduced motion support */
-  @media (prefers-reduced-motion: reduce) {
-    * {
-      animation-duration: 0.01ms !important;
-      animation-iteration-count: 1 !important;
-      transition-duration: 0.01ms !important;
-    }
+  /* GPS marker styles */
+  .gps-marker {
+    @apply relative flex items-center justify-center;
+  }
+
+  .gps-marker::before {
+    content: '';
+    @apply absolute inset-0 rounded-full bg-blue-500/20 animate-pulse-gps;
+    width: 24px;
+    height: 24px;
+  }
+
+  .gps-marker::after {
+    content: '';
+    @apply absolute bg-blue-500 rounded-full border-2 border-white shadow-lg;
+    width: 12px;
+    height: 12px;
+  }
+
+  /* Enhanced scrollbar */
+  ::-webkit-scrollbar {
+    width: 6px;
+  }
+
+  ::-webkit-scrollbar-track {
+    @apply bg-muted/30;
+  }
+
+  ::-webkit-scrollbar-thumb {
+    @apply bg-muted-foreground/30 rounded-full;
+  }
+
+  ::-webkit-scrollbar-thumb:hover {
+    @apply bg-muted-foreground/50;
   }
 }
