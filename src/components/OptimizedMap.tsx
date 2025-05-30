@@ -114,7 +114,7 @@ const MapComponent: React.FC<MapComponentProps> = ({
             scale: isCluster ? 24 : 18,
           },
           zIndex: isCluster ? 600 : 500,
-          optimized: true, // Important for performance
+          optimized: true,
         });
 
         // Add cluster count label
@@ -208,11 +208,45 @@ const OptimizedMap = () => {
   const googleMapsApiKey = 'AIzaSyCnHJ_b9LBpxdSOdE8jmVMmJd6Vdmm5u8o';
   const yanbuCenter: google.maps.LatLngLiteral = { lat: 24.0892, lng: 38.0618 };
 
+  // Convert places to MarkerData format for the hook
+  const markersData = places.map(place => ({
+    id: place.id,
+    name: place.name,
+    latitude: place.latitude,
+    longitude: place.longitude,
+    type: place.type,
+    distance: place.distance,
+    isActive: place.is_active
+  }));
+
   const { visibleMarkers, isLoading, markerCount } = useOptimizedMarkers({
-    places,
+    places: markersData,
     maxDistance: 5000,
     clusterThreshold: 3
   });
+
+  // Convert back to Place format for display
+  const displayMarkers: Place[] = visibleMarkers.map(marker => ({
+    id: marker.id,
+    name: marker.name,
+    type: marker.type,
+    latitude: marker.latitude,
+    longitude: marker.longitude,
+    is_active: marker.isActive,
+    merchant_id: '', // Default value since clusters don't have merchant_id
+    distance: marker.distance,
+    count: marker.count,
+    places: marker.places?.map(p => ({
+      id: p.id,
+      name: p.name,
+      type: p.type,
+      latitude: p.latitude,
+      longitude: p.longitude,
+      is_active: p.isActive,
+      merchant_id: '',
+      distance: p.distance
+    }))
+  }));
 
   useEffect(() => {
     fetchActivePlaces();
@@ -292,7 +326,7 @@ const OptimizedMap = () => {
         <MapComponent
           center={userLocation ? { lat: userLocation.latitude, lng: userLocation.longitude } : yanbuCenter}
           zoom={15}
-          visibleMarkers={visibleMarkers}
+          visibleMarkers={displayMarkers}
           userLocation={userLocation}
           onPlaceClick={setSelectedPlace}
         />
