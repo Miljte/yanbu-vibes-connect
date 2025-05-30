@@ -207,24 +207,24 @@ const ModernSettings = () => {
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-background via-background to-muted/5 pb-20">
-      <div className="container mx-auto max-w-6xl px-3 sm:px-4 lg:px-6 py-4 sm:py-6 lg:py-8 space-y-4 sm:space-y-6 lg:space-y-8">
+      <div className="container mx-auto max-w-4xl px-4 py-6 space-y-6">
         {/* Header */}
-        <div className="text-center space-y-3 sm:space-y-4">
-          <div className="inline-flex items-center justify-center w-16 h-16 sm:w-20 sm:h-20 bg-gradient-to-br from-primary/20 to-primary/10 rounded-2xl mb-4 sm:mb-6">
-            <Settings className="w-8 h-8 sm:w-10 sm:h-10 text-primary" />
+        <div className="text-center space-y-4">
+          <div className="inline-flex items-center justify-center w-16 h-16 bg-gradient-to-br from-primary/20 to-primary/10 rounded-2xl mb-4">
+            <Settings className="w-8 h-8 text-primary" />
           </div>
-          <h1 className="text-2xl sm:text-3xl lg:text-4xl font-bold text-foreground">Settings</h1>
-          <p className="text-muted-foreground text-sm sm:text-base lg:text-lg max-w-md mx-auto">
+          <h1 className="text-3xl font-bold text-foreground">Settings</h1>
+          <p className="text-muted-foreground max-w-md mx-auto">
             Customize your experience and manage your preferences
           </p>
         </div>
 
         {/* User Profile Section */}
         {user && (
-          <Card className="card-modern">
+          <Card className="border-0 shadow-lg">
             <CardHeader className="pb-4">
-              <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-                <CardTitle className="flex items-center space-x-3 text-lg sm:text-xl">
+              <div className="flex items-center justify-between">
+                <CardTitle className="flex items-center space-x-3 text-xl">
                   <div className="p-2 rounded-lg bg-blue-100 dark:bg-blue-900/20">
                     <User className="w-5 h-5 text-blue-600 dark:text-blue-400" />
                   </div>
@@ -234,7 +234,6 @@ const ModernSettings = () => {
                   onClick={() => editingProfile ? saveProfile() : setEditingProfile(true)}
                   disabled={loading}
                   size="sm"
-                  className="w-full sm:w-auto"
                 >
                   {editingProfile ? (
                     loading ? (
@@ -261,8 +260,8 @@ const ModernSettings = () => {
               {/* Avatar and Basic Info */}
               <div className="flex flex-col sm:flex-row items-center sm:items-start space-y-4 sm:space-y-0 sm:space-x-6">
                 <div className="flex flex-col items-center space-y-3">
-                  <div className={`w-20 h-20 sm:w-24 sm:h-24 bg-gradient-to-br ${getAvatarGradient(profile.avatar_preset)} rounded-full flex items-center justify-center shadow-lg`}>
-                    <User className="w-10 h-10 sm:w-12 sm:h-12 text-white" />
+                  <div className={`w-20 h-20 bg-gradient-to-br ${getAvatarGradient(profile.avatar_preset)} rounded-full flex items-center justify-center shadow-lg`}>
+                    <User className="w-10 h-10 text-white" />
                   </div>
                   {editingProfile && (
                     <Button variant="outline" size="sm" className="text-xs">
@@ -415,14 +414,14 @@ const ModernSettings = () => {
         )}
 
         {/* Quick Actions Grid */}
-        <div className="grid grid-cols-2 lg:grid-cols-4 gap-3 sm:gap-4">
+        <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
           <Button
             onClick={toggleTheme}
             variant="outline"
-            className="h-20 sm:h-24 flex-col space-y-2 sm:space-y-3 card-modern group hover:scale-105 transition-all duration-300"
+            className="h-20 flex-col space-y-2 group hover:scale-105 transition-all duration-300"
           >
             <div className="p-2 rounded-lg bg-primary/10 group-hover:bg-primary/20 transition-colors">
-              {isDark ? <Sun className="w-4 h-4 sm:w-5 sm:h-5 text-primary" /> : <Moon className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />}
+              {isDark ? <Sun className="w-5 h-5 text-primary" /> : <Moon className="w-5 h-5 text-primary" />}
             </div>
             <span className="text-xs font-medium">{isDark ? 'Light' : 'Dark'}</span>
           </Button>
@@ -430,10 +429,10 @@ const ModernSettings = () => {
           <Button
             onClick={handleLanguageSwitch}
             variant="outline"
-            className="h-20 sm:h-24 flex-col space-y-2 sm:space-y-3 card-modern group hover:scale-105 transition-all duration-300"
+            className="h-20 flex-col space-y-2 group hover:scale-105 transition-all duration-300"
           >
             <div className="p-2 rounded-lg bg-primary/10 group-hover:bg-primary/20 transition-colors">
-              <Languages className="w-4 h-4 sm:w-5 sm:h-5 text-primary" />
+              <Languages className="w-5 h-5 text-primary" />
             </div>
             <span className="text-xs font-medium">{language === 'en' ? 'عربي' : 'English'}</span>
           </Button>
@@ -441,13 +440,13 @@ const ModernSettings = () => {
           <Button
             onClick={saveProfile}
             disabled={loading}
-            className="h-20 sm:h-24 flex-col space-y-2 sm:space-y-3 bg-gradient-to-br from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white border-0 hover:scale-105 transition-all duration-300"
+            className="h-20 flex-col space-y-2 bg-gradient-to-br from-green-500 to-green-600 hover:from-green-600 hover:to-green-700 text-white border-0 hover:scale-105 transition-all duration-300"
           >
             <div className="p-2 rounded-lg bg-white/20">
               {loading ? (
-                <div className="w-4 h-4 sm:w-5 sm:h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
               ) : (
-                <Save className="w-4 h-4 sm:w-5 sm:h-5" />
+                <Save className="w-5 h-5" />
               )}
             </div>
             <span className="text-xs font-medium">{loading ? 'Saving...' : 'Save'}</span>
@@ -456,19 +455,19 @@ const ModernSettings = () => {
           <Button
             onClick={handleSignOut}
             variant="outline"
-            className="h-20 sm:h-24 flex-col space-y-2 sm:space-y-3 border-red-200 hover:bg-red-50 dark:border-red-800 dark:hover:bg-red-900/20 hover:scale-105 transition-all duration-300"
+            className="h-20 flex-col space-y-2 border-red-200 hover:bg-red-50 dark:border-red-800 dark:hover:bg-red-900/20 hover:scale-105 transition-all duration-300"
           >
             <div className="p-2 rounded-lg bg-red-100 dark:bg-red-900/20">
-              <X className="w-4 h-4 sm:w-5 sm:h-5 text-red-600 dark:text-red-400" />
+              <X className="w-5 h-5 text-red-600 dark:text-red-400" />
             </div>
             <span className="text-xs font-medium text-red-600 dark:text-red-400">Sign Out</span>
           </Button>
         </div>
 
         {/* Settings Sections */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-4 sm:gap-6">
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
           {/* Privacy & Security */}
-          <Card className="card-modern">
+          <Card className="border-0 shadow-lg">
             <CardHeader className="pb-4">
               <CardTitle className="flex items-center justify-between text-lg">
                 <div className="flex items-center space-x-3">
@@ -481,10 +480,10 @@ const ModernSettings = () => {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex items-center justify-between p-3 sm:p-4 bg-muted/30 rounded-lg">
+              <div className="flex items-center justify-between p-4 bg-muted/30 rounded-lg">
                 <div>
-                  <div className="font-medium text-sm sm:text-base">Location Sharing</div>
-                  <div className="text-xs sm:text-sm text-muted-foreground">
+                  <div className="font-medium">Location Sharing</div>
+                  <div className="text-sm text-muted-foreground">
                     Allow others to see your location
                   </div>
                 </div>
@@ -498,7 +497,7 @@ const ModernSettings = () => {
                 <Button 
                   variant="outline" 
                   onClick={() => setShowPasswordReset(true)}
-                  className="w-full h-11 sm:h-12"
+                  className="w-full h-12"
                 >
                   Reset Password
                 </Button>
@@ -509,16 +508,16 @@ const ModernSettings = () => {
                     value={resetEmail}
                     onChange={(e) => setResetEmail(e.target.value)}
                     placeholder="Enter your email address"
-                    className="h-11 sm:h-12"
+                    className="h-12"
                   />
-                  <div className="flex flex-col sm:flex-row space-y-2 sm:space-y-0 sm:space-x-2">
-                    <Button onClick={sendPasswordReset} className="flex-1 h-11 sm:h-12">
+                  <div className="flex space-x-2">
+                    <Button onClick={sendPasswordReset} className="flex-1 h-12">
                       Send Reset Email
                     </Button>
                     <Button 
                       variant="outline" 
                       onClick={() => setShowPasswordReset(false)}
-                      className="h-11 sm:h-12"
+                      className="h-12"
                     >
                       Cancel
                     </Button>
@@ -529,7 +528,7 @@ const ModernSettings = () => {
           </Card>
 
           {/* Notifications & Sound */}
-          <Card className="card-modern">
+          <Card className="border-0 shadow-lg">
             <CardHeader className="pb-4">
               <CardTitle className="flex items-center justify-between text-lg">
                 <div className="flex items-center space-x-3">
@@ -542,12 +541,12 @@ const ModernSettings = () => {
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              <div className="flex items-center justify-between p-3 sm:p-4 bg-muted/30 rounded-lg">
+              <div className="flex items-center justify-between p-4 bg-muted/30 rounded-lg">
                 <div className="flex items-center space-x-3">
                   <Bell className="w-4 h-4" />
                   <div>
-                    <div className="font-medium text-sm sm:text-base">Push Notifications</div>
-                    <div className="text-xs sm:text-sm text-muted-foreground">Proximity alerts</div>
+                    <div className="font-medium">Push Notifications</div>
+                    <div className="text-sm text-muted-foreground">Proximity alerts</div>
                   </div>
                 </div>
                 <Switch
@@ -556,23 +555,23 @@ const ModernSettings = () => {
                 />
               </div>
 
-              <div className="flex items-center justify-between p-3 sm:p-4 bg-muted/30 rounded-lg">
+              <div className="flex items-center justify-between p-4 bg-muted/30 rounded-lg">
                 <div className="flex items-center space-x-3">
                   <Volume2 className="w-4 h-4" />
                   <div>
-                    <div className="font-medium text-sm sm:text-base">Sound Effects</div>
-                    <div className="text-xs sm:text-sm text-muted-foreground">Audio feedback</div>
+                    <div className="font-medium">Sound Effects</div>
+                    <div className="text-sm text-muted-foreground">Audio feedback</div>
                   </div>
                 </div>
                 <Switch checked={soundEnabled} onCheckedChange={setSoundEnabled} />
               </div>
 
-              <div className="flex items-center justify-between p-3 sm:p-4 bg-muted/30 rounded-lg">
+              <div className="flex items-center justify-between p-4 bg-muted/30 rounded-lg">
                 <div className="flex items-center space-x-3">
                   <Vibrate className="w-4 h-4" />
                   <div>
-                    <div className="font-medium text-sm sm:text-base">Haptic Feedback</div>
-                    <div className="text-xs sm:text-sm text-muted-foreground">Touch vibrations</div>
+                    <div className="font-medium">Haptic Feedback</div>
+                    <div className="text-sm text-muted-foreground">Touch vibrations</div>
                   </div>
                 </div>
                 <Switch checked={hapticEnabled} onCheckedChange={setHapticEnabled} />
@@ -582,7 +581,7 @@ const ModernSettings = () => {
         </div>
 
         {/* Device Info */}
-        <Card className="card-modern">
+        <Card className="border-0 shadow-lg">
           <CardHeader className="pb-4">
             <CardTitle className="flex items-center space-x-3 text-lg">
               <div className="p-2 rounded-lg bg-gray-100 dark:bg-gray-800">
@@ -593,19 +592,19 @@ const ModernSettings = () => {
           </CardHeader>
           <CardContent>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
-              <div className="text-center p-3 sm:p-4 bg-muted/30 rounded-lg">
+              <div className="text-center p-4 bg-muted/30 rounded-lg">
                 <div className="text-sm text-muted-foreground">Platform</div>
                 <Badge variant="outline" className="mt-2">
                   {navigator.userAgent.includes('Mobile') ? 'Mobile' : 'Desktop'}
                 </Badge>
               </div>
-              <div className="text-center p-3 sm:p-4 bg-muted/30 rounded-lg">
+              <div className="text-center p-4 bg-muted/30 rounded-lg">
                 <div className="text-sm text-muted-foreground">Text Direction</div>
                 <Badge variant="outline" className="mt-2">
                   {isRTL ? 'RTL' : 'LTR'}
                 </Badge>
               </div>
-              <div className="text-center p-3 sm:p-4 bg-muted/30 rounded-lg sm:col-span-2 lg:col-span-1">
+              <div className="text-center p-4 bg-muted/30 rounded-lg sm:col-span-2 lg:col-span-1">
                 <div className="text-sm text-muted-foreground">Version</div>
                 <Badge variant="outline" className="mt-2">v1.0.0</Badge>
               </div>
