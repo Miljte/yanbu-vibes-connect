@@ -1,8 +1,4 @@
 
-import { LocalNotifications } from '@capacitor/local-notifications';
-import { Geolocation } from '@capacitor/geolocation';
-import { Haptics, ImpactStyle } from '@capacitor/haptics';
-
 interface Place {
   id: string;
   name: string;
@@ -21,11 +17,40 @@ interface NotificationService {
 class ProximityNotificationService implements NotificationService {
   private notifiedPlaces = new Set<string>();
   private readonly PROXIMITY_THRESHOLD = 100; // 100 meters
+  private LocalNotifications: any = null;
+  private Haptics: any = null;
+
+  constructor() {
+    this.initializeCapacitorPlugins();
+  }
+
+  private async initializeCapacitorPlugins() {
+    try {
+      // Dynamically import Capacitor plugins to avoid errors in web environment
+      if (typeof window !== 'undefined' && 'Capacitor' in window) {
+        const { LocalNotifications } = await import('@capacitor/local-notifications');
+        const { Haptics, ImpactStyle } = await import('@capacitor/haptics');
+        this.LocalNotifications = LocalNotifications;
+        this.Haptics = { Haptics, ImpactStyle };
+      }
+    } catch (error) {
+      console.log('Capacitor plugins not available in web environment');
+    }
+  }
 
   async requestPermissions(): Promise<boolean> {
     try {
-      const result = await LocalNotifications.requestPermissions();
-      return result.display === 'granted';
+      if (this.LocalNotifications) {
+        const result = await this.LocalNotifications.requestPermissions();
+        return result.display === 'granted';
+      } else {
+        // Fallback to web notifications
+        if ('Notification' in window) {
+          const permission = await Notification.requestPermission();
+          return permission === 'granted';
+        }
+      }
+      return false;
     } catch (error) {
       console.error('Error requesting notification permissions:', error);
       return false;
@@ -36,23 +61,32 @@ class ProximityNotificationService implements NotificationService {
     if (this.notifiedPlaces.has(place.id)) return;
 
     try {
-      await LocalNotifications.schedule({
-        notifications: [
-          {
-            title: `🏪 ${place.name} Nearby!`,
-            body: `You're ${Math.round(distance)}m away from ${place.name}. Tap to explore!`,
-            id: Date.now(),
-            schedule: { at: new Date(Date.now() + 1000) },
-            sound: 'default',
-            attachments: undefined,
-            actionTypeId: '',
-            extra: {
-              placeId: place.id,
-              type: 'proximity'
+      if (this.LocalNotifications) {
+        // Use Capacitor notifications
+        await this.LocalNotifications.schedule({
+          notifications: [
+            {
+              title: `🏪 ${place.name} Nearby!`,
+              body: `You're ${Math.round(distance)}m away from ${place.name}. Tap to explore!`,
+              id: Date.now(),
+              schedule: { at: new Date(Date.now() + 1000) },
+              sound: 'default',
+              attachments: undefined,
+              actionTypeId: '',
+              extra: {
+                placeId: place.id,
+                type: 'proximity'
+              }
             }
-          }
-        ]
-      });
+          ]
+        });
+      } else if ('Notification' in window && Notification.permission === 'granted') {
+        // Fallback to web notifications
+        new Notification(`🏪 ${place.name} Nearby!`, {
+          body: `You're ${Math.round(distance)}m away from ${place.name}. Tap to explore!`,
+          icon: '/favicon.ico'
+        });
+      }
 
       this.notifiedPlaces.add(place.id);
       await this.vibrate();
@@ -69,7 +103,12 @@ class ProximityNotificationService implements NotificationService {
 
   async vibrate(): Promise<void> {
     try {
-      await Haptics.impact({ style: ImpactStyle.Light });
+      if (this.Haptics?.Haptics) {
+        await this.Haptics.Haptics.impact({ style: this.Haptics.ImpactStyle.Light });
+      } else if ('vibrate' in navigator) {
+        // Fallback to web vibration API
+        navigator.vibrate(200);
+      }
     } catch (error) {
       console.error('Error with haptic feedback:', error);
     }
