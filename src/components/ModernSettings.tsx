@@ -20,7 +20,8 @@ import {
   Save,
   Camera,
   Mail,
-  Calendar
+  Calendar,
+  LogOut
 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -141,11 +142,15 @@ const ModernSettings = () => {
 
   const handleSignOut = async () => {
     try {
-      await signOut();
-      toast.success('Signed out successfully');
+      setLoading(true);
+      const { error } = await signOut();
+      if (error) throw error;
+      toast.success('Successfully signed out');
     } catch (error) {
       console.error('Error signing out:', error);
       toast.error('Failed to sign out');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -454,13 +459,17 @@ const ModernSettings = () => {
           
           <Button
             onClick={handleSignOut}
-            variant="outline"
-            className="h-20 flex-col space-y-2 border-red-200 hover:bg-red-50 dark:border-red-800 dark:hover:bg-red-900/20 hover:scale-105 transition-all duration-300"
+            disabled={loading}
+            className="h-20 flex-col space-y-2 bg-gradient-to-br from-red-500 to-red-600 hover:from-red-600 hover:to-red-700 text-white border-0 hover:scale-105 transition-all duration-300"
           >
-            <div className="p-2 rounded-lg bg-red-100 dark:bg-red-900/20">
-              <X className="w-5 h-5 text-red-600 dark:text-red-400" />
+            <div className="p-2 rounded-lg bg-white/20">
+              {loading ? (
+                <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+              ) : (
+                <LogOut className="w-5 h-5" />
+              )}
             </div>
-            <span className="text-xs font-medium text-red-600 dark:text-red-400">Sign Out</span>
+            <span className="text-xs font-medium">{loading ? 'Signing Out...' : 'Sign Out'}</span>
           </Button>
         </div>
 

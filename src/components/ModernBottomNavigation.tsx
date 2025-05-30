@@ -1,6 +1,6 @@
 
 import React from 'react';
-import { MapPin, Calendar, Settings, Crown, Store } from 'lucide-react';
+import { MapPin, Calendar, Settings, Crown, Store, User } from 'lucide-react';
 import { useLocalization } from '@/contexts/LocalizationContext';
 
 interface NavigationItem {
@@ -40,6 +40,12 @@ const ModernBottomNavigation: React.FC<ModernBottomNavigationProps> = ({
       id: 'events',
       labelKey: 'nav.events',
       icon: <Calendar className="w-5 h-5" />,
+      show: true
+    },
+    {
+      id: 'profile',
+      labelKey: 'nav.profile',
+      icon: <User className="w-5 h-5" />,
       show: true
     },
     {
@@ -90,7 +96,7 @@ const ModernBottomNavigation: React.FC<ModernBottomNavigationProps> = ({
               <button
                 key={item.id}
                 onClick={() => handleItemClick(item.id)}
-                className={`flex flex-col items-center space-y-1 px-3 py-2 rounded-lg transition-all duration-200 ${
+                className={`flex flex-col items-center space-y-1 px-2 py-2 rounded-lg transition-all duration-200 min-w-0 ${
                   isActive
                     ? 'bg-primary text-primary-foreground'
                     : isMapRestricted

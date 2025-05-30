@@ -1,124 +1,96 @@
 
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import { useRoles } from '@/hooks/useRoles';
-import { useRealtimeLocation } from '@/hooks/useRealtimeLocation';
-import { useState, useEffect } from 'react';
-import AuthModal from '@/components/AuthModal';
+import { useYanbuLocationCheck } from '@/hooks/useYanbuLocationCheck';
 import ModernBottomNavigation from '@/components/ModernBottomNavigation';
 import ModernMap from '@/components/ModernMap';
-import ModernProfile from '@/components/ModernProfile';
 import ModernEvents from '@/components/ModernEvents';
-import EnhancedSettings from '@/components/EnhancedSettings';
-import EnhancedMerchantDashboard from '@/components/EnhancedMerchantDashboard';
-import SuperAdminDashboard from '@/components/SuperAdminDashboard';
-import LocationRestrictionScreen from '@/components/LocationRestrictionScreen';
+import ModernSettings from '@/components/ModernSettings';
+import UserProfile from '@/components/UserProfile';
+import AuthModal from '@/components/AuthModal';
 import OnboardingTutorial from '@/components/OnboardingTutorial';
-import { proximityNotifications } from '@/services/ProximityNotifications';
+import LocationRestrictionScreen from '@/components/LocationRestrictionScreen';
+import FullMerchantDashboard from '@/components/FullMerchantDashboard';
+import EnhancedAdminPanel from '@/components/EnhancedAdminPanel';
 
 const Index = () => {
-  const { user, loading } = useAuth();
-  const { userRole, isAdmin, isMerchant } = useRoles();
-  const [currentView, setCurrentView] = useState('map');
+  const [activeSection, setActiveSection] = useState('events');
+  const [showAuth, setShowAuth] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
-  
-  // Start real-time location tracking for logged-in users
-  const { location, error: locationError, isTracking, isInYanbu } = useRealtimeLocation();
+  const { user, userRole, loading } = useAuth();
+  const { isInYanbu, loading: locationLoading } = useYanbuLocationCheck();
 
-  // Check if user needs onboarding
   useEffect(() => {
-    if (user) {
-      const hasSeenOnboarding = localStorage.getItem(`onboarding_${user.id}`);
+    if (!loading && !user) {
+      setShowAuth(true);
+    } else if (user && !loading) {
+      setShowAuth(false);
+      const hasSeenOnboarding = localStorage.getItem('hasSeenOnboarding');
       if (!hasSeenOnboarding) {
         setShowOnboarding(true);
       }
-      
-      // Initialize proximity notifications
-      proximityNotifications.requestPermissions();
     }
-  }, [user]);
+  }, [user, loading]);
 
-  const handleOnboardingComplete = () => {
-    if (user) {
-      localStorage.setItem(`onboarding_${user.id}`, 'true');
+  useEffect(() => {
+    if (isInYanbu === false && userRole !== 'admin' && activeSection === 'map') {
+      setActiveSection('events');
     }
+  }, [isInYanbu, userRole, activeSection]);
+
+  const handleCompleteOnboarding = () => {
+    localStorage.setItem('hasSeenOnboarding', 'true');
     setShowOnboarding(false);
   };
 
-  if (loading) {
+  if (loading || locationLoading) {
     return (
-      <div className="min-h-screen bg-background flex items-center justify-center">
-        <div className="text-foreground animate-pulse">Loading...</div>
+      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <div className="w-16 h-16 border-4 border-cyan-500/30 border-t-cyan-500 rounded-full animate-spin mx-auto"></div>
+          <p className="text-white text-lg">Loading...</p>
+        </div>
       </div>
     );
   }
 
-  if (!user) {
-    return <AuthModal isOpen={true} onClose={() => {}} />;
+  if (showAuth) {
+    return <AuthModal isOpen={true} onClose={() => setShowAuth(false)} />;
   }
 
-  // Handle location-based restrictions
-  const handleLocationRetry = () => {
-    window.location.reload(); // Force location recheck
-  };
-
-  // If user is outside Yanbu and trying to access map, show restriction screen
-  if (isInYanbu === false && currentView === 'map') {
-    return (
-      <LocationRestrictionScreen
-        onRetry={handleLocationRetry}
-        isChecking={isInYanbu === null}
-        onNavigateToEvents={() => setCurrentView('events')}
-        onNavigateToProfile={() => setCurrentView('profile')}
-      />
-    );
+  if (showOnboarding) {
+    return <OnboardingTutorial onComplete={handleCompleteOnboarding} />;
   }
 
-  const renderCurrentView = () => {
-    switch (currentView) {
+  if (isInYanbu === false && userRole !== 'admin') {
+    return <LocationRestrictionScreen />;
+  }
+
+  const renderActiveSection = () => {
+    switch (activeSection) {
       case 'map':
-        // Only render map if user is in Yanbu or admin override
-        if (isInYanbu === true || isAdmin) {
-          return <ModernMap />;
-        }
-        // Fallback to events if map not accessible
-        return <ModernEvents />;
+        return <ModernMap />;
       case 'events':
         return <ModernEvents />;
       case 'profile':
-        return <ModernProfile />;
+        return <UserProfile />;
       case 'settings':
-        return <EnhancedSettings />;
+        return <ModernSettings />;
       case 'merchant':
-        return isMerchant ? <EnhancedMerchantDashboard /> : <ModernEvents />;
+        return <FullMerchantDashboard />;
       case 'admin':
-        return isAdmin ? <SuperAdminDashboard /> : <ModernEvents />;
-      case 'super-admin':
-        return isAdmin ? <SuperAdminDashboard /> : <ModernEvents />;
+        return <EnhancedAdminPanel />;
       default:
-        return <ModernEvents />; // Default to events instead of map
+        return <ModernEvents />;
     }
   };
 
   return (
     <div className="min-h-screen bg-background">
-      {/* Location error notification - only show if not a restriction issue */}
-      {locationError && isInYanbu !== false && (
-        <div className="fixed top-4 left-4 right-4 bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded z-50 animate-slide-in-right">
-          <span className="block sm:inline">{locationError}</span>
-        </div>
-      )}
-      
-      {/* Onboarding Tutorial */}
-      <OnboardingTutorial 
-        isOpen={showOnboarding} 
-        onComplete={handleOnboardingComplete} 
-      />
-      
-      {renderCurrentView()}
-      <ModernBottomNavigation 
-        activeSection={currentView} 
-        onSectionChange={setCurrentView}
+      {renderActiveSection()}
+      <ModernBottomNavigation
+        activeSection={activeSection}
+        onSectionChange={setActiveSection}
         userRole={userRole}
         isInYanbu={isInYanbu}
       />
