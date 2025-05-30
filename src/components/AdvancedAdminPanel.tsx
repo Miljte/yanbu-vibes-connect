@@ -73,11 +73,11 @@ const AdvancedAdminPanel = () => {
       }
 
       // Get auth users for email information (admin only operation)
-      let authUsersMap = new Map();
+      let authUsersMap = new Map<string, string>();
       try {
         const { data: authData } = await supabase.auth.admin.listUsers();
         if (authData?.users) {
-          authUsersMap = new Map(authData.users.map(u => [u.id, u.email]));
+          authUsersMap = new Map(authData.users.map(u => [u.id, u.email || '']));
           console.log(`📧 Found email data for ${authData.users.length} auth users`);
         }
       } catch (authError) {
