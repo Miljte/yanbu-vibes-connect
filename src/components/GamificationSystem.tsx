@@ -53,89 +53,37 @@ const GamificationSystem: React.FC = () => {
   useEffect(() => {
     if (user) {
       fetchUserStats();
-      setupRealtimeSubscription();
     }
   }, [user]);
-
-  const setupRealtimeSubscription = () => {
-    if (!user) return;
-
-    const channel = supabase
-      .channel('user-stats-changes')
-      .on(
-        'postgres_changes',
-        {
-          event: '*',
-          schema: 'public',
-          table: 'user_stats',
-          filter: `user_id=eq.${user.id}`
-        },
-        (payload) => {
-          if (payload.eventType === 'UPDATE' || payload.eventType === 'INSERT') {
-            const newData = payload.new as any;
-            setUserStats(prev => ({
-              placesVisited: newData.places_visited || 0,
-              messagesSent: newData.messages_sent || 0,
-              daysActive: newData.days_active || 1,
-              level: newData.level || 1,
-              totalPoints: newData.total_points || 0,
-              lastDailyReward: newData.last_daily_reward
-            }));
-          }
-        }
-      )
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
-  };
 
   const fetchUserStats = async () => {
     if (!user) return;
 
     try {
-      // First try to get existing stats
-      const { data: existingStats, error: fetchError } = await supabase
-        .rpc('execute_sql', {
-          query: `SELECT * FROM user_stats WHERE user_id = '${user.id}'`
-        });
+      // Get chat messages count
+      const { data: messagesData } = await supabase
+        .from('chat_messages')
+        .select('id')
+        .eq('user_id', user.id);
 
-      if (fetchError) {
-        console.log('Stats table might not exist yet, using defaults');
-        setUserStats({
-          placesVisited: 0,
-          messagesSent: 0,
-          daysActive: 1,
-          level: 1,
-          totalPoints: 0,
-          lastDailyReward: null
-        });
-      } else if (existingStats && existingStats.length > 0) {
-        const stats = existingStats[0];
-        setUserStats({
-          placesVisited: stats.places_visited || 0,
-          messagesSent: stats.messages_sent || 0,
-          daysActive: stats.days_active || 1,
-          level: stats.level || 1,
-          totalPoints: stats.total_points || 0,
-          lastDailyReward: stats.last_daily_reward
-        });
-      } else {
-        // Create initial stats record using SQL function
-        await supabase.rpc('execute_sql', {
-          query: `
-            INSERT INTO user_stats (user_id, places_visited, messages_sent, days_active, level, total_points)
-            VALUES ('${user.id}', 0, 0, 1, 1, 0)
-            ON CONFLICT (user_id) DO NOTHING
-          `
-        });
-      }
+      const messagesSent = messagesData?.length || 0;
+      
+      // Calculate level and points based on messages
+      const totalPoints = messagesSent * 10;
+      const level = Math.floor(totalPoints / 100) + 1;
 
-      initializeAchievements();
+      setUserStats({
+        placesVisited: 0, // Will be implemented when place visits are tracked
+        messagesSent,
+        daysActive: 1,
+        level,
+        totalPoints,
+        lastDailyReward: null
+      });
+
+      initializeAchievements(messagesSent);
     } catch (error) {
       console.error('Error fetching user stats:', error);
-      // Fallback to defaults
       setUserStats({
         placesVisited: 0,
         messagesSent: 0,
@@ -144,21 +92,21 @@ const GamificationSystem: React.FC = () => {
         totalPoints: 0,
         lastDailyReward: null
       });
-      initializeAchievements();
+      initializeAchievements(0);
     } finally {
       setLoading(false);
     }
   };
 
-  const initializeAchievements = () => {
+  const initializeAchievements = (messagesSent: number) => {
     const achievementsList: Achievement[] = [
       {
         id: 'first_message',
         name: 'First Steps',
         description: 'Send your first message',
         icon: <MessageSquare className="w-6 h-6" />,
-        unlocked: userStats.messagesSent >= 1,
-        progress: Math.min(userStats.messagesSent, 1),
+        unlocked: messagesSent >= 1,
+        progress: Math.min(messagesSent, 1),
         maxProgress: 1
       },
       {
@@ -166,8 +114,8 @@ const GamificationSystem: React.FC = () => {
         name: 'Social Butterfly',
         description: 'Send 10 messages',
         icon: <MessageSquare className="w-6 h-6" />,
-        unlocked: userStats.messagesSent >= 10,
-        progress: Math.min(userStats.messagesSent, 10),
+        unlocked: messagesSent >= 10,
+        progress: Math.min(messagesSent, 10),
         maxProgress: 10
       },
       {
@@ -218,20 +166,7 @@ const GamificationSystem: React.FC = () => {
       const newTotalPoints = userStats.totalPoints + points;
       const newLevel = Math.floor(newTotalPoints / 100) + 1;
       
-      // Update using SQL since table might not be in types yet
-      await supabase.rpc('execute_sql', {
-        query: `
-          UPDATE user_stats 
-          SET 
-            total_points = ${newTotalPoints},
-            level = ${newLevel},
-            last_daily_reward = '${new Date().toISOString()}',
-            updated_at = '${new Date().toISOString()}'
-          WHERE user_id = '${user.id}'
-        `
-      });
-
-      // Update local state
+      // For now, just update local state - will be connected to database later
       setUserStats(prev => ({
         ...prev,
         totalPoints: newTotalPoints,

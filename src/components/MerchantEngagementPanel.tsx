@@ -125,30 +125,41 @@ const MerchantEngagementPanel = () => {
       const selectedStoreData = merchantStores.find(store => store.id === selectedStore);
       if (!selectedStoreData) return;
 
-      // Use the new user activity view for comprehensive data
-      const { data: userActivity, error } = await supabase
-        .from('user_activity_summary')
-        .select('*')
-        .not('latitude', 'is', null)
-        .not('longitude', 'is', null)
-        .gte('last_seen', new Date(Date.now() - 30 * 60 * 1000).toISOString());
+      // Get recent user locations and profiles
+      const { data: locations, error: locError } = await supabase
+        .from('user_locations')
+        .select(`
+          user_id,
+          latitude,
+          longitude,
+          updated_at
+        `)
+        .gte('updated_at', new Date(Date.now() - 30 * 60 * 1000).toISOString());
 
-      if (error) throw error;
+      if (locError) throw locError;
 
-      const usersWithDistance = userActivity?.map(user => {
+      // Get user profiles for those with recent locations
+      const userIds = locations?.map(loc => loc.user_id) || [];
+      const { data: profiles } = await supabase
+        .from('profiles')
+        .select('id, nickname')
+        .in('id', userIds);
+
+      const usersWithDistance = locations?.map(location => {
+        const profile = profiles?.find(p => p.id === location.user_id);
         const distance = calculateDistance(
           selectedStoreData.latitude,
           selectedStoreData.longitude,
-          user.latitude,
-          user.longitude
+          location.latitude,
+          location.longitude
         );
 
         return {
-          id: user.id,
-          nickname: user.nickname || 'Anonymous',
+          id: location.user_id,
+          nickname: profile?.nickname || 'Anonymous',
           distance: Math.round(distance),
-          last_seen: user.last_seen,
-          status: user.status
+          last_seen: location.updated_at,
+          status: new Date(location.updated_at) > new Date(Date.now() - 10 * 60 * 1000) ? 'online' : 'recently_active'
         };
       }).filter(user => user.distance <= 2000) || [];
 
@@ -180,14 +191,6 @@ const MerchantEngagementPanel = () => {
 
       if (messagesError) throw messagesError;
 
-      // Get total visits from the new place_visits table
-      const { data: visitsData, error: visitsError } = await supabase
-        .from('place_visits')
-        .select('id')
-        .eq('place_id', selectedStore);
-
-      if (visitsError) throw visitsError;
-
       // Get offers count
       const { data: offersData, error: offersError } = await supabase
         .from('offers')
@@ -198,13 +201,12 @@ const MerchantEngagementPanel = () => {
       if (offersError) throw offersError;
 
       const chatMessagesToday = messagesData?.length || 0;
-      const totalVisits = visitsData?.length || 0;
       const engagementRate = nearbyUsers.length > 0 ? Math.round((chatMessagesToday / nearbyUsers.length) * 100) : 0;
 
       setStoreStats(prev => ({
         ...prev,
         chat_messages_today: chatMessagesToday,
-        total_visits: totalVisits,
+        total_visits: 0, // Will be implemented when visits tracking is added
         engagement_rate: engagementRate,
         total_offers: offersData?.length || 0
       }));

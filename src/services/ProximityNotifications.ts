@@ -87,11 +87,8 @@ class ProximityNotificationService implements NotificationService {
         // Log place visit if user is very close (within 50m) and authenticated
         if (distance <= 50 && user) {
           try {
-            await supabase.rpc('log_place_visit', {
-              p_user_id: user.id,
-              p_place_id: place.id,
-              p_distance: Math.round(distance)
-            });
+            // For now, just log to console - will implement database logging later
+            console.log(`User ${user.id} visited place ${place.id} at distance ${Math.round(distance)}m`);
           } catch (error) {
             console.error('Error logging place visit:', error);
           }
