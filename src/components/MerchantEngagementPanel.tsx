@@ -1,9 +1,8 @@
 
 import React, { useState, useEffect } from 'react';
-import { Send, Users, MapPin, Megaphone, BarChart3, Eye, Image, Gift } from 'lucide-react';
+import { Send, Users, MapPin, Megaphone, BarChart3, Eye, Gift } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/hooks/useAuth';
@@ -16,6 +15,7 @@ interface NearbyUser {
   nickname: string;
   distance: number;
   last_seen: string;
+  status: string;
 }
 
 interface StoreStats {
@@ -41,23 +41,63 @@ const MerchantEngagementPanel = () => {
   const [loading, setLoading] = useState(false);
   
   const { user } = useAuth();
-  const { location, calculateDistance } = useRealtimeLocation();
+  const { calculateDistance } = useRealtimeLocation();
 
   useEffect(() => {
     if (user) {
       fetchMerchantStores();
-      fetchNearbyUsers();
-      fetchStoreStats();
+      setupRealtimeSubscriptions();
       
-      // Set up real-time updates
       const interval = setInterval(() => {
         fetchNearbyUsers();
         fetchStoreStats();
-      }, 30000); // Update every 30 seconds
+      }, 30000);
 
       return () => clearInterval(interval);
     }
   }, [user, selectedStore]);
+
+  const setupRealtimeSubscriptions = () => {
+    if (!user) return;
+
+    // Subscribe to real-time location updates
+    const locationChannel = supabase
+      .channel('location-updates')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'user_locations'
+        },
+        () => {
+          fetchNearbyUsers();
+        }
+      )
+      .subscribe();
+
+    // Subscribe to chat message updates
+    const messageChannel = supabase
+      .channel('message-updates')
+      .on(
+        'postgres_changes',
+        {
+          event: 'INSERT',
+          schema: 'public',
+          table: 'chat_messages',
+          filter: selectedStore ? `place_id=eq.${selectedStore}` : undefined
+        },
+        () => {
+          fetchStoreStats();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(locationChannel);
+      supabase.removeChannel(messageChannel);
+    };
+  };
 
   const fetchMerchantStores = async () => {
     try {
@@ -85,49 +125,35 @@ const MerchantEngagementPanel = () => {
       const selectedStoreData = merchantStores.find(store => store.id === selectedStore);
       if (!selectedStoreData) return;
 
-      // Get all users with recent locations (within last 30 minutes)
-      const { data: userLocations, error } = await supabase
-        .from('user_locations')
-        .select('user_id, latitude, longitude, updated_at')
-        .gte('updated_at', new Date(Date.now() - 30 * 60 * 1000).toISOString());
+      // Use the new user activity view for comprehensive data
+      const { data: userActivity, error } = await supabase
+        .from('user_activity_summary')
+        .select('*')
+        .not('latitude', 'is', null)
+        .not('longitude', 'is', null)
+        .gte('last_seen', new Date(Date.now() - 30 * 60 * 1000).toISOString());
 
       if (error) throw error;
 
-      // Get user profiles for the location users
-      const userIds = userLocations?.map(loc => loc.user_id) || [];
-      if (userIds.length === 0) {
-        setNearbyUsers([]);
-        return;
-      }
-
-      const { data: profiles, error: profilesError } = await supabase
-        .from('profiles')
-        .select('id, nickname')
-        .in('id', userIds);
-
-      if (profilesError) throw profilesError;
-
-      // Calculate distances and filter users within 2km
-      const usersWithDistance = userLocations?.map(userLoc => {
-        const userProfile = profiles?.find(p => p.id === userLoc.user_id);
+      const usersWithDistance = userActivity?.map(user => {
         const distance = calculateDistance(
           selectedStoreData.latitude,
           selectedStoreData.longitude,
-          userLoc.latitude,
-          userLoc.longitude
+          user.latitude,
+          user.longitude
         );
 
         return {
-          id: userLoc.user_id,
-          nickname: userProfile?.nickname || 'Anonymous',
+          id: user.id,
+          nickname: user.nickname || 'Anonymous',
           distance: Math.round(distance),
-          last_seen: userLoc.updated_at
+          last_seen: user.last_seen,
+          status: user.status
         };
-      }).filter(user => user.distance <= 2000) || []; // Within 2km
+      }).filter(user => user.distance <= 2000) || [];
 
       setNearbyUsers(usersWithDistance);
       
-      // Update nearby users count
       setStoreStats(prev => ({
         ...prev,
         nearby_users: usersWithDistance.length
@@ -142,10 +168,10 @@ const MerchantEngagementPanel = () => {
     if (!selectedStore) return;
 
     try {
-      // Get today's messages count
       const todayStart = new Date();
       todayStart.setHours(0, 0, 0, 0);
 
+      // Get today's messages
       const { data: messagesData, error: messagesError } = await supabase
         .from('chat_messages')
         .select('id')
@@ -154,13 +180,13 @@ const MerchantEngagementPanel = () => {
 
       if (messagesError) throw messagesError;
 
-      // Get total messages for engagement calculation
-      const { data: totalMessages, error: totalError } = await supabase
-        .from('chat_messages')
+      // Get total visits from the new place_visits table
+      const { data: visitsData, error: visitsError } = await supabase
+        .from('place_visits')
         .select('id')
         .eq('place_id', selectedStore);
 
-      if (totalError) throw totalError;
+      if (visitsError) throw visitsError;
 
       // Get offers count
       const { data: offersData, error: offersError } = await supabase
@@ -172,13 +198,13 @@ const MerchantEngagementPanel = () => {
       if (offersError) throw offersError;
 
       const chatMessagesToday = messagesData?.length || 0;
-      const totalChats = totalMessages?.length || 0;
+      const totalVisits = visitsData?.length || 0;
       const engagementRate = nearbyUsers.length > 0 ? Math.round((chatMessagesToday / nearbyUsers.length) * 100) : 0;
 
       setStoreStats(prev => ({
         ...prev,
         chat_messages_today: chatMessagesToday,
-        total_visits: totalChats,
+        total_visits: totalVisits,
         engagement_rate: engagementRate,
         total_offers: offersData?.length || 0
       }));
@@ -196,8 +222,6 @@ const MerchantEngagementPanel = () => {
 
     setLoading(true);
     try {
-      const selectedStoreData = merchantStores.find(store => store.id === selectedStore);
-      
       // Send promotion as a special message in the chat
       const { error } = await supabase
         .from('chat_messages')
@@ -211,7 +235,7 @@ const MerchantEngagementPanel = () => {
 
       if (error) throw error;
 
-      // Also create an offer record for tracking
+      // Create an offer record
       const { error: offerError } = await supabase
         .from('offers')
         .insert({
@@ -226,7 +250,7 @@ const MerchantEngagementPanel = () => {
 
       toast.success(`🎉 Promotion sent to ${nearbyUsers.length} nearby users!`);
       setPromotionText('');
-      fetchStoreStats(); // Refresh stats
+      fetchStoreStats();
       
     } catch (error) {
       console.error('Error sending promotion:', error);
@@ -240,7 +264,7 @@ const MerchantEngagementPanel = () => {
     <div className="space-y-6">
       <div className="mb-6">
         <h2 className="text-2xl font-bold text-foreground mb-2">🎯 Customer Engagement Hub</h2>
-        <p className="text-muted-foreground">Connect with nearby customers and boost your business</p>
+        <p className="text-muted-foreground">Connect with nearby customers in real-time</p>
       </div>
 
       {/* Store Selection */}
@@ -267,7 +291,7 @@ const MerchantEngagementPanel = () => {
         </Card>
       )}
 
-      {/* Enhanced Real-time Stats */}
+      {/* Real-time Stats */}
       <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
         <Card className="bg-card border">
           <CardContent className="p-4">
@@ -275,7 +299,7 @@ const MerchantEngagementPanel = () => {
               <Users className="w-5 h-5 text-blue-600" />
               <div>
                 <p className="text-2xl font-bold text-foreground">{storeStats.nearby_users}</p>
-                <p className="text-xs text-muted-foreground">Users Nearby (2km)</p>
+                <p className="text-xs text-muted-foreground">Users Nearby</p>
               </div>
             </div>
           </CardContent>
@@ -299,7 +323,7 @@ const MerchantEngagementPanel = () => {
               <BarChart3 className="w-5 h-5 text-purple-600" />
               <div>
                 <p className="text-2xl font-bold text-foreground">{storeStats.engagement_rate}%</p>
-                <p className="text-xs text-muted-foreground">Engagement Rate</p>
+                <p className="text-xs text-muted-foreground">Engagement</p>
               </div>
             </div>
           </CardContent>
@@ -308,10 +332,10 @@ const MerchantEngagementPanel = () => {
         <Card className="bg-card border">
           <CardContent className="p-4">
             <div className="flex items-center space-x-2">
-              <Megaphone className="w-5 h-5 text-orange-600" />
+              <MapPin className="w-5 h-5 text-orange-600" />
               <div>
                 <p className="text-2xl font-bold text-foreground">{storeStats.total_visits}</p>
-                <p className="text-xs text-muted-foreground">Total Interactions</p>
+                <p className="text-xs text-muted-foreground">Total Visits</p>
               </div>
             </div>
           </CardContent>
@@ -331,12 +355,12 @@ const MerchantEngagementPanel = () => {
       </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-        {/* Enhanced Promotion Panel */}
+        {/* Promotion Panel */}
         <Card className="bg-card border">
           <CardHeader>
             <CardTitle className="text-foreground flex items-center">
               <Megaphone className="w-5 h-5 mr-2" />
-              Send Promotion to Nearby Users
+              Send Real-time Promotion
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -348,7 +372,7 @@ const MerchantEngagementPanel = () => {
             />
             <div className="flex items-center justify-between">
               <span className="text-sm text-muted-foreground">
-                Will reach {storeStats.nearby_users} nearby users within 2km radius
+                Will reach {storeStats.nearby_users} nearby users
               </span>
               <Button
                 onClick={sendPromotionToNearbyUsers}
@@ -356,40 +380,18 @@ const MerchantEngagementPanel = () => {
                 className="bg-orange-600 hover:bg-orange-700"
               >
                 <Send className="w-4 h-4 mr-2" />
-                {loading ? 'Sending...' : 'Send Promotion'}
+                {loading ? 'Sending...' : 'Send Now'}
               </Button>
-            </div>
-            
-            {/* Promotion Templates */}
-            <div className="border-t pt-4">
-              <p className="text-sm font-medium text-foreground mb-2">Quick Templates:</p>
-              <div className="grid grid-cols-1 gap-2">
-                {[
-                  "🔥 Flash Sale: 20% off everything for the next hour!",
-                  "☕ Free coffee with any pastry purchase today only!",
-                  "🍕 Buy 2 pizzas, get 1 free - limited time offer!"
-                ].map((template, index) => (
-                  <Button
-                    key={index}
-                    variant="outline"
-                    size="sm"
-                    onClick={() => setPromotionText(template)}
-                    className="text-left justify-start text-xs h-auto py-2"
-                  >
-                    {template}
-                  </Button>
-                ))}
-              </div>
             </div>
           </CardContent>
         </Card>
 
-        {/* Enhanced Nearby Users */}
+        {/* Real-time Nearby Users */}
         <Card className="bg-card border">
           <CardHeader>
             <CardTitle className="text-foreground flex items-center">
               <Users className="w-5 h-5 mr-2" />
-              Nearby Customers ({nearbyUsers.length})
+              Live Nearby Customers ({nearbyUsers.length})
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -398,7 +400,6 @@ const MerchantEngagementPanel = () => {
                 <div className="text-center text-muted-foreground py-8">
                   <Users className="w-12 h-12 mx-auto mb-4 opacity-50" />
                   <p>No customers nearby at the moment</p>
-                  <p className="text-sm">Check back later or create an attractive offer!</p>
                 </div>
               ) : (
                 nearbyUsers.map(user => (
@@ -411,16 +412,25 @@ const MerchantEngagementPanel = () => {
                           : `${(user.distance / 1000).toFixed(1)}km away`
                         }
                       </div>
-                      <div className="text-xs text-muted-foreground">
-                        Last seen: {new Date(user.last_seen).toLocaleTimeString()}
-                      </div>
                     </div>
-                    <Badge 
-                      variant="secondary" 
-                      className={user.distance <= 500 ? "bg-green-100 text-green-800" : "bg-blue-100 text-blue-800"}
-                    >
-                      {user.distance <= 500 ? 'Very Close' : 'Nearby'}
-                    </Badge>
+                    <div className="flex flex-col items-end space-y-1">
+                      <Badge 
+                        variant="secondary" 
+                        className={
+                          user.status === 'online' ? "bg-green-100 text-green-800" :
+                          user.status === 'recently_active' ? "bg-yellow-100 text-yellow-800" :
+                          "bg-gray-100 text-gray-800"
+                        }
+                      >
+                        {user.status}
+                      </Badge>
+                      <Badge 
+                        variant="outline"
+                        className={user.distance <= 500 ? "border-green-500 text-green-700" : "border-blue-500 text-blue-700"}
+                      >
+                        {user.distance <= 500 ? 'Very Close' : 'Nearby'}
+                      </Badge>
+                    </div>
                   </div>
                 ))
               )}
@@ -428,44 +438,6 @@ const MerchantEngagementPanel = () => {
           </CardContent>
         </Card>
       </div>
-
-      {/* Enhanced Tips for Engagement */}
-      <Card className="bg-gradient-to-r from-blue-50 to-purple-50 dark:from-blue-900/20 dark:to-purple-900/20 border">
-        <CardHeader>
-          <CardTitle className="text-foreground">💡 Pro Engagement Tips</CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
-            <div>
-              <h4 className="font-semibold text-foreground mb-2">Best Times to Send Promotions:</h4>
-              <ul className="text-muted-foreground space-y-1">
-                <li>• Lunch hours (11 AM - 2 PM)</li>
-                <li>• Evening rush (5 PM - 8 PM)</li>
-                <li>• Weekend afternoons</li>
-                <li>• Special events & holidays</li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="font-semibold text-foreground mb-2">Effective Promotion Ideas:</h4>
-              <ul className="text-muted-foreground space-y-1">
-                <li>• "Flash Sale: 20% off for next hour!"</li>
-                <li>• "Free coffee with any pastry today"</li>
-                <li>• "Buy 2 get 1 free - limited time"</li>
-                <li>• "Happy hour: 50% off drinks!"</li>
-              </ul>
-            </div>
-            <div>
-              <h4 className="font-semibold text-foreground mb-2">Engagement Boosters:</h4>
-              <ul className="text-muted-foreground space-y-1">
-                <li>• Use emojis to grab attention</li>
-                <li>• Create urgency with time limits</li>
-                <li>• Offer exclusive mobile-only deals</li>
-                <li>• Share high-quality store images</li>
-              </ul>
-            </div>
-          </div>
-        </CardContent>
-      </Card>
     </div>
   );
 };

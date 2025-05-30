@@ -1,4 +1,6 @@
 
+import { supabase } from '@/integrations/supabase/client';
+
 interface Place {
   id: string;
   name: string;
@@ -39,7 +41,7 @@ class ProximityNotificationService implements NotificationService {
         new Notification(`🏪 ${place.name} Nearby!`, {
           body: `You're ${Math.round(distance)}m away from ${place.name}. Tap to explore!`,
           icon: '/favicon.ico',
-          tag: `place-${place.id}`, // Prevent duplicate notifications
+          tag: `place-${place.id}`,
           requireInteraction: false
         });
       }
@@ -68,6 +70,9 @@ class ProximityNotificationService implements NotificationService {
   }
 
   async checkNearbyPlaces(places: Place[], userLocation: { latitude: number; longitude: number }): Promise<void> {
+    // Get current user ID for logging visits
+    const { data: { user } } = await supabase.auth.getUser();
+    
     for (const place of places) {
       const distance = this.calculateDistance(
         userLocation.latitude,
@@ -78,6 +83,19 @@ class ProximityNotificationService implements NotificationService {
 
       if (distance <= this.PROXIMITY_THRESHOLD) {
         await this.scheduleProximityNotification(place, distance);
+        
+        // Log place visit if user is very close (within 50m) and authenticated
+        if (distance <= 50 && user) {
+          try {
+            await supabase.rpc('log_place_visit', {
+              p_user_id: user.id,
+              p_place_id: place.id,
+              p_distance: Math.round(distance)
+            });
+          } catch (error) {
+            console.error('Error logging place visit:', error);
+          }
+        }
       }
     }
   }

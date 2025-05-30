@@ -34,6 +34,7 @@ interface UserStats {
   daysActive: number;
   level: number;
   totalPoints: number;
+  lastDailyReward: string | null;
 }
 
 const GamificationSystem: React.FC = () => {
@@ -43,7 +44,8 @@ const GamificationSystem: React.FC = () => {
     messagesSent: 0,
     daysActive: 1,
     level: 1,
-    totalPoints: 0
+    totalPoints: 0,
+    lastDailyReward: null
   });
   const [achievements, setAchievements] = useState<Achievement[]>([]);
   const [loading, setLoading] = useState(true);
@@ -51,52 +53,82 @@ const GamificationSystem: React.FC = () => {
   useEffect(() => {
     if (user) {
       fetchUserStats();
-      initializeAchievements();
+      setupRealtimeSubscription();
     }
   }, [user]);
+
+  const setupRealtimeSubscription = () => {
+    if (!user) return;
+
+    const channel = supabase
+      .channel('user-stats-changes')
+      .on(
+        'postgres_changes',
+        {
+          event: '*',
+          schema: 'public',
+          table: 'user_stats',
+          filter: `user_id=eq.${user.id}`
+        },
+        (payload) => {
+          if (payload.eventType === 'UPDATE' || payload.eventType === 'INSERT') {
+            setUserStats(prev => ({
+              placesVisited: payload.new.places_visited || 0,
+              messagesSent: payload.new.messages_sent || 0,
+              daysActive: payload.new.days_active || 1,
+              level: payload.new.level || 1,
+              totalPoints: payload.new.total_points || 0,
+              lastDailyReward: payload.new.last_daily_reward
+            }));
+          }
+        }
+      )
+      .subscribe();
+
+    return () => {
+      supabase.removeChannel(channel);
+    };
+  };
 
   const fetchUserStats = async () => {
     if (!user) return;
 
     try {
-      // Get messages sent by user
-      const { data: messages, error: messagesError } = await supabase
-        .from('chat_messages')
+      // Get user stats from the new table
+      const { data: stats, error: statsError } = await supabase
+        .from('user_stats')
         .select('*')
-        .eq('user_id', user.id);
-
-      if (messagesError) {
-        console.error('Error fetching messages:', messagesError);
-      }
-
-      // Get user profile to check activity
-      const { data: profile, error: profileError } = await supabase
-        .from('profiles')
-        .select('*')
-        .eq('id', user.id)
+        .eq('user_id', user.id)
         .single();
 
-      if (profileError) {
-        console.error('Error fetching profile:', profileError);
+      if (statsError && statsError.code !== 'PGRST116') {
+        console.error('Error fetching user stats:', statsError);
       }
 
-      // Calculate stats based on available data
-      const messagesSent = messages?.length || 0;
-      const daysActive = profile ? 
-        Math.max(1, Math.floor((new Date().getTime() - new Date(profile.created_at).getTime()) / (1000 * 60 * 60 * 24))) : 1;
-      
-      // Simple point calculation
-      const totalPoints = (messagesSent * 10) + (daysActive * 5);
-      const level = Math.floor(totalPoints / 100) + 1;
+      if (stats) {
+        setUserStats({
+          placesVisited: stats.places_visited || 0,
+          messagesSent: stats.messages_sent || 0,
+          daysActive: stats.days_active || 1,
+          level: stats.level || 1,
+          totalPoints: stats.total_points || 0,
+          lastDailyReward: stats.last_daily_reward
+        });
+      } else {
+        // Create initial stats record
+        await supabase
+          .from('user_stats')
+          .insert({
+            user_id: user.id,
+            places_visited: 0,
+            messages_sent: 0,
+            days_active: 1,
+            level: 1,
+            total_points: 0
+          });
+      }
 
-      setUserStats({
-        placesVisited: 0, // This would need a separate tracking table
-        messagesSent,
-        daysActive,
-        level,
-        totalPoints
-      });
-
+      initializeAchievements();
     } catch (error) {
       console.error('Error fetching user stats:', error);
     } finally {
@@ -125,6 +157,15 @@ const GamificationSystem: React.FC = () => {
         maxProgress: 10
       },
       {
+        id: 'explorer',
+        name: 'Explorer',
+        description: 'Visit 5 different places',
+        icon: <MapPin className="w-6 h-6" />,
+        unlocked: userStats.placesVisited >= 5,
+        progress: Math.min(userStats.placesVisited, 5),
+        maxProgress: 5
+      },
+      {
         id: 'active_week',
         name: 'Week Warrior',
         description: 'Stay active for 7 days',
@@ -151,13 +192,25 @@ const GamificationSystem: React.FC = () => {
     if (!user) return;
 
     try {
-      // In a real implementation, you'd check if the user already claimed today
+      const today = new Date().toDateString();
+      const lastReward = userStats.lastDailyReward ? new Date(userStats.lastDailyReward).toDateString() : null;
+      
+      if (lastReward === today) {
+        toast.error('Daily reward already claimed today!');
+        return;
+      }
+
       const points = 50;
       
-      setUserStats(prev => ({
-        ...prev,
-        totalPoints: prev.totalPoints + points
-      }));
+      await supabase
+        .from('user_stats')
+        .update({
+          total_points: userStats.totalPoints + points,
+          level: Math.floor((userStats.totalPoints + points) / 100) + 1,
+          last_daily_reward: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        })
+        .eq('user_id', user.id);
 
       toast.success(`Daily reward claimed! +${points} points`);
     } catch (error) {
@@ -175,6 +228,13 @@ const GamificationSystem: React.FC = () => {
       </Card>
     );
   }
+
+  const canClaimDailyReward = () => {
+    if (!userStats.lastDailyReward) return true;
+    const today = new Date().toDateString();
+    const lastReward = new Date(userStats.lastDailyReward).toDateString();
+    return lastReward !== today;
+  };
 
   return (
     <Card>
@@ -204,14 +264,19 @@ const GamificationSystem: React.FC = () => {
         </div>
 
         {/* Stats Grid */}
-        <div className="grid grid-cols-2 gap-4">
+        <div className="grid grid-cols-3 gap-4">
           <div className="text-center p-3 bg-muted rounded-lg">
             <MessageSquare className="w-6 h-6 mx-auto mb-1 text-blue-500" />
             <div className="text-lg font-semibold">{userStats.messagesSent}</div>
             <div className="text-xs text-muted-foreground">Messages</div>
           </div>
           <div className="text-center p-3 bg-muted rounded-lg">
-            <Calendar className="w-6 h-6 mx-auto mb-1 text-green-500" />
+            <MapPin className="w-6 h-6 mx-auto mb-1 text-green-500" />
+            <div className="text-lg font-semibold">{userStats.placesVisited}</div>
+            <div className="text-xs text-muted-foreground">Places</div>
+          </div>
+          <div className="text-center p-3 bg-muted rounded-lg">
+            <Calendar className="w-6 h-6 mx-auto mb-1 text-purple-500" />
             <div className="text-lg font-semibold">{userStats.daysActive}</div>
             <div className="text-xs text-muted-foreground">Days Active</div>
           </div>
@@ -224,11 +289,17 @@ const GamificationSystem: React.FC = () => {
               <Zap className="w-5 h-5 text-yellow-600" />
               <div>
                 <div className="font-medium">Daily Reward</div>
-                <div className="text-sm text-muted-foreground">Claim 50 points</div>
+                <div className="text-sm text-muted-foreground">
+                  {canClaimDailyReward() ? 'Claim 50 points' : 'Come back tomorrow'}
+                </div>
               </div>
             </div>
-            <Button size="sm" onClick={claimDailyReward}>
-              Claim
+            <Button 
+              size="sm" 
+              onClick={claimDailyReward}
+              disabled={!canClaimDailyReward()}
+            >
+              {canClaimDailyReward() ? 'Claim' : 'Claimed'}
             </Button>
           </div>
         </div>

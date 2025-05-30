@@ -1,7 +1,7 @@
-
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
+import { proximityNotifications } from '@/services/ProximityNotifications';
 
 interface LocationData {
   latitude: number;
