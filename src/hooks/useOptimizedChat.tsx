@@ -1,3 +1,4 @@
+
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
@@ -37,7 +38,7 @@ export const useOptimizedChat = ({
   const { user } = useAuth();
   const { canSendMessage, getMuteMessage } = useChatValidation();
 
-  // Throttled fetch to prevent excessive API calls
+  // Optimized fetch to prevent excessive API calls
   const fetchMessages = useCallback(async () => {
     if (!placeId || !isWithinRange) {
       setMessages([]);
@@ -50,6 +51,8 @@ export const useOptimizedChat = ({
 
     setLoading(true);
     try {
+      console.log('🔄 Fetching messages for place:', placeId);
+      
       const { data: messagesData, error } = await supabase
         .from('chat_messages')
         .select(`
@@ -67,7 +70,12 @@ export const useOptimizedChat = ({
         .order('created_at', { ascending: true })
         .limit(messageLimit);
 
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Error fetching messages:', error);
+        throw error;
+      }
+
+      console.log('✅ Fetched', messagesData?.length || 0, 'messages');
 
       // Batch fetch user nicknames to reduce queries
       const userIds = [...new Set(messagesData?.map(msg => msg.user_id).filter(Boolean) || [])];
@@ -92,26 +100,30 @@ export const useOptimizedChat = ({
 
       setMessages(messagesWithUsers);
     } catch (error) {
-      console.error('Error fetching messages:', error);
+      console.error('❌ Error fetching messages:', error);
+      toast.error('Failed to load messages');
     } finally {
       setLoading(false);
     }
   }, [placeId, isWithinRange, messageLimit]);
 
-  // Optimized real-time subscription
+  // Real-time subscription management
   useEffect(() => {
     if (!placeId || !isWithinRange) {
       // Clean up existing subscription
       if (channelRef.current) {
+        console.log('🧹 Cleaning up chat subscription');
         supabase.removeChannel(channelRef.current);
         channelRef.current = null;
       }
+      setMessages([]);
       return;
     }
 
+    console.log('🔌 Setting up chat subscription for place:', placeId);
     fetchMessages();
 
-    // Create new subscription only when needed
+    // Create new subscription
     const channel = supabase
       .channel(`optimized_chat_${placeId}`)
       .on('postgres_changes', {
@@ -120,6 +132,8 @@ export const useOptimizedChat = ({
         table: 'chat_messages',
         filter: `place_id=eq.${placeId}`
       }, async (payload) => {
+        console.log('📩 New message received:', payload.new);
+        
         // Get user nickname for new message
         const { data: profileData } = await supabase
           .from('profiles')
@@ -148,15 +162,27 @@ export const useOptimizedChat = ({
         table: 'chat_messages',
         filter: `place_id=eq.${placeId}`
       }, () => {
-        // Refresh on updates (deletions, etc.)
+        console.log('🔄 Message updated, refreshing...');
         fetchMessages();
       })
-      .subscribe();
+      .on('postgres_changes', {
+        event: 'DELETE',
+        schema: 'public',
+        table: 'chat_messages',
+        filter: `place_id=eq.${placeId}`
+      }, () => {
+        console.log('🗑️ Message deleted, refreshing...');
+        fetchMessages();
+      })
+      .subscribe((status) => {
+        console.log('📡 Subscription status:', status);
+      });
 
     channelRef.current = channel;
 
     return () => {
       if (channelRef.current) {
+        console.log('🧹 Cleaning up chat subscription on unmount');
         supabase.removeChannel(channelRef.current);
         channelRef.current = null;
       }
@@ -173,6 +199,8 @@ export const useOptimizedChat = ({
 
     setSending(true);
     try {
+      console.log('📤 Sending message to place:', placeId);
+      
       const { error } = await supabase
         .from('chat_messages')
         .insert({
@@ -183,10 +211,15 @@ export const useOptimizedChat = ({
           is_promotion: false
         });
 
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Error sending message:', error);
+        throw error;
+      }
+
+      console.log('✅ Message sent successfully');
       return true;
     } catch (error) {
-      console.error('Error sending message:', error);
+      console.error('❌ Error sending message:', error);
       toast.error('Failed to send message');
       return false;
     } finally {

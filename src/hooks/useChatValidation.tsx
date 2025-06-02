@@ -12,6 +12,8 @@ export const useChatValidation = () => {
   useEffect(() => {
     if (!user) {
       setLoading(false);
+      setIsMuted(false);
+      setIsBanned(false);
       return;
     }
 
@@ -46,7 +48,7 @@ export const useChatValidation = () => {
 
     try {
       setLoading(true);
-      console.log('🔍 Checking mute and ban status for user:', user.id);
+      console.log('🔍 Checking moderation status for user:', user.id);
       
       // Check mute status - get most recent active mute
       const { data: muteData, error: muteError } = await supabase

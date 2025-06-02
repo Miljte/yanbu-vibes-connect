@@ -1,11 +1,13 @@
+
 import React, { useState, useEffect } from 'react';
-import { Store, Image, Calendar, Gift, Users, BarChart3, MapPin } from 'lucide-react';
+import { Store, Image, Calendar, Gift, Users, BarChart3, MapPin, Trash2 } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Badge } from '@/components/ui/badge';
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -13,7 +15,6 @@ import MediaUpload from './MediaUpload';
 import OfferManager from './OfferManager';
 import MerchantEngagementPanel from './MerchantEngagementPanel';
 
-// Import types from Supabase
 import type { Database } from '@/integrations/supabase/types';
 
 type PlaceType = Database['public']['Tables']['places']['Row']['type'];
@@ -37,7 +38,7 @@ const EnhancedMerchantDashboard = () => {
   const [formData, setFormData] = useState({
     name: '',
     description: '',
-    type: 'restaurant' as PlaceType, // Type assertion to ensure it's a valid place type
+    type: 'restaurant' as PlaceType,
     address: '',
     latitude: 24.0892,
     longitude: 38.0618,
@@ -81,7 +82,6 @@ const EnhancedMerchantDashboard = () => {
       const placeData = {
         ...formData,
         merchant_id: user.id,
-        // Ensure type is correctly typed as PlaceType
         type: formData.type as PlaceType
       };
 
@@ -107,6 +107,67 @@ const EnhancedMerchantDashboard = () => {
     } catch (error) {
       console.error('Error saving place:', error);
       toast.error('Failed to save store');
+    }
+  };
+
+  const handleDeletePlace = async (placeId: string) => {
+    if (!user || !placeId) return;
+
+    try {
+      // First delete related data
+      console.log('🗑️ Starting store deletion process for:', placeId);
+
+      // Delete related chat messages
+      const { error: messagesError } = await supabase
+        .from('chat_messages')
+        .delete()
+        .eq('place_id', placeId);
+
+      if (messagesError) {
+        console.error('Error deleting messages:', messagesError);
+      }
+
+      // Delete related offers
+      const { error: offersError } = await supabase
+        .from('offers')
+        .delete()
+        .eq('place_id', placeId);
+
+      if (offersError) {
+        console.error('Error deleting offers:', offersError);
+      }
+
+      // Delete related events
+      const { error: eventsError } = await supabase
+        .from('events')
+        .delete()
+        .eq('place_id', placeId);
+
+      if (eventsError) {
+        console.error('Error deleting events:', eventsError);
+      }
+
+      // Finally delete the place
+      const { error: placeError } = await supabase
+        .from('places')
+        .delete()
+        .eq('id', placeId)
+        .eq('merchant_id', user.id); // Ensure only the owner can delete
+
+      if (placeError) throw placeError;
+
+      console.log('✅ Store deleted successfully');
+      toast.success('Store deleted successfully!');
+      
+      // Reset selection if the deleted place was selected
+      if (selectedPlace?.id === placeId) {
+        setSelectedPlace(null);
+      }
+      
+      fetchMerchantPlaces();
+    } catch (error) {
+      console.error('Error deleting place:', error);
+      toast.error('Failed to delete store');
     }
   };
 
@@ -188,9 +249,41 @@ const EnhancedMerchantDashboard = () => {
                           <h4 className="font-medium text-foreground">{place.name}</h4>
                           <p className="text-sm text-muted-foreground">{place.type}</p>
                         </div>
-                        <Badge variant={place.is_active ? "default" : "secondary"}>
-                          {place.is_active ? 'Active' : 'Inactive'}
-                        </Badge>
+                        <div className="flex items-center space-x-2">
+                          <Badge variant={place.is_active ? "default" : "secondary"}>
+                            {place.is_active ? 'Active' : 'Inactive'}
+                          </Badge>
+                          <AlertDialog>
+                            <AlertDialogTrigger asChild>
+                              <Button
+                                variant="outline"
+                                size="icon"
+                                className="h-8 w-8 text-red-600 hover:text-red-700 hover:bg-red-50"
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                <Trash2 className="w-4 h-4" />
+                              </Button>
+                            </AlertDialogTrigger>
+                            <AlertDialogContent>
+                              <AlertDialogHeader>
+                                <AlertDialogTitle>Delete Store</AlertDialogTitle>
+                                <AlertDialogDescription>
+                                  Are you sure you want to delete "{place.name}"? This action cannot be undone.
+                                  All related data including messages, offers, and events will be permanently deleted.
+                                </AlertDialogDescription>
+                              </AlertDialogHeader>
+                              <AlertDialogFooter>
+                                <AlertDialogCancel>Cancel</AlertDialogCancel>
+                                <AlertDialogAction
+                                  onClick={() => handleDeletePlace(place.id!)}
+                                  className="bg-red-600 hover:bg-red-700"
+                                >
+                                  Delete Store
+                                </AlertDialogAction>
+                              </AlertDialogFooter>
+                            </AlertDialogContent>
+                          </AlertDialog>
+                        </div>
                       </div>
                     </div>
                   ))}
@@ -274,9 +367,11 @@ const EnhancedMerchantDashboard = () => {
                       <CardHeader>
                         <CardTitle className="text-foreground flex items-center justify-between">
                           <span>{selectedPlace.name}</span>
-                          <Button onClick={() => startEditing(selectedPlace)}>
-                            Edit Store
-                          </Button>
+                          <div className="flex space-x-2">
+                            <Button onClick={() => startEditing(selectedPlace)}>
+                              Edit Store
+                            </Button>
+                          </div>
                         </CardTitle>
                       </CardHeader>
                       <CardContent className="space-y-4">

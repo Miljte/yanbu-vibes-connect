@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, MapPin, Users, AlertCircle, VolumeX, Ban } from 'lucide-react';
+import { Send, MapPin, Users, AlertCircle, Ban } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -61,7 +61,7 @@ const OptimizedProximityChat: React.FC<OptimizedProximityChatProps> = ({
   }, [messages]);
 
   const handleSendMessage = async () => {
-    if (!newMessage.trim()) return;
+    if (!newMessage.trim() || !canSendMessage()) return;
     
     const success = await sendMessage(newMessage);
     if (success) {
@@ -107,7 +107,7 @@ const OptimizedProximityChat: React.FC<OptimizedProximityChatProps> = ({
           <Alert>
             <AlertCircle className="h-4 w-4" />
             <AlertDescription>
-              No Nearby Stores
+              No Nearby Stores Available
               <br />
               Move closer to stores to access proximity chat
             </AlertDescription>
@@ -119,7 +119,7 @@ const OptimizedProximityChat: React.FC<OptimizedProximityChatProps> = ({
               {nearbyPlaces.slice(0, 3).map(place => (
                 <div key={place.id} className="flex justify-between items-center text-sm">
                   <span>{place.name}</span>
-                  <Badge variant="outline">{place.distance}m away</Badge>
+                  <Badge variant="outline">{Math.round(place.distance)}m away</Badge>
                 </div>
               ))}
             </div>
@@ -136,7 +136,7 @@ const OptimizedProximityChat: React.FC<OptimizedProximityChatProps> = ({
         <CardHeader className="pb-3">
           <CardTitle className="flex items-center space-x-2">
             <MapPin className="w-5 h-5" />
-            <span>Chat Rooms ({chatUnlockedPlaces.size})</span>
+            <span>Available Chat Rooms ({chatUnlockedPlaces.size})</span>
           </CardTitle>
         </CardHeader>
         <CardContent>
@@ -159,7 +159,7 @@ const OptimizedProximityChat: React.FC<OptimizedProximityChatProps> = ({
                     <div className="font-medium">{place.name}</div>
                     <div className="text-sm text-muted-foreground">{place.type}</div>
                   </div>
-                  <Badge variant="outline">{place.distance}m</Badge>
+                  <Badge variant="outline">{Math.round(place.distance)}m</Badge>
                 </button>
               );
             })}
@@ -176,7 +176,7 @@ const OptimizedProximityChat: React.FC<OptimizedProximityChatProps> = ({
                 <Users className="w-5 h-5" />
                 <span>{getPlaceName(selectedPlace)}</span>
               </div>
-              <Badge variant="outline">{getPlaceDistance(selectedPlace)}m away</Badge>
+              <Badge variant="outline">{Math.round(getPlaceDistance(selectedPlace))}m away</Badge>
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
@@ -250,9 +250,8 @@ const OptimizedProximityChat: React.FC<OptimizedProximityChatProps> = ({
             </div>
 
             {!canSendMessage() && (
-              <div className="flex items-center space-x-2 text-sm text-muted-foreground">
-                <VolumeX className="w-4 h-4" />
-                <span>{getMuteMessage()}</span>
+              <div className="text-sm text-muted-foreground">
+                {getMuteMessage()}
               </div>
             )}
           </CardContent>
