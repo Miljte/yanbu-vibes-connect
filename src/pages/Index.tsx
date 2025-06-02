@@ -1,16 +1,15 @@
 
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import { useYanbuLocationCheck } from '@/hooks/useYanbuLocationCheck';
+import { useJeddahLocationCheck } from '@/hooks/useJeddahLocationCheck';
 import { useDeleteMerchants } from '@/hooks/useDeleteMerchants';
 import ModernBottomNavigation from '@/components/ModernBottomNavigation';
-import ModernMap from '@/components/ModernMap';
+import EnhancedJeddahMap from '@/components/EnhancedJeddahMap';
 import ModernEvents from '@/components/ModernEvents';
 import ModernSettings from '@/components/ModernSettings';
 import UserProfile from '@/components/UserProfile';
 import AuthModal from '@/components/AuthModal';
 import OnboardingTutorial from '@/components/OnboardingTutorial';
-import LocationRestrictionScreen from '@/components/LocationRestrictionScreen';
 import FullMerchantDashboard from '@/components/FullMerchantDashboard';
 import EnhancedAdminPanel from '@/components/EnhancedAdminPanel';
 
@@ -19,7 +18,7 @@ const Index = () => {
   const [showAuth, setShowAuth] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const { user, userRole, loading } = useAuth();
-  const { isInYanbu, loading: locationLoading, recheckLocation, locationError } = useYanbuLocationCheck();
+  const { isInJeddah, loading: locationLoading } = useJeddahLocationCheck();
   const { deleteMerchants } = useDeleteMerchants();
 
   useEffect(() => {
@@ -33,14 +32,6 @@ const Index = () => {
       }
     }
   }, [user, loading]);
-
-  useEffect(() => {
-    // Only restrict map access if we're certain the user is outside Jeddah
-    // If there's a location error, allow map access
-    if (isInYanbu === false && userRole !== 'admin' && !locationError && activeSection === 'map') {
-      setActiveSection('events');
-    }
-  }, [isInYanbu, userRole, activeSection, locationError]);
 
   // Auto-delete merchants on app load for admin users
   useEffect(() => {
@@ -58,19 +49,12 @@ const Index = () => {
     setShowOnboarding(false);
   };
 
-  if (loading || locationLoading) {
+  if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
         <div className="text-center space-y-4">
-          <div className="w-16 h-16 border-4 border-cyan-500/30 border-t-cyan-500 rounded-full animate-spin mx-auto"></div>
-          <p className="text-white text-lg">
-            {locationLoading ? 'Getting your location...' : 'Loading...'}
-          </p>
-          {locationError && (
-            <p className="text-yellow-400 text-sm max-w-md mx-auto">
-              {locationError}
-            </p>
-          )}
+          <div className="w-16 h-16 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin mx-auto"></div>
+          <p className="text-blue-900 text-lg font-medium">Loading Jeddah Vibes...</p>
         </div>
       </div>
     );
@@ -84,23 +68,10 @@ const Index = () => {
     return <OnboardingTutorial onComplete={handleCompleteOnboarding} isOpen={true} />;
   }
 
-  // Only show location restriction if we're certain the user is outside Jeddah
-  // Allow access if there's a location error (better user experience)
-  if (isInYanbu === false && userRole !== 'admin' && !locationError) {
-    return (
-      <LocationRestrictionScreen 
-        onRetry={recheckLocation}
-        isChecking={locationLoading}
-        onNavigateToEvents={() => setActiveSection('events')}
-        onNavigateToProfile={() => setActiveSection('profile')}
-      />
-    );
-  }
-
   const renderActiveSection = () => {
     switch (activeSection) {
       case 'map':
-        return <ModernMap />;
+        return <EnhancedJeddahMap />;
       case 'events':
         return <ModernEvents />;
       case 'profile':
@@ -123,7 +94,7 @@ const Index = () => {
         activeSection={activeSection}
         onSectionChange={setActiveSection}
         userRole={userRole}
-        isInYanbu={isInYanbu}
+        isInJeddah={isInJeddah}
       />
     </div>
   );

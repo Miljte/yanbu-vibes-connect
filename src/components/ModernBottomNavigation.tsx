@@ -1,4 +1,3 @@
-
 import React from 'react';
 import { MapPin, Calendar, Settings, Crown, Store, User } from 'lucide-react';
 import { useLocalization } from '@/contexts/LocalizationContext';
@@ -14,14 +13,14 @@ interface ModernBottomNavigationProps {
   activeSection: string;
   onSectionChange: (section: string) => void;
   userRole?: string;
-  isInYanbu?: boolean | null;
+  isInJeddah?: boolean | null;
 }
 
 const ModernBottomNavigation: React.FC<ModernBottomNavigationProps> = ({ 
   activeSection, 
   onSectionChange, 
   userRole = 'user',
-  isInYanbu = null
+  isInJeddah = null
 }) => {
   const { t, isRTL } = useLocalization();
   console.log('ModernBottomNavigation - userRole:', userRole);
@@ -29,7 +28,7 @@ const ModernBottomNavigation: React.FC<ModernBottomNavigationProps> = ({
   const isAdmin = userRole === 'admin';
   const isMerchant = userRole === 'merchant' || isAdmin;
 
-  const navigationItems: NavigationItem[] = [
+  const navItems: NavigationItem[] = [
     {
       id: 'events',
       labelKey: 'nav.events',
@@ -68,15 +67,19 @@ const ModernBottomNavigation: React.FC<ModernBottomNavigationProps> = ({
     }
   ];
 
-  const visibleItems = navigationItems.filter(item => {
+  const visibleItems = navItems.filter(item => {
     console.log(`Item ${item.id} - show: ${item.show}, userRole: ${userRole}`);
+    // Map access restricted to Jeddah users only
+    if (item.id === 'map' && isInJeddah === false) {
+      return false;
+    }
     return item.show;
   });
 
   console.log('Visible nav items:', visibleItems.map(item => item.id));
 
   const handleItemClick = (itemId: string) => {
-    if (itemId === 'map' && isInYanbu === false && !isAdmin) {
+    if (itemId === 'map' && isInJeddah === false && !isAdmin) {
       onSectionChange('events');
       return;
     }
@@ -90,7 +93,7 @@ const ModernBottomNavigation: React.FC<ModernBottomNavigationProps> = ({
         <div className="flex items-center justify-around px-2 py-3">
           {visibleItems.map((item) => {
             const isActive = activeSection === item.id;
-            const isMapRestricted = item.id === 'map' && isInYanbu === false && !isAdmin;
+            const isMapRestricted = item.id === 'map' && isInJeddah === false && !isAdmin;
             
             return (
               <button
