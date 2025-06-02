@@ -16,7 +16,8 @@ export const useLocation = () => {
   const [retryAttempts, setRetryAttempts] = useState(0);
   const { user } = useAuth();
 
-  const maxRetryAttempts = 3;
+  const maxRetryAttempts = 2; // Reduced retry attempts
+  let watchId: number | null = null;
 
   useEffect(() => {
     if (!navigator.geolocation) {
@@ -26,9 +27,7 @@ export const useLocation = () => {
     }
 
     console.log('🌍 Starting enhanced GPS tracking for Jeddah...');
-
-    let watchId: number | null = null;
-    let retryTimeout: NodeJS.Timeout | null = null;
+    let mounted = true;
 
     const updateLocationInDB = async (newLocation: Location) => {
       if (user) {
@@ -50,6 +49,8 @@ export const useLocation = () => {
     };
 
     const processPosition = async (position: GeolocationPosition) => {
+      if (!mounted) return;
+      
       const newLocation = {
         latitude: position.coords.latitude,
         longitude: position.coords.longitude,
@@ -64,36 +65,37 @@ export const useLocation = () => {
       setLocation(newLocation);
       setError(null);
       setLoading(false);
-      setRetryAttempts(0); // Reset retry attempts on successful location
+      setRetryAttempts(0);
       
       await updateLocationInDB(newLocation);
     };
 
     const handleError = (error: GeolocationPositionError) => {
+      if (!mounted) return;
+      
       console.error('❌ GPS error:', error.message);
       
       let errorMessage = 'Location error: ';
       
       switch (error.code) {
         case error.PERMISSION_DENIED:
-          errorMessage += 'Location permission denied. Please enable location permissions in your browser settings.';
+          errorMessage += 'Location permission denied. Please enable location permissions.';
           setLoading(false);
+          setError(errorMessage);
           break;
         case error.POSITION_UNAVAILABLE:
-          errorMessage += 'GPS signal unavailable. Please ensure you have a clear view of the sky.';
+          errorMessage += 'GPS signal unavailable.';
           retryLocationRequest();
           break;
         case error.TIMEOUT:
-          errorMessage += 'GPS timeout. Retrying...';
+          errorMessage += 'GPS timeout.';
           retryLocationRequest();
           break;
         default:
-          errorMessage += 'Unknown error occurred. Retrying...';
+          errorMessage += 'Unknown error occurred.';
           retryLocationRequest();
           break;
       }
-      
-      setError(errorMessage);
     };
 
     const retryLocationRequest = () => {
@@ -102,21 +104,23 @@ export const useLocation = () => {
         setRetryAttempts(nextAttempt);
         console.log(`🔄 Retrying location request (${nextAttempt}/${maxRetryAttempts})...`);
         
-        retryTimeout = setTimeout(() => {
-          requestLocation();
-        }, 2000 * nextAttempt); // Exponential backoff
+        setTimeout(() => {
+          if (mounted) {
+            requestLocation();
+          }
+        }, 1000 * nextAttempt);
       } else {
-        setError('Failed to get location after multiple attempts. Please check your GPS settings and try again.');
+        setError('Unable to get your location. Please check GPS settings and try again.');
         setLoading(false);
       }
     };
 
     const requestLocation = () => {
-      // High accuracy options for better real-time tracking
+      // More lenient options for better success rate
       const options = {
         enableHighAccuracy: true,
-        timeout: 15000,
-        maximumAge: 1000, // Very fresh positions for real-time updates
+        timeout: 10000, // Increased timeout
+        maximumAge: 5000, // Allow slightly older positions
       };
 
       // Get initial position
@@ -126,7 +130,7 @@ export const useLocation = () => {
         options
       );
 
-      // Start continuous tracking with aggressive settings for real-time updates
+      // Start continuous tracking
       watchId = navigator.geolocation.watchPosition(
         processPosition,
         (error) => {
@@ -135,24 +139,22 @@ export const useLocation = () => {
         },
         {
           enableHighAccuracy: true,
-          timeout: 10000,
-          maximumAge: 500, // Very fresh for smooth tracking
+          timeout: 8000,
+          maximumAge: 2000, // Fresh positions for real-time tracking
         }
       );
 
-      console.log('🔄 Continuous real-time tracking started');
+      console.log('🔄 Continuous GPS tracking started');
     };
 
     requestLocation();
 
     // Cleanup function
     return () => {
+      mounted = false;
       if (watchId) {
         navigator.geolocation.clearWatch(watchId);
         console.log('🛑 GPS tracking stopped');
-      }
-      if (retryTimeout) {
-        clearTimeout(retryTimeout);
       }
     };
   }, [user, retryAttempts]);
@@ -174,7 +176,6 @@ export const useLocation = () => {
     setLoading(true);
     setError(null);
     setRetryAttempts(0);
-    // The useEffect will trigger automatically due to retryAttempts change
   };
 
   return {

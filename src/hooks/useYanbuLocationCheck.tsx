@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { useLocation } from './useLocation';
 
@@ -9,7 +10,7 @@ interface JeddahBounds {
 export const useYanbuLocationCheck = () => {
   const [isInYanbu, setIsInYanbu] = useState<boolean | null>(null);
   const [isChecking, setIsChecking] = useState(true);
-  const { location, loading } = useLocation();
+  const { location, loading, error } = useLocation();
 
   // Jeddah city boundaries (expanded to cover greater Jeddah area)
   const jeddahBounds: JeddahBounds = {
@@ -27,6 +28,8 @@ export const useYanbuLocationCheck = () => {
   };
 
   useEffect(() => {
+    console.log('🔍 Location check status:', { location, loading, error });
+    
     if (!loading) {
       if (location) {
         const inBounds = checkLocationInBounds(location.latitude, location.longitude);
@@ -34,30 +37,40 @@ export const useYanbuLocationCheck = () => {
         console.log('🌍 Location check:', {
           lat: location.latitude,
           lng: location.longitude,
-          inJeddah: inBounds
+          inJeddah: inBounds,
+          accuracy: location.accuracy
         });
+      } else if (error) {
+        // If there's a location error, allow access but show warning
+        console.warn('⚠️ Location error, allowing limited access:', error);
+        setIsInYanbu(null);
       } else {
-        // If no location available, keep checking instead of assuming outside
+        // Still trying to get location
         setIsInYanbu(null);
       }
       setIsChecking(false);
     }
-  }, [location, loading]);
+  }, [location, loading, error]);
 
   const recheckLocation = () => {
+    console.log('🔄 Rechecking location...');
     setIsChecking(true);
-    if (location) {
-      const inBounds = checkLocationInBounds(location.latitude, location.longitude);
-      setIsInYanbu(inBounds);
-    } else {
-      setIsInYanbu(null);
-    }
-    setIsChecking(false);
+    setIsInYanbu(null);
+    
+    // The useLocation hook will handle the retry
+    setTimeout(() => {
+      if (location) {
+        const inBounds = checkLocationInBounds(location.latitude, location.longitude);
+        setIsInYanbu(inBounds);
+      }
+      setIsChecking(false);
+    }, 2000);
   };
 
   return {
     isInYanbu,
     loading: isChecking || loading,
-    recheckLocation
+    recheckLocation,
+    locationError: error
   };
 };

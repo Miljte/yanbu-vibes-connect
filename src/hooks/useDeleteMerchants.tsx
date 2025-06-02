@@ -16,11 +16,11 @@ export const useDeleteMerchants = () => {
     try {
       console.log('🗑️ Starting merchant deletion process...');
       
-      // First, delete all places associated with merchants
+      // First, delete all places associated with merchants (fix the UUID issue)
       const { error: placesError } = await supabase
         .from('places')
         .delete()
-        .neq('merchant_id', null);
+        .not('merchant_id', 'is', null);
 
       if (placesError) {
         console.error('❌ Error deleting places:', placesError);
@@ -31,7 +31,7 @@ export const useDeleteMerchants = () => {
       const { error: subscriptionsError } = await supabase
         .from('merchant_subscriptions')
         .delete()
-        .neq('merchant_id', null);
+        .not('merchant_id', 'is', null);
 
       if (subscriptionsError) {
         console.error('❌ Error deleting subscriptions:', subscriptionsError);
@@ -42,7 +42,7 @@ export const useDeleteMerchants = () => {
       const { error: offersError } = await supabase
         .from('offers')
         .delete()
-        .neq('merchant_id', null);
+        .not('merchant_id', 'is', null);
 
       if (offersError) {
         console.error('❌ Error deleting offers:', offersError);

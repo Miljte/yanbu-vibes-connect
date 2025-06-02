@@ -19,7 +19,7 @@ const Index = () => {
   const [showAuth, setShowAuth] = useState(false);
   const [showOnboarding, setShowOnboarding] = useState(false);
   const { user, userRole, loading } = useAuth();
-  const { isInYanbu, loading: locationLoading, recheckLocation } = useYanbuLocationCheck();
+  const { isInYanbu, loading: locationLoading, recheckLocation, locationError } = useYanbuLocationCheck();
   const { deleteMerchants } = useDeleteMerchants();
 
   useEffect(() => {
@@ -35,10 +35,12 @@ const Index = () => {
   }, [user, loading]);
 
   useEffect(() => {
-    if (isInYanbu === false && userRole !== 'admin' && activeSection === 'map') {
+    // Only restrict map access if we're certain the user is outside Jeddah
+    // If there's a location error, allow map access
+    if (isInYanbu === false && userRole !== 'admin' && !locationError && activeSection === 'map') {
       setActiveSection('events');
     }
-  }, [isInYanbu, userRole, activeSection]);
+  }, [isInYanbu, userRole, activeSection, locationError]);
 
   // Auto-delete merchants on app load for admin users
   useEffect(() => {
@@ -61,7 +63,14 @@ const Index = () => {
       <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 flex items-center justify-center">
         <div className="text-center space-y-4">
           <div className="w-16 h-16 border-4 border-cyan-500/30 border-t-cyan-500 rounded-full animate-spin mx-auto"></div>
-          <p className="text-white text-lg">Loading...</p>
+          <p className="text-white text-lg">
+            {locationLoading ? 'Getting your location...' : 'Loading...'}
+          </p>
+          {locationError && (
+            <p className="text-yellow-400 text-sm max-w-md mx-auto">
+              {locationError}
+            </p>
+          )}
         </div>
       </div>
     );
@@ -75,7 +84,9 @@ const Index = () => {
     return <OnboardingTutorial onComplete={handleCompleteOnboarding} isOpen={true} />;
   }
 
-  if (isInYanbu === false && userRole !== 'admin') {
+  // Only show location restriction if we're certain the user is outside Jeddah
+  // Allow access if there's a location error (better user experience)
+  if (isInYanbu === false && userRole !== 'admin' && !locationError) {
     return (
       <LocationRestrictionScreen 
         onRetry={recheckLocation}
