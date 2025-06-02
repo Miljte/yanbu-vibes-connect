@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
@@ -12,39 +13,22 @@ export const useLocation = () => {
   const [location, setLocation] = useState<Location | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [retryAttempts, setRetryAttempts] = useState(0);
   const { user } = useAuth();
 
-  // Yanbu city center as fallback
-  const yanbuCenter = {
-    latitude: 24.0892,
-    longitude: 38.0618,
-    accuracy: 1000
-  };
+  const maxRetryAttempts = 3;
 
   useEffect(() => {
     if (!navigator.geolocation) {
       setError('Geolocation is not supported by this browser');
-      setLocation(yanbuCenter);
       setLoading(false);
       return;
     }
 
-    console.log('🌍 Starting optimized GPS tracking...');
-
-    // Progressive accuracy options - start with lower accuracy for faster response
-    const quickOptions = {
-      enableHighAccuracy: false, // Start with network/WiFi location
-      timeout: 5000, // Shorter timeout for quick fix
-      maximumAge: 30000, // Allow cached positions
-    };
-
-    const preciseOptions = {
-      enableHighAccuracy: true, // High accuracy GPS
-      timeout: 10000, // Longer timeout for GPS
-      maximumAge: 5000,
-    };
+    console.log('🌍 Starting enhanced GPS tracking for Jeddah...');
 
     let watchId: number | null = null;
+    let retryTimeout: NodeJS.Timeout | null = null;
 
     const updateLocationInDB = async (newLocation: Location) => {
       if (user) {
@@ -72,66 +56,77 @@ export const useLocation = () => {
         accuracy: position.coords.accuracy,
       };
       
-      // Verify location is within reasonable Yanbu bounds
-      const isInYanbu = 
-        newLocation.latitude >= 23.9 && newLocation.latitude <= 24.3 &&
-        newLocation.longitude >= 37.9 && newLocation.longitude <= 38.4;
+      console.log('📍 GPS location received:', {
+        ...newLocation,
+        accuracy: newLocation.accuracy + 'm'
+      });
 
-      if (!isInYanbu) {
-        console.log('📍 Location outside Yanbu bounds, using city center');
-        setLocation(yanbuCenter);
-      } else {
-        console.log('📍 Valid GPS location:', newLocation);
-        setLocation(newLocation);
-      }
-      
+      setLocation(newLocation);
       setError(null);
       setLoading(false);
+      setRetryAttempts(0); // Reset retry attempts on successful location
+      
       await updateLocationInDB(newLocation);
     };
 
     const handleError = (error: GeolocationPositionError) => {
       console.error('❌ GPS error:', error.message);
+      
       let errorMessage = 'Location error: ';
       
       switch (error.code) {
         case error.PERMISSION_DENIED:
-          errorMessage += 'Please enable location permissions and try again.';
+          errorMessage += 'Location permission denied. Please enable location permissions in your browser settings.';
+          setLoading(false);
           break;
         case error.POSITION_UNAVAILABLE:
-          errorMessage += 'GPS unavailable. Using Yanbu center location.';
+          errorMessage += 'GPS signal unavailable. Please ensure you have a clear view of the sky.';
+          retryLocationRequest();
           break;
         case error.TIMEOUT:
-          errorMessage += 'GPS timeout. Using network location.';
+          errorMessage += 'GPS timeout. Retrying...';
+          retryLocationRequest();
           break;
         default:
-          errorMessage += 'Using fallback location.';
+          errorMessage += 'Unknown error occurred. Retrying...';
+          retryLocationRequest();
           break;
       }
       
       setError(errorMessage);
-      setLocation(yanbuCenter); // Always provide a location
-      setLoading(false);
     };
 
-    // Strategy 1: Quick network-based location first
-    navigator.geolocation.getCurrentPosition(
-      processPosition,
-      (error) => {
-        console.log('⚡ Quick location failed, trying GPS...');
+    const retryLocationRequest = () => {
+      if (retryAttempts < maxRetryAttempts) {
+        const nextAttempt = retryAttempts + 1;
+        setRetryAttempts(nextAttempt);
+        console.log(`🔄 Retrying location request (${nextAttempt}/${maxRetryAttempts})...`);
         
-        // Strategy 2: If quick fails, try high-accuracy GPS
-        navigator.geolocation.getCurrentPosition(
-          processPosition,
-          handleError,
-          preciseOptions
-        );
-      },
-      quickOptions
-    );
+        retryTimeout = setTimeout(() => {
+          requestLocation();
+        }, 2000 * nextAttempt); // Exponential backoff
+      } else {
+        setError('Failed to get location after multiple attempts. Please check your GPS settings and try again.');
+        setLoading(false);
+      }
+    };
 
-    // Set up continuous tracking with reasonable settings
-    const startTracking = () => {
+    const requestLocation = () => {
+      // High accuracy options for better real-time tracking
+      const options = {
+        enableHighAccuracy: true,
+        timeout: 15000,
+        maximumAge: 1000, // Very fresh positions for real-time updates
+      };
+
+      // Get initial position
+      navigator.geolocation.getCurrentPosition(
+        processPosition,
+        handleError,
+        options
+      );
+
+      // Start continuous tracking with aggressive settings for real-time updates
       watchId = navigator.geolocation.watchPosition(
         processPosition,
         (error) => {
@@ -140,15 +135,15 @@ export const useLocation = () => {
         },
         {
           enableHighAccuracy: true,
-          timeout: 15000, // Reasonable timeout
-          maximumAge: 60000, // Allow 1-minute old positions for stability
+          timeout: 10000,
+          maximumAge: 500, // Very fresh for smooth tracking
         }
       );
-      console.log('🔄 Continuous tracking started');
+
+      console.log('🔄 Continuous real-time tracking started');
     };
 
-    // Start tracking after initial position is obtained
-    setTimeout(startTracking, 2000);
+    requestLocation();
 
     // Cleanup function
     return () => {
@@ -156,8 +151,11 @@ export const useLocation = () => {
         navigator.geolocation.clearWatch(watchId);
         console.log('🛑 GPS tracking stopped');
       }
+      if (retryTimeout) {
+        clearTimeout(retryTimeout);
+      }
     };
-  }, [user]);
+  }, [user, retryAttempts]);
 
   const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
     const R = 6371; // Radius of the Earth in km
@@ -172,10 +170,18 @@ export const useLocation = () => {
     return Math.round(distance);
   };
 
+  const retryLocation = () => {
+    setLoading(true);
+    setError(null);
+    setRetryAttempts(0);
+    // The useEffect will trigger automatically due to retryAttempts change
+  };
+
   return {
     location,
     error,
     loading,
     calculateDistance,
+    retryLocation,
   };
 };

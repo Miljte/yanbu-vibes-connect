@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Wrapper, Status } from '@googlemaps/react-wrapper';
 import { Card, CardContent } from '@/components/ui/card';
@@ -206,7 +205,7 @@ const OptimizedMap = () => {
   const { user } = useAuth();
 
   const googleMapsApiKey = 'AIzaSyCnHJ_b9LBpxdSOdE8jmVMmJd6Vdmm5u8o';
-  const yanbuCenter: google.maps.LatLngLiteral = { lat: 24.0892, lng: 38.0618 };
+  const jeddahCenter: google.maps.LatLngLiteral = { lat: 21.5433, lng: 39.1728 };
 
   // Convert places to MarkerData format for the hook
   const markersData = places.map(place => ({
@@ -324,7 +323,7 @@ const OptimizedMap = () => {
 
       <Wrapper apiKey={googleMapsApiKey} render={render} libraries={['places']}>
         <MapComponent
-          center={userLocation ? { lat: userLocation.latitude, lng: userLocation.longitude } : yanbuCenter}
+          center={userLocation ? { lat: userLocation.latitude, lng: userLocation.longitude } : jeddahCenter}
           zoom={15}
           visibleMarkers={displayMarkers}
           userLocation={userLocation}

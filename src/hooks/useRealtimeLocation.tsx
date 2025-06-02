@@ -24,13 +24,13 @@ export const useRealtimeLocation = () => {
   const [isTracking, setIsTracking] = useState(false);
   const [nearbyPlaces, setNearbyPlaces] = useState<Place[]>([]);
   const [chatUnlockedPlaces, setChatUnlockedPlaces] = useState<Set<string>>(new Set());
-  const [isInYanbu, setIsInYanbu] = useState<boolean | null>(null);
+  const [isInJeddah, setIsInJeddah] = useState<boolean | null>(null);
   const { user } = useAuth();
 
-  // Yanbu city boundaries - Relaxed for better coverage
-  const yanbuBounds = {
-    southwest: { lat: 23.900000, lng: 38.000000 },
-    northeast: { lat: 24.200000, lng: 38.250000 }
+  // Jeddah city boundaries - Expanded for better coverage
+  const jeddahBounds = {
+    southwest: { lat: 21.200000, lng: 38.800000 },
+    northeast: { lat: 21.800000, lng: 39.600000 }
   };
 
   const calculateDistance = (lat1: number, lon1: number, lat2: number, lon2: number): number => {
@@ -46,16 +46,16 @@ export const useRealtimeLocation = () => {
     return Math.round(distance);
   };
 
-  const isWithinYanbu = (lat: number, lng: number): boolean => {
+  const isWithinJeddah = (lat: number, lng: number): boolean => {
     return (
-      lat >= yanbuBounds.southwest.lat &&
-      lat <= yanbuBounds.northeast.lat &&
-      lng >= yanbuBounds.southwest.lng &&
-      lng <= yanbuBounds.northeast.lng
+      lat >= jeddahBounds.southwest.lat &&
+      lat <= jeddahBounds.northeast.lat &&
+      lng >= jeddahBounds.southwest.lng &&
+      lng <= jeddahBounds.northeast.lng
     );
   };
 
-  // Smoothing algorithm to prevent jumps
+  // Enhanced smoothing algorithm for real-time movement
   const smoothLocation = (newLoc: LocationData, prevLoc: LocationData | null): LocationData => {
     if (!prevLoc) return newLoc;
     
@@ -64,18 +64,18 @@ export const useRealtimeLocation = () => {
       newLoc.latitude, newLoc.longitude
     );
     
-    // If jump is too large and accuracy is poor, smooth it
-    if (distance > 2000 && newLoc.accuracy && newLoc.accuracy > 100) {
+    // More permissive for real-time tracking during movement
+    if (distance > 5000 && newLoc.accuracy && newLoc.accuracy > 200) {
       console.log('🔧 Smoothing large location jump:', distance + 'm');
       return {
-        latitude: (prevLoc.latitude + newLoc.latitude) / 2,
-        longitude: (prevLoc.longitude + newLoc.longitude) / 2,
+        latitude: (prevLoc.latitude * 0.3 + newLoc.latitude * 0.7), // Weighted average favoring new location
+        longitude: (prevLoc.longitude * 0.3 + newLoc.longitude * 0.7),
         accuracy: newLoc.accuracy
       };
     }
     
-    // For driving scenarios, allow larger movements if accuracy is good
-    if (distance > 5000 && (!newLoc.accuracy || newLoc.accuracy > 50)) {
+    // Allow larger movements for vehicles/fast movement with good accuracy
+    if (distance > 10000 && (!newLoc.accuracy || newLoc.accuracy > 100)) {
       console.warn('🚫 Rejecting suspicious location jump:', distance + 'm, accuracy:', newLoc.accuracy);
       return prevLoc;
     }
@@ -188,21 +188,8 @@ export const useRealtimeLocation = () => {
         return;
       }
 
-      console.log('🌍 Starting enhanced GPS tracking for user:', user.id);
+      console.log('🌍 Starting enhanced real-time GPS tracking for Jeddah:', user.id);
       setIsTracking(true);
-
-      // Progressive options for better accuracy
-      const highAccuracyOptions = {
-        enableHighAccuracy: true,
-        timeout: 20000,
-        maximumAge: 10000,
-      };
-
-      const fastOptions = {
-        enableHighAccuracy: false,
-        timeout: 10000,
-        maximumAge: 30000,
-      };
 
       const updateLocation = async (position: GeolocationPosition) => {
         const rawLocation = {
@@ -211,32 +198,33 @@ export const useRealtimeLocation = () => {
           accuracy: position.coords.accuracy,
         };
 
-        console.log('📍 Raw GPS update:', {
+        console.log('📍 Real-time GPS update:', {
           ...rawLocation,
-          accuracy: rawLocation.accuracy + 'm'
+          accuracy: rawLocation.accuracy + 'm',
+          speed: position.coords.speed ? position.coords.speed + 'm/s' : 'unknown'
         });
 
-        // Apply smoothing to prevent jumps
+        // Apply smoothing for real-time movement
         const smoothedLocation = smoothLocation(rawLocation, location);
         
-        const withinYanbu = isWithinYanbu(smoothedLocation.latitude, smoothedLocation.longitude);
-        setIsInYanbu(withinYanbu);
+        const withinJeddah = isWithinJeddah(smoothedLocation.latitude, smoothedLocation.longitude);
+        setIsInJeddah(withinJeddah);
 
-        if (!withinYanbu) {
-          console.warn('❌ Location outside Yanbu bounds');
-          setError('Outside Yanbu city limits - Limited functionality');
+        if (!withinJeddah) {
+          console.warn('❌ Location outside Jeddah bounds');
+          setError('Outside Jeddah city limits - Limited functionality');
           setLocation(smoothedLocation);
           return;
         }
 
-        console.log('✅ Location confirmed within Yanbu bounds');
+        console.log('✅ Location confirmed within Jeddah bounds');
         setLocation(smoothedLocation);
         setError(null);
 
         // Always fetch nearby places when location updates
         await fetchNearbyPlaces(smoothedLocation);
 
-        // Update location in database
+        // Update location in database with higher frequency for real-time tracking
         try {
           await supabase
             .from('user_locations')
@@ -250,14 +238,14 @@ export const useRealtimeLocation = () => {
               onConflict: 'user_id'
             });
 
-          console.log('✅ Location updated in database');
+          console.log('✅ Real-time location updated in database');
         } catch (error) {
           console.error('❌ Failed to update location in DB:', error);
         }
       };
 
       const handleError = (error: GeolocationPositionError) => {
-        console.warn('⚠️ GPS error:', error.message);
+        console.warn('⚠️ Real-time GPS error:', error.message);
         
         let errorMessage = 'GPS issue: ';
         switch (error.code) {
@@ -280,32 +268,32 @@ export const useRealtimeLocation = () => {
         }
       };
 
-      // Quick position first, then high accuracy
+      // Aggressive tracking settings for real-time movement
+      const realtimeOptions = {
+        enableHighAccuracy: true,
+        timeout: 8000, // Shorter timeout for real-time
+        maximumAge: 500, // Very fresh positions
+      };
+
+      // Get initial position quickly
       navigator.geolocation.getCurrentPosition(
         updateLocation,
-        () => {
-          // If quick fails, try high accuracy
-          navigator.geolocation.getCurrentPosition(
-            updateLocation,
-            handleError,
-            highAccuracyOptions
-          );
-        },
-        fastOptions
+        handleError,
+        realtimeOptions
       );
 
-      // Start continuous tracking with optimal settings
+      // Start aggressive continuous tracking for real-time updates
       watchId = navigator.geolocation.watchPosition(
         updateLocation,
         handleError,
         {
           enableHighAccuracy: true,
-          timeout: 15000,
-          maximumAge: 30000, // Allow some caching for stability
+          timeout: 5000, // Quick timeout for continuous updates
+          maximumAge: 200, // Ultra-fresh for smooth real-time tracking
         }
       );
 
-      // Refresh online status every 30 seconds
+      // More frequent online status updates for real-time tracking
       updateInterval = setInterval(async () => {
         if (location && user) {
           try {
@@ -317,7 +305,7 @@ export const useRealtimeLocation = () => {
             console.error('❌ Online status update failed:', err);
           }
         }
-      }, 30000);
+      }, 15000); // Every 15 seconds for real-time apps
     };
 
     const stopTracking = () => {
@@ -372,6 +360,6 @@ export const useRealtimeLocation = () => {
     nearbyPlaces,
     chatUnlockedPlaces,
     calculateDistance,
-    isInYanbu,
+    isInJeddah,
   };
 };

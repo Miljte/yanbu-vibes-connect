@@ -232,7 +232,7 @@ const CleanMap = () => {
   const { user } = useAuth();
 
   const googleMapsApiKey = 'AIzaSyCnHJ_b9LBpxdSOdE8jmVMmJd6Vdmm5u8o';
-  const yanbuCenter: google.maps.LatLngLiteral = { lat: 24.0892, lng: 38.0618 };
+  const jeddahCenter: google.maps.LatLngLiteral = { lat: 21.5433, lng: 39.1728 };
 
   useEffect(() => {
     fetchActivePlaces();
@@ -320,7 +320,7 @@ const CleanMap = () => {
 
       <Wrapper apiKey={googleMapsApiKey} render={render} libraries={['places']}>
         <MapComponent
-          center={location ? { lat: location.latitude, lng: location.longitude } : yanbuCenter}
+          center={location ? { lat: location.latitude, lng: location.longitude } : jeddahCenter}
           zoom={15}
           places={places}
           userLocation={location}

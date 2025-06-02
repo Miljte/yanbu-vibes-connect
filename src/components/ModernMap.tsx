@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Wrapper, Status } from '@googlemaps/react-wrapper';
 import { Card, CardContent } from '@/components/ui/card';
@@ -242,12 +241,12 @@ const ModernMap = () => {
   
   // Call ALL hooks first, before any conditional logic
   const { location, calculateDistance } = useLocation();
-  const { isInYanbu, isChecking, recheckLocation } = useYanbuLocationCheck();
+  const { isInYanbu, loading: locationLoading, recheckLocation } = useYanbuLocationCheck();
   const { user } = useAuth();
   const { t, language, setLanguage, isRTL } = useLocalization();
 
   const googleMapsApiKey = 'AIzaSyCnHJ_b9LBpxdSOdE8jmVMmJd6Vdmm5u8o';
-  const yanbuCenter: google.maps.LatLngLiteral = { lat: 24.0892, lng: 38.0618 };
+  const jeddahCenter: google.maps.LatLngLiteral = { lat: 21.5433, lng: 39.1728 };
 
   // All useEffect hooks must be called consistently
   useEffect(() => {
@@ -352,7 +351,7 @@ const ModernMap = () => {
   );
 
   // NOW handle conditional rendering AFTER all hooks are called
-  if (isChecking) {
+  if (locationLoading) {
     return (
       <div className="min-h-screen bg-background flex items-center justify-center">
         <div className="text-foreground text-lg">Checking location...</div>
@@ -361,7 +360,7 @@ const ModernMap = () => {
   }
 
   if (isInYanbu === false) {
-    return <LocationRestriction onRetry={recheckLocation} isChecking={isChecking} />;
+    return <LocationRestriction onRetry={recheckLocation} isChecking={locationLoading} />;
   }
 
   // Show chat interface when requested
@@ -413,7 +412,7 @@ const ModernMap = () => {
 
       <Wrapper apiKey={googleMapsApiKey} render={render} libraries={['places']}>
         <MapComponent
-          center={location ? { lat: location.latitude, lng: location.longitude } : yanbuCenter}
+          center={location ? { lat: location.latitude, lng: location.longitude } : jeddahCenter}
           zoom={14}
           places={places}
           userLocation={location}

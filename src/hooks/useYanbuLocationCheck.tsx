@@ -1,8 +1,7 @@
-
 import { useState, useEffect } from 'react';
 import { useLocation } from './useLocation';
 
-interface YanbuBounds {
+interface JeddahBounds {
   southwest: { lat: number; lng: number };
   northeast: { lat: number; lng: number };
 }
@@ -12,18 +11,18 @@ export const useYanbuLocationCheck = () => {
   const [isChecking, setIsChecking] = useState(true);
   const { location, loading } = useLocation();
 
-  // Yanbu city boundaries
-  const yanbuBounds: YanbuBounds = {
-    southwest: { lat: 23.970000, lng: 38.060000 },
-    northeast: { lat: 24.140000, lng: 38.200000 }
+  // Jeddah city boundaries (expanded to cover greater Jeddah area)
+  const jeddahBounds: JeddahBounds = {
+    southwest: { lat: 21.200000, lng: 38.800000 },
+    northeast: { lat: 21.800000, lng: 39.600000 }
   };
 
   const checkLocationInBounds = (lat: number, lng: number) => {
     return (
-      lat >= yanbuBounds.southwest.lat &&
-      lat <= yanbuBounds.northeast.lat &&
-      lng >= yanbuBounds.southwest.lng &&
-      lng <= yanbuBounds.northeast.lng
+      lat >= jeddahBounds.southwest.lat &&
+      lat <= jeddahBounds.northeast.lat &&
+      lng >= jeddahBounds.southwest.lng &&
+      lng <= jeddahBounds.northeast.lng
     );
   };
 
@@ -32,9 +31,14 @@ export const useYanbuLocationCheck = () => {
       if (location) {
         const inBounds = checkLocationInBounds(location.latitude, location.longitude);
         setIsInYanbu(inBounds);
+        console.log('🌍 Location check:', {
+          lat: location.latitude,
+          lng: location.longitude,
+          inJeddah: inBounds
+        });
       } else {
-        // If no location available, assume outside Yanbu for safety
-        setIsInYanbu(false);
+        // If no location available, keep checking instead of assuming outside
+        setIsInYanbu(null);
       }
       setIsChecking(false);
     }
@@ -46,7 +50,7 @@ export const useYanbuLocationCheck = () => {
       const inBounds = checkLocationInBounds(location.latitude, location.longitude);
       setIsInYanbu(inBounds);
     } else {
-      setIsInYanbu(false);
+      setIsInYanbu(null);
     }
     setIsChecking(false);
   };

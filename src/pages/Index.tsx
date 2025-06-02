@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useYanbuLocationCheck } from '@/hooks/useYanbuLocationCheck';
+import { useDeleteMerchants } from '@/hooks/useDeleteMerchants';
 import ModernBottomNavigation from '@/components/ModernBottomNavigation';
 import ModernMap from '@/components/ModernMap';
 import ModernEvents from '@/components/ModernEvents';
@@ -19,6 +20,7 @@ const Index = () => {
   const [showOnboarding, setShowOnboarding] = useState(false);
   const { user, userRole, loading } = useAuth();
   const { isInYanbu, loading: locationLoading, recheckLocation } = useYanbuLocationCheck();
+  const { deleteMerchants } = useDeleteMerchants();
 
   useEffect(() => {
     if (!loading && !user) {
@@ -37,6 +39,17 @@ const Index = () => {
       setActiveSection('events');
     }
   }, [isInYanbu, userRole, activeSection]);
+
+  // Auto-delete merchants on app load for admin users
+  useEffect(() => {
+    if (user && userRole === 'admin') {
+      const hasDeletedMerchants = localStorage.getItem('merchantsDeleted');
+      if (!hasDeletedMerchants) {
+        deleteMerchants();
+        localStorage.setItem('merchantsDeleted', 'true');
+      }
+    }
+  }, [user, userRole, deleteMerchants]);
 
   const handleCompleteOnboarding = () => {
     localStorage.setItem('hasSeenOnboarding', 'true');
