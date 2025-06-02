@@ -51,10 +51,10 @@ const Index = () => {
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center">
         <div className="text-center space-y-4">
           <div className="w-16 h-16 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin mx-auto"></div>
-          <p className="text-blue-900 text-lg font-medium">Loading Jeddah Vibes...</p>
+          <p className="text-blue-900 dark:text-blue-100 text-lg font-medium">Loading Jeddah Vibes...</p>
         </div>
       </div>
     );

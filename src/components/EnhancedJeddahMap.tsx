@@ -3,11 +3,11 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Wrapper, Status } from '@googlemaps/react-wrapper';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { MapPin, Navigation, Users, MessageSquare, Lock, RefreshCw } from 'lucide-react';
-import { Badge } from '@/components/ui/badge';
+import { MapPin, Navigation, MessageSquare, Lock, RefreshCw, ZoomIn, ZoomOut } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useJeddahLocationCheck } from '@/hooks/useJeddahLocationCheck';
+import { useLocation } from '@/hooks/useLocation';
 import { toast } from 'sonner';
 
 interface Place {
@@ -28,6 +28,7 @@ interface MapComponentProps {
   userLocation: { latitude: number; longitude: number } | null;
   jeddahBounds: { southwest: { lat: number; lng: number }; northeast: { lat: number; lng: number } };
   onPlaceClick: (place: Place) => void;
+  isDarkMode: boolean;
 }
 
 const MapComponent: React.FC<MapComponentProps> = React.memo(({
@@ -37,6 +38,7 @@ const MapComponent: React.FC<MapComponentProps> = React.memo(({
   userLocation,
   jeddahBounds,
   onPlaceClick,
+  isDarkMode,
 }) => {
   const ref = useRef<HTMLDivElement>(null);
   const [map, setMap] = useState<google.maps.Map>();
@@ -48,72 +50,82 @@ const MapComponent: React.FC<MapComponentProps> = React.memo(({
     new google.maps.LatLng(jeddahBounds.northeast.lat, jeddahBounds.northeast.lng)
   );
 
-  // Modern Jeddah map style
-  const jeddahMapStyle = [
+  // Modern Jeddah map styles with dark/light mode support
+  const lightMapStyle = [
     {
       "featureType": "administrative",
       "elementType": "geometry.stroke",
-      "stylers": [{ "color": "#c9b2a6" }]
-    },
-    {
-      "featureType": "administrative.land_parcel",
-      "elementType": "geometry.stroke",
-      "stylers": [{ "color": "#dcd2be" }]
-    },
-    {
-      "featureType": "administrative.land_parcel",
-      "elementType": "labels.text.fill",
-      "stylers": [{ "color": "#ae9e90" }]
+      "stylers": [{ "color": "#e0e0e0" }]
     },
     {
       "featureType": "landscape.natural",
       "elementType": "geometry",
-      "stylers": [{ "color": "#dfd2ae" }]
-    },
-    {
-      "featureType": "poi",
-      "elementType": "geometry",
-      "stylers": [{ "color": "#dfd2ae" }]
-    },
-    {
-      "featureType": "poi",
-      "elementType": "labels.text.fill",
-      "stylers": [{ "color": "#93817c" }]
+      "stylers": [{ "color": "#f5f5f5" }]
     },
     {
       "featureType": "poi.park",
       "elementType": "geometry.fill",
-      "stylers": [{ "color": "#a5b076" }]
+      "stylers": [{ "color": "#c8e6c9" }]
     },
     {
       "featureType": "road",
       "elementType": "geometry",
-      "stylers": [{ "color": "#f5f1e6" }]
-    },
-    {
-      "featureType": "road.arterial",
-      "elementType": "geometry",
-      "stylers": [{ "color": "#fdfcf8" }]
+      "stylers": [{ "color": "#ffffff" }]
     },
     {
       "featureType": "road.highway",
       "elementType": "geometry",
-      "stylers": [{ "color": "#f8c967" }]
-    },
-    {
-      "featureType": "road.highway",
-      "elementType": "geometry.stroke",
-      "stylers": [{ "color": "#e9bc62" }]
+      "stylers": [{ "color": "#ffcc02" }]
     },
     {
       "featureType": "water",
       "elementType": "geometry",
-      "stylers": [{ "color": "#54acd4" }]
+      "stylers": [{ "color": "#64b5f6" }]
+    }
+  ];
+
+  const darkMapStyle = [
+    {
+      "elementType": "geometry",
+      "stylers": [{ "color": "#1a1a1a" }]
     },
     {
-      "featureType": "water",
       "elementType": "labels.text.fill",
-      "stylers": [{ "color": "#92998d" }]
+      "stylers": [{ "color": "#ffffff" }]
+    },
+    {
+      "elementType": "labels.text.stroke",
+      "stylers": [{ "color": "#1a1a1a" }]
+    },
+    {
+      "featureType": "administrative",
+      "elementType": "geometry.stroke",
+      "stylers": [{ "color": "#404040" }]
+    },
+    {
+      "featureType": "landscape.natural",
+      "elementType": "geometry",
+      "stylers": [{ "color": "#2d2d2d" }]
+    },
+    {
+      "featureType": "poi.park",
+      "elementType": "geometry.fill",
+      "stylers": [{ "color": "#1b5e20" }]
+    },
+    {
+      "featureType": "road",
+      "elementType": "geometry",
+      "stylers": [{ "color": "#404040" }]
+    },
+    {
+      "featureType": "road.highway",
+      "elementType": "geometry",
+      "stylers": [{ "color": "#ff6f00" }]
+    },
+    {
+      "featureType": "water",
+      "elementType": "geometry",
+      "stylers": [{ "color": "#1565c0" }]
     }
   ];
 
@@ -129,38 +141,48 @@ const MapComponent: React.FC<MapComponentProps> = React.memo(({
           latLngBounds: jeddahMapBounds,
           strictBounds: true,
         },
-        styles: jeddahMapStyle,
+        styles: isDarkMode ? darkMapStyle : lightMapStyle,
         disableDefaultUI: true,
-        zoomControl: true,
+        zoomControl: false,
         mapTypeControl: false,
         streetViewControl: false,
-        fullscreenControl: true,
+        fullscreenControl: false,
         gestureHandling: 'cooperative',
-        backgroundColor: '#f8fafc',
+        backgroundColor: isDarkMode ? '#1a1a1a' : '#f8fafc',
         clickableIcons: false,
       });
       
       setMap(newMap);
       console.log('✅ Enhanced Jeddah map created');
     }
-  }, [center, zoom, jeddahMapBounds]);
+  }, [center, zoom, jeddahMapBounds, isDarkMode]);
+
+  // Update map style when theme changes
+  useEffect(() => {
+    if (map) {
+      map.setOptions({
+        styles: isDarkMode ? darkMapStyle : lightMapStyle,
+        backgroundColor: isDarkMode ? '#1a1a1a' : '#f8fafc',
+      });
+    }
+  }, [map, isDarkMode]);
 
   const getMarkerIcon = useCallback((type: string, isNearby: boolean = false) => {
     const iconConfig = {
-      'cafe': { color: isNearby ? '#00FF00' : '#8B4513', scale: isNearby ? 20 : 16 },
-      'restaurant': { color: isNearby ? '#00FF00' : '#FF6347', scale: isNearby ? 20 : 16 },
-      'shop': { color: isNearby ? '#00FF00' : '#4169E1', scale: isNearby ? 20 : 16 },
-      'event': { color: isNearby ? '#00FF00' : '#FF69B4', scale: isNearby ? 20 : 16 },
+      'cafe': { color: isNearby ? '#4ade80' : '#8B4513', scale: isNearby ? 22 : 18 },
+      'restaurant': { color: isNearby ? '#4ade80' : '#ff6347', scale: isNearby ? 22 : 18 },
+      'shop': { color: isNearby ? '#4ade80' : '#3b82f6', scale: isNearby ? 22 : 18 },
+      'event': { color: isNearby ? '#4ade80' : '#ec4899', scale: isNearby ? 22 : 18 },
     };
 
-    const config = iconConfig[type] || { color: isNearby ? '#00FF00' : '#666666', scale: isNearby ? 20 : 16 };
+    const config = iconConfig[type] || { color: isNearby ? '#4ade80' : '#6b7280', scale: isNearby ? 22 : 18 };
     
     return {
       path: google.maps.SymbolPath.CIRCLE,
       fillColor: config.color,
       fillOpacity: 1,
       strokeColor: '#ffffff',
-      strokeWeight: isNearby ? 4 : 2,
+      strokeWeight: isNearby ? 4 : 3,
       scale: config.scale,
     };
   }, []);
@@ -169,7 +191,7 @@ const MapComponent: React.FC<MapComponentProps> = React.memo(({
     if (!map) return;
 
     const updateMarkers = () => {
-      // Add user location marker with enhanced visibility
+      // Add enhanced user location marker
       if (userLocation && !markersRef.current.has('user-location')) {
         const userMarker = new google.maps.Marker({
           position: { lat: userLocation.latitude, lng: userLocation.longitude },
@@ -177,11 +199,11 @@ const MapComponent: React.FC<MapComponentProps> = React.memo(({
           title: "Your Location in Jeddah",
           icon: {
             path: google.maps.SymbolPath.CIRCLE,
-            fillColor: '#1E90FF',
+            fillColor: '#3b82f6',
             fillOpacity: 1,
             strokeColor: '#ffffff',
             strokeWeight: 4,
-            scale: 15,
+            scale: 16,
           },
           zIndex: 1000,
           optimized: true,
@@ -239,6 +261,21 @@ const MapComponent: React.FC<MapComponentProps> = React.memo(({
     requestAnimationFrame(updateMarkers);
   }, [map, places, userLocation, onPlaceClick, getMarkerIcon]);
 
+  // Custom zoom controls
+  const zoomIn = () => {
+    if (map) {
+      const currentZoom = map.getZoom() || 13;
+      map.setZoom(Math.min(currentZoom + 1, 20));
+    }
+  };
+
+  const zoomOut = () => {
+    if (map) {
+      const currentZoom = map.getZoom() || 13;
+      map.setZoom(Math.max(currentZoom - 1, 11));
+    }
+  };
+
   useEffect(() => {
     return () => {
       markersRef.current.forEach(marker => marker.setMap(null));
@@ -246,28 +283,50 @@ const MapComponent: React.FC<MapComponentProps> = React.memo(({
     };
   }, []);
 
-  return <div ref={ref} className="w-full h-full rounded-lg" style={{ minHeight: '100vh' }} />;
+  return (
+    <div className="relative w-full h-full">
+      <div ref={ref} className="w-full h-full rounded-lg" style={{ minHeight: '100vh' }} />
+      
+      {/* Modern Custom Zoom Controls */}
+      <div className="absolute top-4 right-4 flex flex-col space-y-2 z-10">
+        <Button
+          onClick={zoomIn}
+          size="sm"
+          className="w-10 h-10 p-0 bg-background/90 hover:bg-background border shadow-lg"
+        >
+          <ZoomIn className="w-4 h-4" />
+        </Button>
+        <Button
+          onClick={zoomOut}
+          size="sm"
+          className="w-10 h-10 p-0 bg-background/90 hover:bg-background border shadow-lg"
+        >
+          <ZoomOut className="w-4 h-4" />
+        </Button>
+      </div>
+    </div>
+  );
 });
 
 const render = (status: Status) => {
   switch (status) {
     case Status.LOADING:
       return (
-        <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
+        <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center">
           <div className="text-center space-y-4">
             <div className="w-16 h-16 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin mx-auto"></div>
-            <div className="text-blue-900 text-lg font-medium">Loading Jeddah Map...</div>
+            <div className="text-blue-900 dark:text-blue-100 text-lg font-medium">Loading Jeddah Map...</div>
           </div>
         </div>
       );
     case Status.FAILURE:
       return (
-        <div className="min-h-screen bg-gradient-to-br from-red-50 to-red-100 p-4">
+        <div className="min-h-screen bg-gradient-to-br from-red-50 to-red-100 dark:from-gray-900 dark:to-red-900/20 p-4">
           <div className="container mx-auto max-w-2xl">
-            <Card className="bg-white border border-red-200">
+            <Card className="bg-background border">
               <CardContent className="p-6">
-                <h2 className="text-2xl font-bold text-red-900 mb-4">Map Loading Error</h2>
-                <p className="text-red-700">Failed to load the Jeddah map. Please check your internet connection and try again.</p>
+                <h2 className="text-2xl font-bold text-foreground mb-4">Map Loading Error</h2>
+                <p className="text-muted-foreground">Failed to load the Jeddah map. Please check your internet connection and try again.</p>
               </CardContent>
             </Card>
           </div>
@@ -281,22 +340,71 @@ const render = (status: Status) => {
 const EnhancedJeddahMap = () => {
   const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
   const [places, setPlaces] = useState<Place[]>([]);
+  const [isDarkMode, setIsDarkMode] = useState(false);
   const { isInJeddah, loading: locationLoading, recheckLocation, locationError, jeddahBounds } = useJeddahLocationCheck();
+  const { location, calculateDistance } = useLocation();
   const { user } = useAuth();
 
   const googleMapsApiKey = 'AIzaSyCnHJ_b9LBpxdSOdE8jmVMmJd6Vdmm5u8o';
 
+  // Detect system theme
+  useEffect(() => {
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    setIsDarkMode(mediaQuery.matches);
+    
+    const handler = (e: MediaQueryListEvent) => setIsDarkMode(e.matches);
+    mediaQuery.addEventListener('change', handler);
+    
+    return () => mediaQuery.removeEventListener('change', handler);
+  }, []);
+
+  // Fetch places with distance calculation
+  useEffect(() => {
+    if (isInJeddah && location) {
+      fetchActivePlaces();
+    }
+  }, [isInJeddah, location]);
+
+  const fetchActivePlaces = async () => {
+    try {
+      const { data, error } = await supabase
+        .from('places')
+        .select('*')
+        .eq('is_active', true);
+
+      if (error) throw error;
+
+      const placesWithDistance = data?.map(place => {
+        let distance = null;
+        if (location) {
+          distance = calculateDistance(
+            location.latitude,
+            location.longitude,
+            place.latitude,
+            place.longitude
+          );
+        }
+        return { ...place, distance };
+      }) || [];
+
+      setPlaces(placesWithDistance);
+    } catch (error) {
+      console.error('Error fetching places:', error);
+      toast.error('Failed to load places');
+    }
+  };
+
   // Show location restriction if not in Jeddah
   if (isInJeddah === false || locationError) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-amber-50 to-orange-100 flex items-center justify-center p-4">
-        <Card className="bg-white border border-amber-200 max-w-md">
+      <div className="min-h-screen bg-gradient-to-br from-amber-50 to-orange-100 dark:from-gray-900 dark:to-amber-900/20 flex items-center justify-center p-4">
+        <Card className="bg-background border max-w-md">
           <CardContent className="p-6 text-center space-y-4">
-            <div className="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto">
-              <Lock className="w-8 h-8 text-amber-600" />
+            <div className="w-16 h-16 bg-amber-100 dark:bg-amber-900/20 rounded-full flex items-center justify-center mx-auto">
+              <Lock className="w-8 h-8 text-amber-600 dark:text-amber-400" />
             </div>
-            <h2 className="text-xl font-bold text-amber-900">Location Required</h2>
-            <p className="text-amber-700">
+            <h2 className="text-xl font-bold text-foreground">Location Required</h2>
+            <p className="text-muted-foreground">
               {locationError 
                 ? 'Unable to detect your location. Please enable GPS and try again.'
                 : 'This app is currently available only in Jeddah city.'
@@ -304,7 +412,7 @@ const EnhancedJeddahMap = () => {
             </p>
             <Button 
               onClick={recheckLocation}
-              className="w-full bg-amber-600 hover:bg-amber-700 text-white"
+              className="w-full"
               disabled={locationLoading}
             >
               {locationLoading ? (
@@ -325,58 +433,60 @@ const EnhancedJeddahMap = () => {
   // Show loading while checking location
   if (locationLoading || isInJeddah === null) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 flex items-center justify-center">
+      <div className="min-h-screen bg-gradient-to-br from-blue-50 to-indigo-100 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center">
         <div className="text-center space-y-4">
           <div className="w-16 h-16 border-4 border-blue-500/30 border-t-blue-500 rounded-full animate-spin mx-auto"></div>
-          <div className="text-blue-900 text-lg font-medium">Detecting your location in Jeddah...</div>
+          <div className="text-blue-900 dark:text-blue-100 text-lg font-medium">Detecting your location in Jeddah...</div>
         </div>
       </div>
     );
   }
 
   return (
-    <div className="relative min-h-screen bg-gray-50">
+    <div className="relative min-h-screen bg-background">
       {/* Enhanced floating controls */}
-      <div className="absolute top-4 right-4 z-10 space-y-2">
+      <div className="absolute top-4 left-4 z-10 space-y-2">
         <Button
           onClick={recheckLocation}
           size="sm"
-          className="bg-blue-600 hover:bg-blue-700 text-white shadow-lg hover:shadow-xl transition-all"
+          className="bg-background/90 hover:bg-background border shadow-lg"
         >
-          <Navigation className="w-4 h-4" />
+          <Navigation className="w-4 h-4 mr-2" />
+          Center
         </Button>
       </div>
 
       <Wrapper apiKey={googleMapsApiKey} render={render} libraries={['places']}>
         <MapComponent
-          center={{ lat: 21.5433, lng: 39.1728 }} // Jeddah center
-          zoom={13}
+          center={location ? { lat: location.latitude, lng: location.longitude } : { lat: 21.5433, lng: 39.1728 }}
+          zoom={14}
           places={places}
-          userLocation={isInJeddah ? { latitude: 21.5433, longitude: 39.1728 } : null}
+          userLocation={location}
           jeddahBounds={jeddahBounds}
           onPlaceClick={setSelectedPlace}
+          isDarkMode={isDarkMode}
         />
       </Wrapper>
 
       {/* Enhanced Place Info Popup */}
       {selectedPlace && (
         <div className="absolute bottom-4 left-4 right-4 z-10">
-          <Card className="bg-white/95 backdrop-blur-md border shadow-2xl">
+          <Card className="bg-background/95 backdrop-blur-md border shadow-2xl">
             <CardContent className="p-4">
               <div className="flex items-center justify-between mb-3">
-                <h3 className="text-lg font-semibold text-gray-900 flex items-center space-x-2">
+                <h3 className="text-lg font-semibold text-foreground flex items-center space-x-2">
                   <span>{selectedPlace.name}</span>
                 </h3>
                 <button
                   onClick={() => setSelectedPlace(null)}
-                  className="text-gray-500 hover:text-gray-700 text-xl transition-colors"
+                  className="text-muted-foreground hover:text-foreground text-xl transition-colors"
                 >
                   ×
                 </button>
               </div>
               
               <div className="space-y-3">
-                <div className="flex items-center space-x-2 text-gray-600">
+                <div className="flex items-center space-x-2 text-muted-foreground">
                   <MapPin className="w-4 h-4" />
                   <span className="text-sm">
                     {selectedPlace.distance 
@@ -386,7 +496,7 @@ const EnhancedJeddahMap = () => {
                   </span>
                 </div>
 
-                <Button className="w-full bg-blue-600 hover:bg-blue-700 text-white">
+                <Button className="w-full bg-primary hover:bg-primary/90 text-primary-foreground">
                   <MessageSquare className="w-4 h-4 mr-2" />
                   Join Chat
                 </Button>

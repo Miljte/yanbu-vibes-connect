@@ -1,3 +1,4 @@
+
 import { useState, useEffect } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
@@ -15,7 +16,7 @@ export const useLocation = () => {
   const [retryAttempts, setRetryAttempts] = useState(0);
   const { user } = useAuth();
 
-  const maxRetryAttempts = 5; // Increased retry attempts
+  const maxRetryAttempts = 3;
   let watchId: number | null = null;
 
   useEffect(() => {
@@ -58,8 +59,9 @@ export const useLocation = () => {
       
       console.log('📍 GPS location received:', {
         ...newLocation,
-        accuracy: newLocation.accuracy + 'm',
-        timestamp: new Date().toLocaleTimeString()
+        accuracy: newLocation.accuracy ? `${Math.round(newLocation.accuracy)}m` : 'unknown',
+        timestamp: new Date().toLocaleTimeString(),
+        speed: position.coords.speed ? `${position.coords.speed}m/s` : 'stationary'
       });
 
       // Validate location is reasonable (within Saudi Arabia bounds)
@@ -72,8 +74,13 @@ export const useLocation = () => {
         
         await updateLocationInDB(newLocation);
       } else {
-        console.warn('⚠️ GPS coordinates outside Saudi Arabia bounds, retrying...');
-        retryLocationRequest();
+        console.warn('⚠️ GPS coordinates outside Saudi Arabia bounds');
+        if (retryAttempts < maxRetryAttempts) {
+          retryLocationRequest();
+        } else {
+          setError('Location detection failed - coordinates outside expected region');
+          setLoading(false);
+        }
       }
     };
 
@@ -86,20 +93,20 @@ export const useLocation = () => {
       
       switch (error.code) {
         case error.PERMISSION_DENIED:
-          errorMessage += 'Location access denied. Please enable location permissions in your browser settings.';
+          errorMessage += 'Location access denied. Please enable location permissions.';
           setLoading(false);
           setError(errorMessage);
           break;
         case error.POSITION_UNAVAILABLE:
-          errorMessage += 'GPS signal unavailable. Trying enhanced detection...';
+          errorMessage += 'GPS signal unavailable.';
           retryLocationRequest();
           break;
         case error.TIMEOUT:
-          errorMessage += 'GPS timeout. Retrying with different settings...';
+          errorMessage += 'GPS timeout.';
           retryLocationRequest();
           break;
         default:
-          errorMessage += 'Unknown GPS error. Retrying...';
+          errorMessage += 'Unknown GPS error.';
           retryLocationRequest();
           break;
       }
@@ -115,28 +122,28 @@ export const useLocation = () => {
           if (mounted) {
             requestLocation(nextAttempt);
           }
-        }, 1000 * nextAttempt);
+        }, 2000 * nextAttempt);
       } else {
-        setError('Unable to detect your location after multiple attempts. Please check your GPS settings and try again.');
+        setError('Unable to detect your location. Please check GPS settings and try again.');
         setLoading(false);
       }
     };
 
     const requestLocation = (attempt: number = 0) => {
-      // Progressive GPS options - start strict, get more lenient
-      const baseOptions = {
+      // High accuracy GPS options
+      const gpsOptions = {
         enableHighAccuracy: true,
-        timeout: attempt < 2 ? 15000 : 25000, // Longer timeout on retries
-        maximumAge: attempt < 2 ? 30000 : 60000, // Allow older positions on retries
+        timeout: 20000,
+        maximumAge: 10000,
       };
 
-      console.log(`📡 GPS request attempt ${attempt + 1} with options:`, baseOptions);
+      console.log(`📡 GPS request attempt ${attempt + 1}:`, gpsOptions);
 
-      // Get current position with progressive settings
+      // Get current position
       navigator.geolocation.getCurrentPosition(
         processPosition,
         handleError,
-        baseOptions
+        gpsOptions
       );
 
       // Start continuous tracking for real-time updates
@@ -145,12 +152,11 @@ export const useLocation = () => {
           processPosition,
           (error) => {
             console.warn('🔄 Watch position error:', error.message);
-            // Don't set error state for watch failures, keep last known location
           },
           {
             enableHighAccuracy: true,
-            timeout: 10000,
-            maximumAge: 5000, // Fresher positions for real-time tracking
+            timeout: 15000,
+            maximumAge: 5000,
           }
         );
 
@@ -184,6 +190,7 @@ export const useLocation = () => {
   };
 
   const retryLocation = () => {
+    console.log('🔄 Manual location retry requested');
     setLoading(true);
     setError(null);
     setRetryAttempts(0);
