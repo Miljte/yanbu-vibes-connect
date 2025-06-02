@@ -7,7 +7,6 @@ import ModernBottomNavigation from '@/components/ModernBottomNavigation';
 import EnhancedJeddahMap from '@/components/EnhancedJeddahMap';
 import ModernEvents from '@/components/ModernEvents';
 import ModernSettings from '@/components/ModernSettings';
-import UserProfile from '@/components/UserProfile';
 import AuthModal from '@/components/AuthModal';
 import OnboardingTutorial from '@/components/OnboardingTutorial';
 import FullMerchantDashboard from '@/components/FullMerchantDashboard';
@@ -74,8 +73,6 @@ const Index = () => {
         return <EnhancedJeddahMap />;
       case 'events':
         return <ModernEvents />;
-      case 'profile':
-        return <UserProfile />;
       case 'settings':
         return <ModernSettings />;
       case 'merchant':
@@ -89,7 +86,9 @@ const Index = () => {
 
   return (
     <div className="min-h-screen bg-background">
-      {renderActiveSection()}
+      <div className="pb-16 md:pb-20">
+        {renderActiveSection()}
+      </div>
       <ModernBottomNavigation
         activeSection={activeSection}
         onSectionChange={setActiveSection}
