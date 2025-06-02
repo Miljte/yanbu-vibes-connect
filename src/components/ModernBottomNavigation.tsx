@@ -1,116 +1,100 @@
-
 import React from 'react';
-import { MapPin, Calendar, Settings, Crown, Store, User } from 'lucide-react';
-import { useLocalization } from '@/contexts/LocalizationContext';
-
-interface NavigationItem {
-  id: string;
-  labelKey: string;
-  icon: React.ReactNode;
-  show: boolean;
-}
+import { Calendar, MapPin, MessageSquare, Settings, Crown, Shield } from 'lucide-react';
+import { useRoles } from '@/hooks/useRoles';
 
 interface ModernBottomNavigationProps {
   activeSection: string;
   onSectionChange: (section: string) => void;
-  userRole?: string;
+  userRole: string | null;
   isInJeddah?: boolean | null;
 }
 
-const ModernBottomNavigation: React.FC<ModernBottomNavigationProps> = ({ 
-  activeSection, 
-  onSectionChange, 
-  userRole = 'user',
-  isInJeddah = null
+const ModernBottomNavigation: React.FC<ModernBottomNavigationProps> = ({
+  activeSection,
+  onSectionChange,
+  userRole,
+  isInJeddah
 }) => {
-  const { t, isRTL } = useLocalization();
+  const { hasPermission } = useRoles();
+  
+  const getNavigationItems = () => {
+    const baseItems = [
+      {
+        id: 'events',
+        icon: Calendar,
+        label: 'Events',
+        badge: null
+      },
+      {
+        id: 'map',
+        icon: MapPin,
+        label: 'Map',
+        badge: null
+      },
+      {
+        id: 'chat',
+        icon: MessageSquare,
+        label: 'Chat',
+        badge: isInJeddah === false ? '❌' : null,
+        disabled: isInJeddah === false
+      },
+      {
+        id: 'settings',
+        icon: Settings,
+        label: 'Settings',
+        badge: null
+      }
+    ];
 
-  const isAdmin = userRole === 'admin';
-  const isMerchant = userRole === 'merchant' || isAdmin;
-
-  const navItems: NavigationItem[] = [
-    {
-      id: 'events',
-      labelKey: 'nav.events',
-      icon: <Calendar className="w-5 h-5" />,
-      show: true
-    },
-    {
-      id: 'map',
-      labelKey: 'nav.map',
-      icon: <MapPin className="w-5 h-5" />,
-      show: true
-    },
-    {
-      id: 'settings',
-      labelKey: 'nav.settings',
-      icon: <Settings className="w-5 h-5" />,
-      show: true
-    },
-    {
-      id: 'merchant',
-      labelKey: 'nav.merchant',
-      icon: <Store className="w-5 h-5" />,
-      show: isMerchant
-    },
-    {
-      id: 'admin',
-      labelKey: 'nav.admin',
-      icon: <Crown className="w-5 h-5" />,
-      show: isAdmin
+    // Add role-specific items
+    if (hasPermission('merchant_dashboard')) {
+      baseItems.splice(-1, 0, {
+        id: 'merchant',
+        icon: Crown,
+        label: 'Business',
+        badge: null
+      });
     }
-  ];
 
-  const visibleItems = navItems.filter(item => {
-    // Map access restricted to Jeddah users only
-    if (item.id === 'map' && isInJeddah === false) {
-      return false;
+    if (hasPermission('admin_dashboard')) {
+      baseItems.splice(-1, 0, {
+        id: 'admin',
+        icon: Shield,
+        label: 'Admin',
+        badge: '🛠'
+      });
     }
-    return item.show;
-  });
 
-  const handleItemClick = (itemId: string) => {
-    if (itemId === 'map' && isInJeddah === false && !isAdmin) {
-      onSectionChange('events');
-      return;
-    }
-    
-    onSectionChange(itemId);
+    return baseItems;
   };
 
+  const navigationItems = getNavigationItems();
+
   return (
-    <nav className={`fixed bottom-0 left-0 right-0 bg-background/95 backdrop-blur-md border-t border-border z-50 ${isRTL ? 'font-arabic' : 'font-sans'}`}>
-      <div className="container mx-auto px-4 sm:px-6 lg:px-8 max-w-screen-xl">
-        <div className="flex items-center justify-around py-2 sm:py-3">
-          {visibleItems.map((item) => {
-            const isActive = activeSection === item.id;
-            const isMapRestricted = item.id === 'map' && isInJeddah === false && !isAdmin;
-            
-            return (
-              <button
-                key={item.id}
-                onClick={() => handleItemClick(item.id)}
-                className={`flex flex-col items-center space-y-1 px-2 py-2 rounded-xl transition-all duration-300 min-w-0 flex-1 max-w-20 ${
-                  isActive
-                    ? 'bg-primary text-primary-foreground shadow-lg scale-105'
-                    : isMapRestricted
-                    ? 'text-muted-foreground/50 cursor-not-allowed'
-                    : 'text-muted-foreground hover:text-foreground hover:bg-muted/50 hover:scale-105'
-                }`}
-                disabled={isMapRestricted}
-              >
-                <div className={`transition-transform duration-300 ${isActive ? 'scale-110' : ''}`}>
-                  {item.icon}
-                </div>
-                <span className="text-xs font-medium text-center leading-tight">
-                  {t(item.labelKey)}
-                  {isMapRestricted && ' 🔒'}
-                </span>
-              </button>
-            );
-          })}
-        </div>
-      </div>
+    <nav className="fixed inset-x-0 bottom-0 bg-secondary border-t border-border z-50">
+      <ul className="flex justify-around p-2 md:p-3">
+        {navigationItems.map((item) => (
+          <li key={item.id} className="flex-1">
+            <button
+              onClick={() => onSectionChange(item.id)}
+              className={`
+                flex flex-col items-center justify-center
+                w-full h-14 md:h-16
+                text-muted-foreground
+                ${activeSection === item.id ? 'text-foreground' : ''}
+                ${item.disabled ? 'opacity-50 cursor-not-allowed' : ''}
+              `}
+              disabled={item.disabled}
+            >
+              {item.badge && (
+                <span className="absolute top-1 right-1 text-xs text-red-500">{item.badge}</span>
+              )}
+              <item.icon className="w-5 h-5 md:w-6 md:h-6 mb-1" />
+              <span className="text-xs md:text-sm">{item.label}</span>
+            </button>
+          </li>
+        ))}
+      </ul>
     </nav>
   );
 };

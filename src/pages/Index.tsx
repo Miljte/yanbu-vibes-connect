@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { useJeddahLocationCheck } from '@/hooks/useJeddahLocationCheck';
@@ -11,6 +10,7 @@ import AuthModal from '@/components/AuthModal';
 import OnboardingTutorial from '@/components/OnboardingTutorial';
 import FullMerchantDashboard from '@/components/FullMerchantDashboard';
 import EnhancedAdminPanel from '@/components/EnhancedAdminPanel';
+import EnhancedProximityChat from '@/components/EnhancedProximityChat';
 
 const Index = () => {
   const [activeSection, setActiveSection] = useState('events');
@@ -73,6 +73,8 @@ const Index = () => {
         return <EnhancedJeddahMap />;
       case 'events':
         return <ModernEvents />;
+      case 'chat':
+        return <EnhancedProximityChat />;
       case 'settings':
         return <ModernSettings />;
       case 'merchant':
