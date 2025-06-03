@@ -39,7 +39,10 @@ interface Event {
   organizer_id: string;
   max_attendees: number;
   current_attendees: number;
+  interested_count: number;
+  rsvp_count: number;
   is_active: boolean;
+  image_url?: string;
 }
 
 const OptimizedMerchantDashboard = () => {
@@ -65,7 +68,8 @@ const OptimizedMerchantDashboard = () => {
     description: '',
     start_time: '',
     end_time: '',
-    max_attendees: 50
+    max_attendees: 50,
+    image_url: ''
   });
 
   const { user } = useAuth();
@@ -110,7 +114,7 @@ const OptimizedMerchantDashboard = () => {
 
       console.log('✅ Merchant data loaded:', {
         places: placesResult.length,
-        events: (placesResult.length > 0 ? events.length : 0)
+        events: placesResult.length > 0 ? events.length : 0
       });
 
     } catch (error) {
@@ -152,15 +156,23 @@ const OptimizedMerchantDashboard = () => {
         if (error) throw error;
         toast.success('Store updated successfully!');
       } else {
-        const { error } = await supabase
+        const { data, error } = await supabase
           .from('places')
-          .insert(placeData);
+          .insert([placeData])
+          .select()
+          .single();
         
         if (error) throw error;
-        toast.success('Store created successfully!');
+        toast.success('Store created successfully! It will appear on the map shortly.');
+        
+        // Auto-select the newly created place
+        if (data) {
+          setSelectedPlace(data);
+        }
       }
 
       setIsEditing(false);
+      resetFormData();
       fetchMerchantData();
     } catch (error) {
       console.error('❌ Error saving place:', error);
@@ -206,32 +218,36 @@ const OptimizedMerchantDashboard = () => {
   // Handle event operations
   const handleSaveEvent = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || !selectedPlace) return;
+    if (!user || !selectedPlace) {
+      toast.error('Please select a store first');
+      return;
+    }
 
     try {
       const eventData = {
-        ...eventFormData,
+        title: eventFormData.title,
+        description: eventFormData.description,
+        start_time: eventFormData.start_time,
+        end_time: eventFormData.end_time,
+        max_attendees: eventFormData.max_attendees,
+        image_url: eventFormData.image_url,
         place_id: selectedPlace.id,
         organizer_id: user.id,
         current_attendees: 0,
+        interested_count: 0,
+        rsvp_count: 0,
         is_active: true
       };
 
       const { error } = await supabase
         .from('events')
-        .insert(eventData);
+        .insert([eventData]);
       
       if (error) throw error;
       
-      toast.success('Event created successfully!');
+      toast.success('Event created successfully! It will appear on the Events page.');
       setIsCreatingEvent(false);
-      setEventFormData({
-        title: '',
-        description: '',
-        start_time: '',
-        end_time: '',
-        max_attendees: 50
-      });
+      resetEventFormData();
       fetchMerchantData();
     } catch (error) {
       console.error('❌ Error creating event:', error);
@@ -252,17 +268,32 @@ const OptimizedMerchantDashboard = () => {
         image_urls: place.image_urls || []
       });
     } else {
-      setFormData({
-        name: '',
-        description: '',
-        type: 'restaurant',
-        address: '',
-        latitude: 21.485811,
-        longitude: 39.192505,
-        image_urls: []
-      });
+      resetFormData();
     }
     setIsEditing(true);
+  };
+
+  const resetFormData = () => {
+    setFormData({
+      name: '',
+      description: '',
+      type: 'restaurant',
+      address: '',
+      latitude: 21.485811,
+      longitude: 39.192505,
+      image_urls: []
+    });
+  };
+
+  const resetEventFormData = () => {
+    setEventFormData({
+      title: '',
+      description: '',
+      start_time: '',
+      end_time: '',
+      max_attendees: 50,
+      image_url: ''
+    });
   };
 
   if (loading) {
@@ -348,7 +379,7 @@ const OptimizedMerchantDashboard = () => {
                               <AlertDialogHeader>
                                 <AlertDialogTitle>Delete Store</AlertDialogTitle>
                                 <AlertDialogDescription>
-                                  Are you sure you want to delete "{place.name}"? This will also delete all related events and messages.
+                                  Are you sure you want to delete "{place.name}"? This will also delete all related events and chat messages.
                                 </AlertDialogDescription>
                               </AlertDialogHeader>
                               <AlertDialogFooter>
@@ -439,6 +470,11 @@ const OptimizedMerchantDashboard = () => {
                             required
                           />
                         </div>
+                        <Input
+                          placeholder="Image URL"
+                          value={formData.image_urls[0] || ''}
+                          onChange={(e) => setFormData({...formData, image_urls: e.target.value ? [e.target.value] : []})}
+                        />
                         <div className="flex space-x-2">
                           <Button type="submit">
                             {selectedPlace ? 'Update Store' : 'Create Store'}
@@ -462,6 +498,13 @@ const OptimizedMerchantDashboard = () => {
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-4">
+                      {selectedPlace.image_urls && selectedPlace.image_urls.length > 0 && (
+                        <img 
+                          src={selectedPlace.image_urls[0]} 
+                          alt={selectedPlace.name}
+                          className="w-full h-48 object-cover rounded-lg"
+                        />
+                      )}
                       <p className="text-muted-foreground">{selectedPlace.description}</p>
                       <div className="flex items-center space-x-2 text-sm text-muted-foreground">
                         <MapPin className="w-4 h-4" />
@@ -472,6 +515,18 @@ const OptimizedMerchantDashboard = () => {
                         <Badge variant={selectedPlace.is_active ? "default" : "secondary"}>
                           {selectedPlace.is_active ? 'Active' : 'Inactive'}
                         </Badge>
+                      </div>
+                      <div className="bg-blue-50 p-4 rounded-lg">
+                        <h4 className="font-medium text-blue-900 mb-2">🗺️ Map Integration</h4>
+                        <p className="text-blue-700 text-sm">
+                          Your store will appear on the main map with coordinates: {selectedPlace.latitude}, {selectedPlace.longitude}
+                        </p>
+                      </div>
+                      <div className="bg-green-50 p-4 rounded-lg">
+                        <h4 className="font-medium text-green-900 mb-2">💬 Chat Room</h4>
+                        <p className="text-green-700 text-sm">
+                          Users within 500 meters can join your store's dedicated chat room
+                        </p>
                       </div>
                     </CardContent>
                   </Card>
@@ -504,7 +559,7 @@ const OptimizedMerchantDashboard = () => {
               {!selectedPlace && (
                 <Card className="bg-orange-50 border-orange-200">
                   <CardContent className="p-4">
-                    <p className="text-orange-800">Please select a store first to manage events.</p>
+                    <p className="text-orange-800">Please select a store first to create events.</p>
                   </CardContent>
                 </Card>
               )}
@@ -512,7 +567,7 @@ const OptimizedMerchantDashboard = () => {
               {isCreatingEvent && selectedPlace && (
                 <Card className="bg-card border">
                   <CardHeader>
-                    <CardTitle className="text-foreground">Create New Event</CardTitle>
+                    <CardTitle className="text-foreground">Create New Event for {selectedPlace.name}</CardTitle>
                   </CardHeader>
                   <CardContent>
                     <form onSubmit={handleSaveEvent} className="space-y-4">
@@ -554,6 +609,17 @@ const OptimizedMerchantDashboard = () => {
                         onChange={(e) => setEventFormData({...eventFormData, max_attendees: parseInt(e.target.value)})}
                         required
                       />
+                      <Input
+                        placeholder="Event image URL"
+                        value={eventFormData.image_url}
+                        onChange={(e) => setEventFormData({...eventFormData, image_url: e.target.value})}
+                      />
+                      <div className="bg-blue-50 p-4 rounded-lg">
+                        <h4 className="font-medium text-blue-900 mb-2">📅 Event Publishing</h4>
+                        <p className="text-blue-700 text-sm">
+                          Your event will automatically appear on the public Events page with "Interested" and "RSVP" options
+                        </p>
+                      </div>
                       <div className="flex space-x-2">
                         <Button type="submit">Create Event</Button>
                         <Button type="button" variant="outline" onClick={() => setIsCreatingEvent(false)}>
@@ -572,6 +638,13 @@ const OptimizedMerchantDashboard = () => {
                       <CardTitle className="text-foreground text-lg">{event.title}</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-2">
+                      {event.image_url && (
+                        <img 
+                          src={event.image_url} 
+                          alt={event.title}
+                          className="w-full h-32 object-cover rounded-lg mb-3"
+                        />
+                      )}
                       <p className="text-muted-foreground text-sm">{event.description}</p>
                       <div className="flex items-center space-x-2 text-sm">
                         <Calendar className="w-4 h-4 text-primary" />
@@ -580,6 +653,16 @@ const OptimizedMerchantDashboard = () => {
                       <div className="flex items-center space-x-2 text-sm">
                         <Users className="w-4 h-4 text-primary" />
                         <span>{event.current_attendees} / {event.max_attendees} attendees</span>
+                      </div>
+                      <div className="grid grid-cols-2 gap-2 mt-3">
+                        <div className="text-center">
+                          <div className="text-lg font-bold text-purple-600">{event.interested_count}</div>
+                          <div className="text-xs text-muted-foreground">Interested</div>
+                        </div>
+                        <div className="text-center">
+                          <div className="text-lg font-bold text-green-600">{event.rsvp_count}</div>
+                          <div className="text-xs text-muted-foreground">RSVPs</div>
+                        </div>
                       </div>
                       <Badge variant={event.is_active ? "default" : "secondary"}>
                         {event.is_active ? 'Active' : 'Inactive'}
@@ -619,11 +702,11 @@ const OptimizedMerchantDashboard = () => {
               </Card>
               <Card className="bg-card border">
                 <CardHeader>
-                  <CardTitle className="text-foreground text-sm">Total Attendees</CardTitle>
+                  <CardTitle className="text-foreground text-sm">Total Event Responses</CardTitle>
                 </CardHeader>
                 <CardContent>
                   <div className="text-3xl font-bold text-blue-600">
-                    {events.reduce((acc, event) => acc + event.current_attendees, 0)}
+                    {events.reduce((acc, event) => acc + event.interested_count + event.rsvp_count, 0)}
                   </div>
                 </CardContent>
               </Card>
