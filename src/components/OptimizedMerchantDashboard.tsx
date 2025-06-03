@@ -165,7 +165,7 @@ const OptimizedMerchantDashboard = () => {
           .eq('merchant_id', user.id); // Extra security check
         
         if (error) throw error;
-        toast.success('Store updated successfully!');\
+        toast.success('Store updated successfully!');
       } else {
         const { data, error } = await supabase
           .from('places')
