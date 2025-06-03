@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Wrapper, Status } from '@googlemaps/react-wrapper';
 import { Card, CardContent } from '@/components/ui/card';
@@ -340,6 +341,8 @@ const EnhancedJeddahMap = () => {
   const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
   const [places, setPlaces] = useState<Place[]>([]);
   const [isDarkMode, setIsDarkMode] = useState(false);
+  const [showChat, setShowChat] = useState(false);
+  const [selectedChatPlace, setSelectedChatPlace] = useState<Place | null>(null);
   const { isInJeddah, loading: locationLoading, recheckLocation, locationError, jeddahBounds } = useJeddahLocationCheck();
   const { 
     location, 
@@ -379,13 +382,36 @@ const EnhancedJeddahMap = () => {
     }
   }, [nearbyPlaces]);
 
-  // Handle chat button click with proximity validation
-  const handleJoinChat = (place: Place) => {
+  // Handle URL parameters for chat routing
+  useEffect(() => {
+    const urlParams = new URLSearchParams(window.location.search);
+    const section = urlParams.get('section');
+    const placeId = urlParams.get('placeId');
+    
+    if (section === 'chat' && placeId) {
+      const place = places.find(p => p.id === placeId);
+      if (place) {
+        setSelectedChatPlace(place);
+        setShowChat(true);
+      }
+    }
+  }, [places]);
+
+  // Enhanced chat button handler with proper validation and navigation
+  const handleJoinChat = async (place: Place) => {
+    console.log('🔄 Attempting to join chat for place:', place.name);
+    
+    if (!user) {
+      toast.error('Please sign in to join chat');
+      return;
+    }
+
     if (!location) {
       toast.error('Location not available');
       return;
     }
 
+    // Real-time distance check
     const distance = calculateDistance(
       location.latitude,
       location.longitude,
@@ -393,16 +419,60 @@ const EnhancedJeddahMap = () => {
       place.longitude
     );
 
+    console.log('📍 Distance to place:', distance, 'meters');
+
     if (distance > 500) {
       toast.error(`You need to be within 500m to chat. Currently ${Math.round(distance)}m away.`);
       return;
     }
 
-    // Navigate to chat page with place context
-    const chatUrl = new URL(window.location.origin);
-    chatUrl.searchParams.set('section', 'chat');
-    chatUrl.searchParams.set('placeId', place.id);
-    window.location.href = chatUrl.toString();
+    try {
+      // Verify place exists in database and is active
+      const { data: placeData, error: placeError } = await supabase
+        .from('places')
+        .select('id, name, merchant_id, is_active')
+        .eq('id', place.id)
+        .eq('is_active', true)
+        .single();
+
+      if (placeError || !placeData) {
+        console.error('❌ Place not found or inactive:', placeError);
+        toast.error('This chat is no longer available');
+        return;
+      }
+
+      console.log('✅ Place verified:', placeData);
+
+      // Initialize chat session by ensuring user can access this place's chat
+      const { error: chatError } = await supabase
+        .from('chat_messages')
+        .select('id')
+        .eq('place_id', place.id)
+        .limit(1);
+
+      if (chatError) {
+        console.error('❌ Chat access error:', chatError);
+        toast.error('Unable to access chat');
+        return;
+      }
+
+      console.log('✅ Chat access verified for place:', place.id);
+      
+      // Navigate to chat component
+      setSelectedChatPlace(place);
+      setShowChat(true);
+      
+      // Update URL for direct access
+      const newUrl = new URL(window.location.href);
+      newUrl.searchParams.set('section', 'chat');
+      newUrl.searchParams.set('placeId', place.id);
+      window.history.pushState({}, '', newUrl.toString());
+      
+      toast.success(`🎉 Joined ${place.name} chat!`);
+    } catch (error) {
+      console.error('❌ Error joining chat:', error);
+      toast.error('Failed to join chat. Please try again.');
+    }
   };
 
   // Get real-time button state based on proximity
@@ -418,6 +488,44 @@ const EnhancedJeddahMap = () => {
       color: isWithinRange ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'
     };
   };
+
+  // Handle back navigation from chat
+  const handleBackFromChat = () => {
+    setShowChat(false);
+    setSelectedChatPlace(null);
+    
+    // Clean up URL
+    const newUrl = new URL(window.location.href);
+    newUrl.searchParams.delete('section');
+    newUrl.searchParams.delete('placeId');
+    window.history.pushState({}, '', newUrl.toString());
+  };
+
+  // Show chat component if in chat mode
+  if (showChat && selectedChatPlace) {
+    return (
+      <div className="min-h-screen bg-background">
+        <div className="p-4 border-b border-border bg-card">
+          <div className="flex items-center space-x-4">
+            <Button
+              onClick={handleBackFromChat}
+              variant="outline"
+              size="sm"
+            >
+              ← Back to Map
+            </Button>
+            <div>
+              <h1 className="text-lg font-semibold text-foreground">{selectedChatPlace.name}</h1>
+              <p className="text-sm text-muted-foreground">
+                {selectedChatPlace.distance ? `${Math.round(selectedChatPlace.distance)}m away` : 'Distance unknown'}
+              </p>
+            </div>
+          </div>
+        </div>
+        <EnhancedProximityChat placeId={selectedChatPlace.id} />
+      </div>
+    );
+  }
 
   // Show location restriction if not in Jeddah
   if (isInJeddah === false || locationError) {
