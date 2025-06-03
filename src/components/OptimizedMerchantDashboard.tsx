@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { Store, Calendar, Gift, Users, BarChart3, MapPin, Trash2, Plus, Edit } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -715,7 +714,7 @@ const OptimizedMerchantDashboard = () => {
               </Card>
             </div>
           </TabsContent>
-        </tabs>
+        </Tabs>
       </div>
     </div>
   );
