@@ -225,7 +225,7 @@ const OptimizedMap = () => {
 
   const { visibleMarkers, isLoading, markerCount } = useOptimizedMarkers({
     places: markersData,
-    maxDistance: 50000, // Increased distance to show more markers
+    maxDistance: 100000, // 100km to show all stores in a large area
     clusterThreshold: 3
   });
 
@@ -280,8 +280,9 @@ const OptimizedMap = () => {
 
   const fetchActivePlaces = async () => {
     try {
-      console.log('🔄 Fetching all active places for map...');
+      console.log('🔄 Fetching ALL active places for map...');
       
+      // Fetch ALL active places from ALL merchants, not just current user
       const { data, error } = await supabase
         .from('places')
         .select('*')
@@ -289,11 +290,11 @@ const OptimizedMap = () => {
 
       if (error) throw error;
       
-      console.log('✅ Active places loaded:', data?.length || 0, data);
+      console.log('✅ Active places loaded for map:', data?.length || 0, data);
       setPlaces(data || []);
     } catch (error) {
-      console.error('❌ Error fetching places:', error);
-      toast.error('Failed to load stores');
+      console.error('❌ Error fetching places for map:', error);
+      toast.error('Failed to load stores on map');
     } finally {
       setLoading(false);
     }
@@ -346,7 +347,8 @@ const OptimizedMap = () => {
         <Card className="bg-background/90 backdrop-blur-sm">
           <CardContent className="p-2">
             <div className="text-xs text-muted-foreground">
-              <div>Stores: {markerCount}/{places.length}</div>
+              <div>Visible: {markerCount}/{places.length}</div>
+              <div>Total Places: {places.length}</div>
               <div>Status: {isLoading ? 'Loading...' : 'Ready'}</div>
             </div>
           </CardContent>

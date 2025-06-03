@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { Store, Calendar, Gift, Users, BarChart3, MapPin, Trash2, Plus, Edit } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -91,6 +90,7 @@ const OptimizedMerchantDashboard = () => {
 
       const placesResult = placesData || [];
       setPlaces(placesResult);
+      console.log('✅ Places loaded for merchant:', placesResult.length, placesResult);
 
       // Auto-select first place
       if (placesResult.length > 0 && !selectedPlace) {
@@ -98,6 +98,7 @@ const OptimizedMerchantDashboard = () => {
       }
 
       // Fetch events for merchant's places
+      let eventsResult: any[] = [];
       if (placesResult.length > 0) {
         const placeIds = placesResult.map(p => p.id).filter(Boolean);
         const { data: eventsData, error: eventsError } = await supabase
@@ -109,20 +110,19 @@ const OptimizedMerchantDashboard = () => {
         if (eventsError) throw eventsError;
         
         // Ensure all events have the required fields with defaults
-        const eventsWithDefaults = (eventsData || []).map(event => ({
+        eventsResult = (eventsData || []).map(event => ({
           ...event,
           current_attendees: event.current_attendees || 0
         }));
         
-        setEvents(eventsWithDefaults);
-        console.log('✅ Events loaded:', eventsWithDefaults.length);
-      } else {
-        setEvents([]);
+        console.log('✅ Events loaded:', eventsResult.length);
       }
+      
+      setEvents(eventsResult);
 
       console.log('✅ Merchant data loaded:', {
         places: placesResult.length,
-        events: placesResult.length > 0 ? (eventsData?.length || 0) : 0
+        events: eventsResult.length
       });
 
     } catch (error) {
@@ -155,6 +155,8 @@ const OptimizedMerchantDashboard = () => {
         is_active: true
       };
 
+      console.log('💾 Saving place data:', placeData);
+
       if (selectedPlace && isEditing && selectedPlace.id) {
         const { error } = await supabase
           .from('places')
@@ -172,6 +174,7 @@ const OptimizedMerchantDashboard = () => {
           .single();
         
         if (error) throw error;
+        console.log('✅ Store created successfully:', data);
         toast.success('Store created successfully! It will appear on the map shortly.');
         
         // Auto-select the newly created place
