@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, MapPin, Users, AlertCircle, Crown, Clock } from 'lucide-react';
+import { Send, MapPin, Users, AlertCircle, Crown, Clock, MessageSquare, Lock } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -35,6 +35,7 @@ const EnhancedProximityChat: React.FC = () => {
     if (!selectedPlace && chatAvailablePlaces.size > 0) {
       const firstAvailablePlace = Array.from(chatAvailablePlaces)[0];
       setSelectedPlace(firstAvailablePlace);
+      console.log('🎯 Auto-selected place for chat:', firstAvailablePlace);
     }
   }, [chatAvailablePlaces, selectedPlace]);
 
@@ -202,10 +203,14 @@ const EnhancedProximityChat: React.FC = () => {
                       <div className="flex items-center space-x-2">
                         <span className="font-medium">{place.name}</span>
                         {isChatAvailable ? (
-                          <Badge className="bg-green-600 text-white text-xs">Chat Active</Badge>
+                          <Badge className="bg-green-600 text-white text-xs">
+                            <MessageSquare className="w-3 h-3 mr-1" />
+                            Chat Active
+                          </Badge>
                         ) : (
                           <Badge variant="outline" className="border-orange-500 text-orange-600 text-xs">
-                            Chat Locked
+                            <Lock className="w-3 h-3 mr-1" />
+                            Get Closer
                           </Badge>
                         )}
                       </div>
@@ -213,8 +218,12 @@ const EnhancedProximityChat: React.FC = () => {
                     </div>
                     <div className="text-right">
                       <Badge variant="outline">{Math.round(place.distance)}m</Badge>
-                      {place.distance <= 500 && (
-                        <div className="text-xs text-green-600 mt-1">In Range</div>
+                      {place.distance <= 500 ? (
+                        <div className="text-xs text-green-600 mt-1">✓ In Range</div>
+                      ) : (
+                        <div className="text-xs text-orange-600 mt-1">
+                          {500 - place.distance > 0 ? `${Math.abs(500 - place.distance)}m closer` : 'Too far'}
+                        </div>
                       )}
                     </div>
                   </button>
@@ -261,16 +270,22 @@ const EnhancedProximityChat: React.FC = () => {
                 ) : !isWithinRange ? (
                   <div className="flex items-center justify-center h-full">
                     <div className="text-center text-muted-foreground">
-                      <MapPin className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                      <h3 className="text-lg font-medium mb-2">Chat Locked</h3>
-                      <p className="text-sm">
+                      <Lock className="w-16 h-16 mx-auto mb-4 opacity-50" />
+                      <h3 className="text-xl font-medium mb-2">Chat Locked</h3>
+                      <p className="text-sm mb-4">
                         Get within 500m of {getPlaceName(selectedPlace)} to unlock chat
                       </p>
+                      <Badge variant="outline" className="text-orange-600 border-orange-500">
+                        Currently {Math.round(getPlaceDistance(selectedPlace))}m away
+                      </Badge>
                     </div>
                   </div>
                 ) : messages.length === 0 ? (
                   <div className="flex items-center justify-center h-full">
-                    <div className="text-muted-foreground">No messages yet. Start the conversation!</div>
+                    <div className="text-center text-muted-foreground">
+                      <MessageSquare className="w-12 h-12 mx-auto mb-4 opacity-50" />
+                      <p>No messages yet. Start the conversation!</p>
+                    </div>
                   </div>
                 ) : (
                   messages.map((message) => (
@@ -293,19 +308,6 @@ const EnhancedProximityChat: React.FC = () => {
                             <Clock className="w-3 h-3" />
                             <span>{formatTime(message.created_at)}</span>
                           </span>
-                          {canDeleteMessage(message.user_id) && !message.is_deleted && (
-                            <Button
-                              size="sm"
-                              variant="ghost"
-                              className="h-auto p-1 text-xs text-red-500 hover:text-red-700"
-                              onClick={() => {
-                                // Implementation would go here for admin delete
-                                console.log('Delete message:', message.id);
-                              }}
-                            >
-                              Delete
-                            </Button>
-                          )}
                         </div>
                       </div>
                       <div className={`text-sm p-3 rounded-lg ${
@@ -353,8 +355,8 @@ const EnhancedProximityChat: React.FC = () => {
                 
                 <div className="text-xs text-muted-foreground">
                   {isWithinRange 
-                    ? `Chat active • Live GPS • ${Math.round(getPlaceDistance(selectedPlace))}m from store`
-                    : `Chat locked • Need to be within 500m • Currently ${Math.round(getPlaceDistance(selectedPlace))}m away`
+                    ? `🟢 Chat active • Live GPS • ${Math.round(getPlaceDistance(selectedPlace))}m from store`
+                    : `🔴 Chat locked • Need to be within 500m • Currently ${Math.round(getPlaceDistance(selectedPlace))}m away`
                   }
                 </div>
               </div>

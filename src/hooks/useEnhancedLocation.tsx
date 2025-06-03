@@ -186,7 +186,7 @@ export const useEnhancedLocation = () => {
             updated_at: new Date().toISOString()
           }, { onConflict: 'user_id' })
           .then(() => console.log('✅ Location updated in database'))
-          .catch(err => console.error('❌ Failed to update location:', err));
+          .catch((err: any) => console.error('❌ Failed to update location:', err));
       }
     };
 
