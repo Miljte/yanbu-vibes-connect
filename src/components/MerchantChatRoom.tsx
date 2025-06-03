@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, MapPin, Users, Clock, Crown, ArrowLeft } from 'lucide-react';
+import { Send, MapPin, Users, Clock, Crown, ArrowLeft, MessageSquare } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';

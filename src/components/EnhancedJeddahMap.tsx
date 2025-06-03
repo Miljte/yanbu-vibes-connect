@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Wrapper, Status } from '@googlemaps/react-wrapper';
 import { Card, CardContent } from '@/components/ui/card';
@@ -9,6 +8,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useJeddahLocationCheck } from '@/hooks/useJeddahLocationCheck';
 import { useEnhancedLocation } from '@/hooks/useEnhancedLocation';
 import { toast } from 'sonner';
+import MerchantChatRoom from './MerchantChatRoom';
 
 interface Place {
   id: string;
@@ -522,7 +522,7 @@ const EnhancedJeddahMap = () => {
             </div>
           </div>
         </div>
-        <EnhancedProximityChat placeId={selectedChatPlace.id} />
+        <MerchantChatRoom placeId={selectedChatPlace.id} onBack={handleBackFromChat} />
       </div>
     );
   }
