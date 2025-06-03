@@ -1,265 +1,298 @@
 
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from './useAuth';
+import { toast } from 'sonner';
 
 interface LocationData {
   latitude: number;
   longitude: number;
-  accuracy?: number;
+  accuracy: number;
 }
 
-interface Place {
+interface PlaceData {
   id: string;
   name: string;
+  type: string;
   latitude: number;
   longitude: number;
   distance: number;
-  type: string;
+  is_active: boolean;
+  merchant_id: string;
 }
 
 export const useEnhancedLocation = () => {
   const [location, setLocation] = useState<LocationData | null>(null);
-  const [error, setError] = useState<string | null>(null);
-  const [isTracking, setIsTracking] = useState(false);
-  const [nearbyPlaces, setNearbyPlaces] = useState<Place[]>([]);
+  const [nearbyPlaces, setNearbyPlaces] = useState<PlaceData[]>([]);
   const [chatAvailablePlaces, setChatAvailablePlaces] = useState<Set<string>>(new Set());
   const [isInJeddah, setIsInJeddah] = useState<boolean | null>(null);
   const [locationAccuracy, setLocationAccuracy] = useState<number | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  const watchIdRef = useRef<number | null>(null);
+  const lastUpdateRef = useRef<number>(0);
+  const placesCache = useRef<Map<string, PlaceData[]>>(new Map());
+  
   const { user } = useAuth();
 
-  // Precise Jeddah boundaries
-  const jeddahBounds = {
-    southwest: { lat: 21.350000, lng: 39.050000 },
-    northeast: { lat: 21.750000, lng: 39.350000 }
-  };
-
-  const calculateDistance = useCallback((lat1: number, lon1: number, lat2: number, lon2: number): number => {
-    const R = 6371; // Earth's radius in kilometers
+  // Calculate distance between two points
+  const calculateDistance = useCallback((lat1: number, lon1: number, lat2: number, lon2: number) => {
+    const R = 6371000; // Earth's radius in meters
     const dLat = (lat2 - lat1) * Math.PI / 180;
     const dLon = (lon2 - lon1) * Math.PI / 180;
-    const a = 
-      Math.sin(dLat/2) * Math.sin(dLat/2) +
-      Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) * 
-      Math.sin(dLon/2) * Math.sin(dLon/2);
+    const a = Math.sin(dLat/2) * Math.sin(dLat/2) +
+              Math.cos(lat1 * Math.PI / 180) * Math.cos(lat2 * Math.PI / 180) *
+              Math.sin(dLon/2) * Math.sin(dLon/2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
-    return Math.round(R * c * 1000); // Distance in meters
+    return R * c;
   }, []);
 
-  const isWithinJeddah = useCallback((lat: number, lng: number): boolean => {
-    return (
-      lat >= jeddahBounds.southwest.lat &&
-      lat <= jeddahBounds.northeast.lat &&
-      lng >= jeddahBounds.southwest.lng &&
-      lng <= jeddahBounds.northeast.lng
-    );
-  }, [jeddahBounds]);
+  // Check if location is in Jeddah
+  const checkJeddahBounds = useCallback((lat: number, lng: number) => {
+    // Jeddah approximate bounds
+    const jeddahBounds = {
+      north: 21.8,
+      south: 21.2,
+      east: 39.4,
+      west: 38.8
+    };
+    
+    return lat >= jeddahBounds.south && 
+           lat <= jeddahBounds.north && 
+           lng >= jeddahBounds.west && 
+           lng <= jeddahBounds.east;
+  }, []);
 
-  const fetchNearbyPlaces = useCallback(async (currentLocation: LocationData) => {
-    if (!currentLocation || !isWithinJeddah(currentLocation.latitude, currentLocation.longitude)) {
-      setNearbyPlaces([]);
-      setChatAvailablePlaces(new Set());
-      return;
+  // Fetch nearby places with caching
+  const fetchNearbyPlaces = useCallback(async (userLocation: LocationData) => {
+    const cacheKey = `${Math.round(userLocation.latitude * 1000)}-${Math.round(userLocation.longitude * 1000)}`;
+    const cached = placesCache.current.get(cacheKey);
+    
+    if (cached) {
+      console.log('📍 Using cached places data');
+      setNearbyPlaces(cached);
+      return cached;
     }
 
     try {
-      console.log('🏪 Fetching nearby places for location:', {
-        lat: currentLocation.latitude.toFixed(6),
-        lng: currentLocation.longitude.toFixed(6),
-        accuracy: currentLocation.accuracy
-      });
-
+      console.log('🔄 Fetching nearby places...');
+      
       const { data: places, error } = await supabase
         .from('places')
-        .select('*')
-        .eq('is_active', true);
+        .select('id, name, type, latitude, longitude, is_active, merchant_id')
+        .eq('is_active', true)
+        .limit(50);
 
       if (error) throw error;
 
-      if (!places || places.length === 0) {
-        console.log('⚠️ No active places found');
-        setNearbyPlaces([]);
-        setChatAvailablePlaces(new Set());
-        return;
-      }
+      const placesWithDistance = (places || [])
+        .map(place => ({
+          ...place,
+          distance: calculateDistance(
+            userLocation.latitude,
+            userLocation.longitude,
+            place.latitude,
+            place.longitude
+          )
+        }))
+        .filter(place => place.distance <= 5000) // Within 5km
+        .sort((a, b) => a.distance - b.distance);
 
-      const placesWithDistance = places.map(place => {
-        const distance = calculateDistance(
-          currentLocation.latitude,
-          currentLocation.longitude,
-          place.latitude,
-          place.longitude
-        );
-        return {
-          id: place.id,
-          name: place.name,
-          latitude: place.latitude,
-          longitude: place.longitude,
-          distance,
-          type: place.type
-        };
-      })
-      .filter(place => place.distance <= 2000) // Show places within 2km
-      .sort((a, b) => a.distance - b.distance);
-
-      console.log(`✅ Found ${placesWithDistance.length} places within 2km`);
+      placesCache.current.set(cacheKey, placesWithDistance);
       setNearbyPlaces(placesWithDistance);
-
-      // Chat becomes available within 500m (strict proximity requirement)
-      const chatEnabledPlaces = new Set(
-        placesWithDistance
-          .filter(place => place.distance <= 500)
-          .map(place => place.id)
-      );
       
-      setChatAvailablePlaces(chatEnabledPlaces);
-      
-      console.log(`🔓 Chat enabled for ${chatEnabledPlaces.size} places within 500m:`);
-      placesWithDistance.forEach(place => {
-        const status = place.distance <= 500 ? '🔓 CHAT ENABLED' : '🔒 chat locked';
-        console.log(`  - ${place.name}: ${place.distance}m (${status})`);
-      });
-
+      console.log('✅ Found nearby places:', placesWithDistance.length);
+      return placesWithDistance;
     } catch (error) {
       console.error('❌ Error fetching places:', error);
       setError('Failed to load nearby places');
+      return [];
     }
-  }, [calculateDistance, isWithinJeddah]);
+  }, [calculateDistance]);
 
-  useEffect(() => {
-    if (!user || !navigator.geolocation) {
-      setError('Location services not available');
+  // Update user location in database
+  const updateUserLocation = useCallback(async (locationData: LocationData) => {
+    if (!user) return;
+
+    try {
+      const { error } = await supabase
+        .from('user_locations')
+        .upsert({
+          user_id: user.id,
+          latitude: locationData.latitude,
+          longitude: locationData.longitude,
+          accuracy: locationData.accuracy,
+          updated_at: new Date().toISOString()
+        }, {
+          onConflict: 'user_id'
+        });
+
+      if (error) {
+        console.error('❌ Error updating location:', error);
+      }
+    } catch (error) {
+      console.error('❌ Location update failed:', error);
+    }
+  }, [user]);
+
+  // Get high-accuracy location
+  const getCurrentLocation = useCallback(() => {
+    if (!navigator.geolocation) {
+      setError('Geolocation is not supported');
+      setLoading(false);
       return;
     }
 
-    let watchId: number | null = null;
-    setIsTracking(true);
-    setError(null);
-
-    console.log('🌍 Starting CRITICAL HIGH-ACCURACY location tracking...');
-
-    // Ultra-high accuracy options for critical proximity detection
-    const criticalOptions = {
+    const options: PositionOptions = {
       enableHighAccuracy: true,
-      timeout: 5000, // Shorter timeout for faster response
-      maximumAge: 1000 // Very fresh positions only
+      timeout: 15000,
+      maximumAge: 30000
     };
 
-    const handleSuccess = (position: GeolocationPosition) => {
-      const newLocation = {
+    const handleSuccess = async (position: GeolocationPosition) => {
+      const newLocation: LocationData = {
         latitude: position.coords.latitude,
         longitude: position.coords.longitude,
         accuracy: position.coords.accuracy
       };
 
-      console.log('📍 CRITICAL Location update:', {
-        lat: newLocation.latitude.toFixed(6),
-        lng: newLocation.longitude.toFixed(6),
-        accuracy: newLocation.accuracy ? `${Math.round(newLocation.accuracy)}m` : 'unknown',
-        speed: position.coords.speed ? `${position.coords.speed}m/s` : 'stationary'
-      });
-
-      setLocation(newLocation);
-      setLocationAccuracy(newLocation.accuracy || null);
+      console.log('📍 Location updated:', newLocation);
       
-      const withinJeddah = isWithinJeddah(newLocation.latitude, newLocation.longitude);
-      setIsInJeddah(withinJeddah);
-
-      if (withinJeddah) {
-        console.log('✅ CRITICAL: Location confirmed within Jeddah bounds');
-        fetchNearbyPlaces(newLocation);
-        setError(null);
+      setLocation(newLocation);
+      setLocationAccuracy(newLocation.accuracy);
+      setError(null);
+      setLoading(false);
+      
+      // Check Jeddah bounds
+      const inJeddah = checkJeddahBounds(newLocation.latitude, newLocation.longitude);
+      setIsInJeddah(inJeddah);
+      
+      if (inJeddah) {
+        // Fetch nearby places and update database
+        const places = await fetchNearbyPlaces(newLocation);
+        updateUserLocation(newLocation);
+        
+        // Update chat available places (within 500m)
+        const chatPlaces = new Set(
+          places
+            .filter(place => place.distance <= 500)
+            .map(place => place.id)
+        );
+        setChatAvailablePlaces(chatPlaces);
+        
+        console.log('✅ Chat available at:', chatPlaces.size, 'places');
       } else {
-        console.warn('❌ CRITICAL: Location outside Jeddah bounds');
-        setError('Location outside Jeddah city limits');
+        console.log('❌ Outside Jeddah bounds');
         setNearbyPlaces([]);
         setChatAvailablePlaces(new Set());
-      }
-
-      // Update location in database
-      if (user) {
-        const updateLocation = async () => {
-          try {
-            await supabase
-              .from('user_locations')
-              .upsert({
-                user_id: user.id,
-                latitude: newLocation.latitude,
-                longitude: newLocation.longitude,
-                accuracy: newLocation.accuracy,
-                updated_at: new Date().toISOString()
-              }, { onConflict: 'user_id' });
-            console.log('✅ CRITICAL: Location updated in database');
-          } catch (err: any) {
-            console.error('❌ CRITICAL: Failed to update location:', err);
-          }
-        };
-        updateLocation();
       }
     };
 
     const handleError = (error: GeolocationPositionError) => {
-      console.error('❌ CRITICAL GPS error:', error.message);
-      let errorMessage = 'CRITICAL Location error: ';
+      console.error('❌ Location error:', error);
+      let errorMessage = 'Location access failed';
       
       switch (error.code) {
         case error.PERMISSION_DENIED:
-          errorMessage += 'Location permission DENIED. Enable GPS now!';
+          errorMessage = 'Location permission denied. Please enable location access.';
           break;
         case error.POSITION_UNAVAILABLE:
-          errorMessage += 'GPS signal UNAVAILABLE. Move to open area.';
+          errorMessage = 'Location information unavailable. Please check GPS.';
           break;
         case error.TIMEOUT:
-          errorMessage += 'GPS TIMEOUT. Trying again...';
+          errorMessage = 'Location request timed out. Please try again.';
           break;
-        default:
-          errorMessage += 'Unknown GPS error. Check device settings.';
       }
       
       setError(errorMessage);
-      setIsTracking(false);
+      setLoading(false);
+      setIsInJeddah(false);
     };
 
-    // Get initial position with CRITICAL accuracy
-    navigator.geolocation.getCurrentPosition(handleSuccess, handleError, criticalOptions);
+    navigator.geolocation.getCurrentPosition(handleSuccess, handleError, options);
+  }, [checkJeddahBounds, fetchNearbyPlaces, updateUserLocation]);
 
-    // Start CONTINUOUS high-accuracy tracking
-    watchId = navigator.geolocation.watchPosition(
-      handleSuccess, 
-      handleError, 
-      {
-        enableHighAccuracy: true,
-        timeout: 3000, // Fast timeout for continuous updates
-        maximumAge: 500 // Ultra-fresh positions
+  // Start location tracking
+  const startLocationTracking = useCallback(() => {
+    if (!navigator.geolocation) {
+      setError('Geolocation not supported');
+      return;
+    }
+
+    const options: PositionOptions = {
+      enableHighAccuracy: true,
+      timeout: 10000,
+      maximumAge: 30000
+    };
+
+    const handlePosition = async (position: GeolocationPosition) => {
+      const now = Date.now();
+      if (now - lastUpdateRef.current < 10000) return; // Throttle to 10 seconds
+      lastUpdateRef.current = now;
+
+      const newLocation: LocationData = {
+        latitude: position.coords.latitude,
+        longitude: position.coords.longitude,
+        accuracy: position.coords.accuracy
+      };
+
+      setLocation(newLocation);
+      setLocationAccuracy(newLocation.accuracy);
+      
+      const inJeddah = checkJeddahBounds(newLocation.latitude, newLocation.longitude);
+      setIsInJeddah(inJeddah);
+      
+      if (inJeddah) {
+        const places = await fetchNearbyPlaces(newLocation);
+        updateUserLocation(newLocation);
+        
+        const chatPlaces = new Set(
+          places
+            .filter(place => place.distance <= 500)
+            .map(place => place.id)
+        );
+        setChatAvailablePlaces(chatPlaces);
       }
-    );
+    };
 
-    console.log('🔄 CRITICAL: Continuous high-accuracy GPS tracking started');
+    const handleError = (error: GeolocationPositionError) => {
+      console.error('❌ Location tracking error:', error);
+    };
+
+    watchIdRef.current = navigator.geolocation.watchPosition(
+      handlePosition,
+      handleError,
+      options
+    );
+  }, [checkJeddahBounds, fetchNearbyPlaces, updateUserLocation]);
+
+  // Initialize location
+  useEffect(() => {
+    getCurrentLocation();
+    startLocationTracking();
 
     return () => {
-      if (watchId !== null) {
-        navigator.geolocation.clearWatch(watchId);
-        console.log('🛑 CRITICAL: GPS tracking stopped');
+      if (watchIdRef.current !== null) {
+        navigator.geolocation.clearWatch(watchIdRef.current);
       }
-      setIsTracking(false);
     };
-  }, [user, fetchNearbyPlaces, isWithinJeddah]);
+  }, [getCurrentLocation, startLocationTracking]);
 
   const retryLocation = useCallback(() => {
+    setLoading(true);
     setError(null);
-    setLocation(null);
-    console.log('🔄 CRITICAL: Manual location retry requested');
-    // The useEffect will handle restarting location tracking
-  }, []);
+    getCurrentLocation();
+  }, [getCurrentLocation]);
 
   return {
     location,
-    error,
-    isTracking,
     nearbyPlaces,
     chatAvailablePlaces,
     isInJeddah,
     locationAccuracy,
+    error,
+    loading,
     calculateDistance,
     retryLocation
   };

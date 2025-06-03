@@ -2,7 +2,7 @@
 import React from 'react';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import MerchantChatRoom from './MerchantChatRoom';
+import ReliableChatRoom from './ReliableChatRoom';
 
 interface EnhancedProximityChatProps {
   placeId?: string;
@@ -28,7 +28,7 @@ const EnhancedProximityChat: React.FC<EnhancedProximityChatProps> = ({ placeId, 
     );
   }
 
-  return <MerchantChatRoom placeId={placeId} onBack={onBack} />;
+  return <ReliableChatRoom placeId={placeId} onBack={onBack} />;
 };
 
 export default EnhancedProximityChat;
