@@ -39,8 +39,6 @@ interface Event {
   organizer_id: string;
   max_attendees: number;
   current_attendees: number;
-  interested_count?: number;
-  rsvp_count?: number;
   is_active: boolean;
   image_url?: string;
 }
@@ -113,8 +111,6 @@ const OptimizedMerchantDashboard = () => {
         // Ensure all events have the required fields with defaults
         const eventsWithDefaults = (eventsData || []).map(event => ({
           ...event,
-          interested_count: event.interested_count || 0,
-          rsvp_count: event.rsvp_count || 0,
           current_attendees: event.current_attendees || 0
         }));
         
@@ -238,8 +234,6 @@ const OptimizedMerchantDashboard = () => {
         place_id: selectedPlace.id,
         organizer_id: user.id,
         current_attendees: 0,
-        interested_count: 0,
-        rsvp_count: 0,
         is_active: true
       };
 

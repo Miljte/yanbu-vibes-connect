@@ -22,8 +22,6 @@ interface EventData {
   place_id: string;
   created_at: string;
   updated_at: string;
-  interested_count?: number;
-  rsvp_count?: number;
   places: {
     id: string;
     name: string;
@@ -32,21 +30,16 @@ interface EventData {
   };
 }
 
-interface UserResponse {
-  event_id: string;
-  response_type: string;
-}
-
 const EventsSection = () => {
   const [events, setEvents] = useState<EventData[]>([]);
-  const [userResponses, setUserResponses] = useState<UserResponse[]>([]);
+  const [userAttendance, setUserAttendance] = useState<string[]>([]);
   const [loading, setLoading] = useState(true);
   const { user } = useAuth();
 
   useEffect(() => {
     fetchEvents();
     if (user) {
-      fetchUserResponses();
+      fetchUserAttendance();
     }
   }, [user]);
 
@@ -71,15 +64,8 @@ const EventsSection = () => {
 
       if (error) throw error;
 
-      // Add default values for missing fields
-      const eventsWithDefaults = (data || []).map(event => ({
-        ...event,
-        interested_count: event.interested_count || 0,
-        rsvp_count: event.rsvp_count || 0
-      }));
-
-      setEvents(eventsWithDefaults);
-      console.log('✅ Events loaded:', eventsWithDefaults.length);
+      setEvents(data || []);
+      console.log('✅ Events loaded:', data?.length || 0);
     } catch (error) {
       console.error('❌ Error fetching events:', error);
       toast.error('Failed to load events');
@@ -88,63 +74,19 @@ const EventsSection = () => {
     }
   };
 
-  const fetchUserResponses = async () => {
+  const fetchUserAttendance = async () => {
     if (!user) return;
 
     try {
       const { data, error } = await supabase
-        .from('event_responses')
-        .select('event_id, response_type')
+        .from('event_attendees')
+        .select('event_id')
         .eq('user_id', user.id);
 
       if (error) throw error;
-      setUserResponses(data || []);
+      setUserAttendance(data?.map(item => item.event_id) || []);
     } catch (error) {
-      console.error('❌ Error fetching user responses:', error);
-    }
-  };
-
-  const handleInterested = async (eventId: string) => {
-    if (!user) {
-      toast.error('Please sign in to show interest');
-      return;
-    }
-
-    try {
-      const existingResponse = userResponses.find(
-        r => r.event_id === eventId && r.response_type === 'interested'
-      );
-
-      if (existingResponse) {
-        // Remove interest
-        const { error } = await supabase
-          .from('event_responses')
-          .delete()
-          .eq('event_id', eventId)
-          .eq('user_id', user.id)
-          .eq('response_type', 'interested');
-
-        if (error) throw error;
-        toast.success('Interest removed');
-      } else {
-        // Add interest
-        const { error } = await supabase
-          .from('event_responses')
-          .insert({
-            event_id: eventId,
-            user_id: user.id,
-            response_type: 'interested'
-          });
-
-        if (error) throw error;
-        toast.success('Marked as interested!');
-      }
-
-      fetchUserResponses();
-      fetchEvents();
-    } catch (error) {
-      console.error('❌ Error updating interest:', error);
-      toast.error('Failed to update interest');
+      console.error('❌ Error fetching user attendance:', error);
     }
   };
 
@@ -155,36 +97,32 @@ const EventsSection = () => {
     }
 
     try {
-      const existingRSVP = userResponses.find(
-        r => r.event_id === eventId && r.response_type === 'rsvp'
-      );
+      const isAttending = userAttendance.includes(eventId);
 
-      if (existingRSVP) {
+      if (isAttending) {
         // Remove RSVP
         const { error } = await supabase
-          .from('event_responses')
+          .from('event_attendees')
           .delete()
           .eq('event_id', eventId)
-          .eq('user_id', user.id)
-          .eq('response_type', 'rsvp');
+          .eq('user_id', user.id);
 
         if (error) throw error;
         toast.success('RSVP cancelled');
       } else {
         // Add RSVP
         const { error } = await supabase
-          .from('event_responses')
+          .from('event_attendees')
           .insert({
             event_id: eventId,
-            user_id: user.id,
-            response_type: 'rsvp'
+            user_id: user.id
           });
 
         if (error) throw error;
         toast.success('RSVP confirmed!');
       }
 
-      fetchUserResponses();
+      fetchUserAttendance();
       fetchEvents();
     } catch (error) {
       console.error('❌ Error updating RSVP:', error);
@@ -192,12 +130,8 @@ const EventsSection = () => {
     }
   };
 
-  const isInterested = (eventId: string) => {
-    return userResponses.some(r => r.event_id === eventId && r.response_type === 'interested');
-  };
-
-  const hasRSVPed = (eventId: string) => {
-    return userResponses.some(r => r.event_id === eventId && r.response_type === 'rsvp');
+  const isAttending = (eventId: string) => {
+    return userAttendance.includes(eventId);
   };
 
   const formatDate = (dateString: string) => {
@@ -287,33 +221,20 @@ const EventsSection = () => {
                       <div className="flex items-center justify-between pt-4">
                         <div className="flex items-center space-x-4 text-sm text-muted-foreground">
                           <span className="flex items-center space-x-1">
-                            <Heart className="w-4 h-4" />
-                            <span>{event.interested_count || 0} interested</span>
-                          </span>
-                          <span className="flex items-center space-x-1">
                             <UserCheck className="w-4 h-4" />
-                            <span>{event.rsvp_count || 0} attending</span>
+                            <span>{event.current_attendees || 0} attending</span>
                           </span>
                         </div>
 
                         <div className="flex space-x-2">
                           <Button
-                            variant={isInterested(event.id) ? "default" : "outline"}
-                            size="sm"
-                            onClick={() => handleInterested(event.id)}
-                          >
-                            <Heart className={`w-4 h-4 mr-1 ${isInterested(event.id) ? 'fill-current' : ''}`} />
-                            {isInterested(event.id) ? 'Interested' : 'Interest'}
-                          </Button>
-                          
-                          <Button
-                            variant={hasRSVPed(event.id) ? "default" : "outline"}
+                            variant={isAttending(event.id) ? "default" : "outline"}
                             size="sm"
                             onClick={() => handleRSVP(event.id)}
-                            disabled={event.current_attendees >= event.max_attendees && !hasRSVPed(event.id)}
+                            disabled={event.current_attendees >= event.max_attendees && !isAttending(event.id)}
                           >
-                            <UserCheck className={`w-4 h-4 mr-1 ${hasRSVPed(event.id) ? 'fill-current' : ''}`} />
-                            {hasRSVPed(event.id) ? 'Going' : 'RSVP'}
+                            <UserCheck className={`w-4 h-4 mr-1 ${isAttending(event.id) ? 'fill-current' : ''}`} />
+                            {isAttending(event.id) ? 'Going' : 'RSVP'}
                           </Button>
                         </div>
                       </div>
