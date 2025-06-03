@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useCallback } from 'react';
 import { Store, Calendar, Gift, Users, BarChart3, MapPin, Trash2, Plus, Edit } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -13,11 +12,15 @@ import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
 
+import type { Database } from '@/integrations/supabase/types';
+
+type PlaceType = Database['public']['Tables']['places']['Row']['type'];
+
 interface Place {
   id?: string;
   name: string;
   description: string;
-  type: string;
+  type: PlaceType;
   latitude: number;
   longitude: number;
   image_urls: string[];
@@ -49,7 +52,7 @@ const OptimizedMerchantDashboard = () => {
   const [formData, setFormData] = useState({
     name: '',
     description: '',
-    type: 'restaurant',
+    type: 'restaurant' as PlaceType,
     address: '',
     latitude: 21.485811,
     longitude: 39.192505,
@@ -128,8 +131,15 @@ const OptimizedMerchantDashboard = () => {
 
     try {
       const placeData = {
-        ...formData,
-        merchant_id: user.id
+        name: formData.name,
+        description: formData.description,
+        type: formData.type,
+        address: formData.address,
+        latitude: formData.latitude,
+        longitude: formData.longitude,
+        image_urls: formData.image_urls,
+        merchant_id: user.id,
+        is_active: true
       };
 
       if (selectedPlace && isEditing) {
@@ -391,7 +401,7 @@ const OptimizedMerchantDashboard = () => {
                         />
                         <Select
                           value={formData.type}
-                          onValueChange={(value) => setFormData({...formData, type: value})}
+                          onValueChange={(value: PlaceType) => setFormData({...formData, type: value})}
                         >
                           <SelectTrigger>
                             <SelectValue placeholder="Select store type" />
@@ -399,10 +409,10 @@ const OptimizedMerchantDashboard = () => {
                           <SelectContent>
                             <SelectItem value="restaurant">Restaurant</SelectItem>
                             <SelectItem value="cafe">Cafe</SelectItem>
-                            <SelectItem value="retail">Retail</SelectItem>
-                            <SelectItem value="entertainment">Entertainment</SelectItem>
-                            <SelectItem value="services">Services</SelectItem>
-                            <SelectItem value="other">Other</SelectItem>
+                            <SelectItem value="mall">Mall</SelectItem>
+                            <SelectItem value="beach">Beach</SelectItem>
+                            <SelectItem value="park">Park</SelectItem>
+                            <SelectItem value="event_venue">Event Venue</SelectItem>
                           </SelectContent>
                         </Select>
                         <Input
