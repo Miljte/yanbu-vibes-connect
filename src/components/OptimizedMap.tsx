@@ -4,7 +4,6 @@ import { Wrapper, Status } from '@googlemaps/react-wrapper';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { MapPin, MessageSquare, Navigation, Users } from 'lucide-react';
-import { useOptimizedMarkers } from '@/hooks/useOptimizedMarkers';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -25,7 +24,7 @@ interface Place {
 interface MapComponentProps {
   center: google.maps.LatLngLiteral;
   zoom: number;
-  visibleMarkers: Place[];
+  places: Place[];
   userLocation: { latitude: number; longitude: number } | null;
   onPlaceClick: (place: Place) => void;
 }
@@ -33,7 +32,7 @@ interface MapComponentProps {
 const MapComponent: React.FC<MapComponentProps> = ({
   center,
   zoom,
-  visibleMarkers,
+  places,
   userLocation,
   onPlaceClick,
 }) => {
@@ -79,65 +78,56 @@ const MapComponent: React.FC<MapComponentProps> = ({
     }
   }, [ref, map, center, zoom]);
 
-  // Optimized marker management
+  // Simple marker management - just show all active places
   const updateMarkers = useCallback(() => {
     if (!map) return;
 
-    console.log('📍 Updating markers:', visibleMarkers.length);
+    console.log('📍 Updating markers for places:', places.length);
 
     const existingMarkers = markersRef.current;
-    const newMarkerIds = new Set(visibleMarkers.map(place => place.id));
+    const activePlaces = places.filter(place => place.is_active);
+    
+    console.log('📍 Active places to show:', activePlaces.length);
 
-    // Remove markers that are no longer visible
+    // Clear existing store markers
     existingMarkers.forEach((marker, id) => {
-      if (!newMarkerIds.has(id)) {
+      if (id !== 'user-location') {
         marker.setMap(null);
         existingMarkers.delete(id);
       }
     });
 
-    // Add or update visible markers
-    visibleMarkers.forEach(place => {
-      let marker = existingMarkers.get(place.id);
+    // Add markers for all active places
+    activePlaces.forEach(place => {
+      console.log('🎯 Creating marker for:', place.name, 'at', place.latitude, place.longitude);
       
-      if (!marker) {
-        console.log('🎯 Creating marker for:', place.name);
-        // Create new marker
-        const isCluster = place.type === 'cluster';
-        marker = new google.maps.Marker({
-          position: { lat: place.latitude, lng: place.longitude },
-          map,
-          title: place.name,
-          icon: {
-            path: google.maps.SymbolPath.CIRCLE,
-            fillColor: isCluster ? '#8B5CF6' : '#FF6B35',
-            fillOpacity: 1,
-            strokeColor: '#ffffff',
-            strokeWeight: isCluster ? 4 : 3,
-            scale: isCluster ? 24 : 18,
-          },
-          zIndex: isCluster ? 600 : 500,
-          optimized: true,
-        });
+      const marker = new google.maps.Marker({
+        position: { lat: place.latitude, lng: place.longitude },
+        map,
+        title: place.name,
+        icon: {
+          path: google.maps.SymbolPath.CIRCLE,
+          fillColor: '#FF6B35',
+          fillOpacity: 1,
+          strokeColor: '#ffffff',
+          strokeWeight: 3,
+          scale: 18,
+        },
+        zIndex: 500,
+        optimized: true,
+      });
 
-        // Add cluster count label
-        if (isCluster && place.count) {
-          const infoWindow = new google.maps.InfoWindow({
-            content: `<div style="text-align: center; font-weight: bold; color: white;">${place.count}</div>`,
-            disableAutoPan: true,
-          });
-          infoWindow.open(map, marker);
-        }
+      marker.addListener('click', () => {
+        console.log('📍 Marker clicked:', place.name);
+        onPlaceClick(place);
+        map.panTo({ lat: place.latitude, lng: place.longitude });
+      });
 
-        marker.addListener('click', () => {
-          onPlaceClick(place);
-          map.panTo({ lat: place.latitude, lng: place.longitude });
-        });
-
-        existingMarkers.set(place.id, marker);
-      }
+      existingMarkers.set(place.id, marker);
     });
-  }, [map, visibleMarkers, onPlaceClick]);
+
+    console.log('📍 Total markers on map:', existingMarkers.size);
+  }, [map, places, onPlaceClick]);
 
   // Update user location marker
   useEffect(() => {
@@ -164,13 +154,14 @@ const MapComponent: React.FC<MapComponentProps> = ({
         zIndex: 1000,
         optimized: true,
       });
+      
+      markersRef.current.set('user-location', userMarkerRef.current);
     }
   }, [map, userLocation]);
 
-  // Throttled marker updates
+  // Update markers when places change
   useEffect(() => {
-    const timeoutId = setTimeout(updateMarkers, 100);
-    return () => clearTimeout(timeoutId);
+    updateMarkers();
   }, [updateMarkers]);
 
   return <div ref={ref} className="w-full h-full" style={{ minHeight: '100vh' }} />;
@@ -211,46 +202,6 @@ const OptimizedMap = () => {
 
   const googleMapsApiKey = 'AIzaSyCnHJ_b9LBpxdSOdE8jmVMmJd6Vdmm5u8o';
   const jeddahCenter: google.maps.LatLngLiteral = { lat: 21.5433, lng: 39.1728 };
-
-  // Convert places to MarkerData format for the hook
-  const markersData = places.map(place => ({
-    id: place.id,
-    name: place.name,
-    latitude: place.latitude,
-    longitude: place.longitude,
-    type: place.type,
-    distance: place.distance,
-    isActive: place.is_active
-  }));
-
-  const { visibleMarkers, isLoading, markerCount } = useOptimizedMarkers({
-    places: markersData,
-    maxDistance: 100000, // 100km to show all stores in a large area
-    clusterThreshold: 3
-  });
-
-  // Convert back to Place format for display
-  const displayMarkers: Place[] = visibleMarkers.map(marker => ({
-    id: marker.id,
-    name: marker.name,
-    type: marker.type,
-    latitude: marker.latitude,
-    longitude: marker.longitude,
-    is_active: marker.isActive,
-    merchant_id: '', // Default value since clusters don't have merchant_id
-    distance: marker.distance,
-    count: marker.count,
-    places: marker.places?.map(p => ({
-      id: p.id,
-      name: p.name,
-      type: p.type,
-      latitude: p.latitude,
-      longitude: p.longitude,
-      is_active: p.isActive,
-      merchant_id: '',
-      distance: p.distance
-    }))
-  }));
 
   useEffect(() => {
     fetchActivePlaces();
@@ -347,9 +298,9 @@ const OptimizedMap = () => {
         <Card className="bg-background/90 backdrop-blur-sm">
           <CardContent className="p-2">
             <div className="text-xs text-muted-foreground">
-              <div>Visible: {markerCount}/{places.length}</div>
               <div>Total Places: {places.length}</div>
-              <div>Status: {isLoading ? 'Loading...' : 'Ready'}</div>
+              <div>Active: {places.filter(p => p.is_active).length}</div>
+              <div>Status: {loading ? 'Loading...' : 'Ready'}</div>
             </div>
           </CardContent>
         </Card>
@@ -370,7 +321,7 @@ const OptimizedMap = () => {
         <MapComponent
           center={userLocation ? { lat: userLocation.latitude, lng: userLocation.longitude } : jeddahCenter}
           zoom={13}
-          visibleMarkers={displayMarkers}
+          places={places}
           userLocation={userLocation}
           onPlaceClick={setSelectedPlace}
         />
@@ -383,10 +334,7 @@ const OptimizedMap = () => {
             <CardContent className="p-4">
               <div className="flex items-center justify-between mb-3">
                 <h3 className="text-lg font-semibold text-foreground">
-                  {selectedPlace.type === 'cluster' ? 
-                    `${selectedPlace.count} Places Nearby` : 
-                    selectedPlace.name
-                  }
+                  {selectedPlace.name}
                 </h3>
                 <button
                   onClick={() => setSelectedPlace(null)}
@@ -407,19 +355,10 @@ const OptimizedMap = () => {
                   </span>
                 </div>
 
-                {selectedPlace.type === 'cluster' ? (
-                  <div className="space-y-1">
-                    <div className="flex items-center space-x-2 text-muted-foreground">
-                      <Users className="w-4 h-4" />
-                      <span className="text-sm">Multiple locations clustered</span>
-                    </div>
-                  </div>
-                ) : (
-                  <Button className="w-full bg-green-600 hover:bg-green-700">
-                    <MessageSquare className="w-4 h-4 mr-2" />
-                    Join Chat
-                  </Button>
-                )}
+                <Button className="w-full bg-green-600 hover:bg-green-700">
+                  <MessageSquare className="w-4 h-4 mr-2" />
+                  Join Chat
+                </Button>
               </div>
             </CardContent>
           </Card>
