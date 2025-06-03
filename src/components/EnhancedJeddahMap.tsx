@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Wrapper, Status } from '@googlemaps/react-wrapper';
 import { Card, CardContent } from '@/components/ui/card';
@@ -363,10 +362,20 @@ const EnhancedJeddahMap = () => {
     return () => mediaQuery.removeEventListener('change', handler);
   }, []);
 
-  // Use enhanced location data for places with distance
+  // Convert enhanced location places to map places format
   useEffect(() => {
     if (nearbyPlaces.length > 0) {
-      setPlaces(nearbyPlaces);
+      const convertedPlaces: Place[] = nearbyPlaces.map(place => ({
+        id: place.id,
+        name: place.name,
+        type: place.type,
+        latitude: place.latitude,
+        longitude: place.longitude,
+        is_active: true,
+        merchant_id: '', // Default value since enhanced location doesn't provide this
+        distance: place.distance
+      }));
+      setPlaces(convertedPlaces);
     }
   }, [nearbyPlaces]);
 
