@@ -3,7 +3,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Wrapper, Status } from '@googlemaps/react-wrapper';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { MapPin, MessageSquare, Navigation, Users } from 'lucide-react';
+import { Navigation } from 'lucide-react';
 import { useAuth } from '@/hooks/useAuth';
 import { supabase } from '@/integrations/supabase/client';
 import { toast } from 'sonner';
@@ -16,9 +16,6 @@ interface Place {
   longitude: number;
   is_active: boolean;
   merchant_id: string;
-  distance?: number;
-  count?: number;
-  places?: Place[];
 }
 
 interface MapComponentProps {
@@ -39,67 +36,58 @@ const MapComponent: React.FC<MapComponentProps> = ({
   const ref = useRef<HTMLDivElement>(null);
   const [map, setMap] = useState<google.maps.Map>();
   const markersRef = useRef<Map<string, google.maps.Marker>>(new Map());
-  const userMarkerRef = useRef<google.maps.Marker | null>(null);
-
-  // Optimized map style
-  const optimizedMapStyle = [
-    {
-      "featureType": "poi",
-      "stylers": [{ "visibility": "off" }]
-    },
-    {
-      "featureType": "road",
-      "elementType": "labels",
-      "stylers": [{ "visibility": "simplified" }]
-    }
-  ];
 
   useEffect(() => {
     if (ref.current && !map) {
       const newMap = new google.maps.Map(ref.current, {
         center,
         zoom,
-        styles: optimizedMapStyle,
         disableDefaultUI: true,
         zoomControl: true,
         gestureHandling: 'cooperative',
-        backgroundColor: '#f5f5f5',
-        restriction: {
-          latLngBounds: {
-            north: 24.2,
-            south: 23.9,
-            west: 38.0,
-            east: 38.3,
-          },
-        },
       });
       
       setMap(newMap);
+      console.log('🗺️ Map initialized');
     }
   }, [ref, map, center, zoom]);
 
-  // Simple marker management - just show all active places
-  const updateMarkers = useCallback(() => {
+  // Clear all markers and add only store markers
+  useEffect(() => {
     if (!map) return;
 
-    console.log('📍 Updating markers for places:', places.length);
+    console.log('🏪 Adding store markers:', places.length);
 
-    const existingMarkers = markersRef.current;
-    const activePlaces = places.filter(place => place.is_active);
-    
-    console.log('📍 Active places to show:', activePlaces.length);
-
-    // Clear existing store markers
-    existingMarkers.forEach((marker, id) => {
-      if (id !== 'user-location') {
-        marker.setMap(null);
-        existingMarkers.delete(id);
-      }
+    // Clear all existing markers
+    markersRef.current.forEach((marker) => {
+      marker.setMap(null);
     });
+    markersRef.current.clear();
 
-    // Add markers for all active places
-    activePlaces.forEach(place => {
-      console.log('🎯 Creating marker for:', place.name, 'at', place.latitude, place.longitude);
+    // Add user location marker if available
+    if (userLocation) {
+      const userMarker = new google.maps.Marker({
+        position: { lat: userLocation.latitude, lng: userLocation.longitude },
+        map,
+        title: "Your Location",
+        icon: {
+          path: google.maps.SymbolPath.CIRCLE,
+          fillColor: '#4285F4',
+          fillOpacity: 1,
+          strokeColor: '#ffffff',
+          strokeWeight: 3,
+          scale: 10,
+        },
+        zIndex: 1000,
+      });
+      markersRef.current.set('user-location', userMarker);
+    }
+
+    // Add store markers
+    places.forEach(place => {
+      if (!place.is_active) return;
+
+      console.log('📍 Adding store marker:', place.name, 'at', place.latitude, place.longitude);
       
       const marker = new google.maps.Marker({
         position: { lat: place.latitude, lng: place.longitude },
@@ -111,58 +99,21 @@ const MapComponent: React.FC<MapComponentProps> = ({
           fillOpacity: 1,
           strokeColor: '#ffffff',
           strokeWeight: 3,
-          scale: 18,
+          scale: 15,
         },
         zIndex: 500,
-        optimized: true,
       });
 
       marker.addListener('click', () => {
-        console.log('📍 Marker clicked:', place.name);
+        console.log('🎯 Store marker clicked:', place.name);
         onPlaceClick(place);
-        map.panTo({ lat: place.latitude, lng: place.longitude });
       });
 
-      existingMarkers.set(place.id, marker);
+      markersRef.current.set(place.id, marker);
     });
 
-    console.log('📍 Total markers on map:', existingMarkers.size);
-  }, [map, places, onPlaceClick]);
-
-  // Update user location marker
-  useEffect(() => {
-    if (!map || !userLocation) return;
-
-    if (userMarkerRef.current) {
-      userMarkerRef.current.setPosition({
-        lat: userLocation.latitude,
-        lng: userLocation.longitude
-      });
-    } else {
-      userMarkerRef.current = new google.maps.Marker({
-        position: { lat: userLocation.latitude, lng: userLocation.longitude },
-        map,
-        title: "Your Location",
-        icon: {
-          path: google.maps.SymbolPath.CIRCLE,
-          fillColor: '#1E90FF',
-          fillOpacity: 1,
-          strokeColor: '#ffffff',
-          strokeWeight: 4,
-          scale: 12,
-        },
-        zIndex: 1000,
-        optimized: true,
-      });
-      
-      markersRef.current.set('user-location', userMarkerRef.current);
-    }
-  }, [map, userLocation]);
-
-  // Update markers when places change
-  useEffect(() => {
-    updateMarkers();
-  }, [updateMarkers]);
+    console.log('✅ Total markers on map:', markersRef.current.size);
+  }, [map, places, userLocation, onPlaceClick]);
 
   return <div ref={ref} className="w-full h-full" style={{ minHeight: '100vh' }} />;
 };
@@ -172,7 +123,7 @@ const render = (status: Status) => {
     case Status.LOADING:
       return (
         <div className="min-h-screen bg-background flex items-center justify-center">
-          <div className="text-foreground text-lg">Loading Optimized Map...</div>
+          <div className="text-foreground text-lg">Loading Map...</div>
         </div>
       );
     case Status.FAILURE:
@@ -203,74 +154,73 @@ const OptimizedMap = () => {
   const googleMapsApiKey = 'AIzaSyCnHJ_b9LBpxdSOdE8jmVMmJd6Vdmm5u8o';
   const jeddahCenter: google.maps.LatLngLiteral = { lat: 21.5433, lng: 39.1728 };
 
-  useEffect(() => {
-    fetchActivePlaces();
-    startLocationTracking();
-  }, []);
-
-  // Add real-time subscription for place changes
-  useEffect(() => {
-    console.log('🔔 Setting up real-time subscription for places...');
-    
-    const placesSubscription = supabase
-      .channel('places-changes')
-      .on('postgres_changes', 
-        { event: '*', schema: 'public', table: 'places' }, 
-        (payload) => {
-          console.log('🔄 Real-time places update:', payload);
-          fetchActivePlaces(); // Refetch when places change
-        }
-      )
-      .subscribe();
-
-    return () => {
-      console.log('🔔 Cleaning up real-time subscription');
-      supabase.removeChannel(placesSubscription);
-    };
-  }, []);
-
-  const fetchActivePlaces = async () => {
+  // Fetch stores
+  const fetchStores = async () => {
     try {
-      console.log('🔄 Fetching ALL active places for map...');
+      console.log('🔄 Fetching stores...');
       
-      // Fetch ALL active places from ALL merchants, not just current user
       const { data, error } = await supabase
         .from('places')
         .select('*')
         .eq('is_active', true);
 
-      if (error) throw error;
+      if (error) {
+        console.error('❌ Error fetching stores:', error);
+        throw error;
+      }
       
-      console.log('✅ Active places loaded for map:', data?.length || 0, data);
+      console.log('✅ Stores fetched:', data?.length || 0, data);
       setPlaces(data || []);
     } catch (error) {
-      console.error('❌ Error fetching places for map:', error);
-      toast.error('Failed to load stores on map');
+      console.error('❌ Error fetching stores:', error);
+      toast.error('Failed to load stores');
     } finally {
       setLoading(false);
     }
   };
 
-  const startLocationTracking = () => {
+  // Get user location
+  const getUserLocation = () => {
     if (!navigator.geolocation) return;
 
-    const options = {
-      enableHighAccuracy: true,
-      timeout: 10000,
-      maximumAge: 30000,
-    };
-
-    navigator.geolocation.watchPosition(
+    navigator.geolocation.getCurrentPosition(
       (position) => {
         setUserLocation({
           latitude: position.coords.latitude,
           longitude: position.coords.longitude,
         });
+        console.log('📍 User location set:', position.coords.latitude, position.coords.longitude);
       },
       (error) => console.error('Location error:', error),
-      options
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
     );
   };
+
+  useEffect(() => {
+    fetchStores();
+    getUserLocation();
+  }, []);
+
+  // Real-time updates for places
+  useEffect(() => {
+    console.log('🔔 Setting up real-time subscription...');
+    
+    const subscription = supabase
+      .channel('places-changes')
+      .on('postgres_changes', 
+        { event: '*', schema: 'public', table: 'places' }, 
+        (payload) => {
+          console.log('🔄 Real-time update:', payload);
+          fetchStores();
+        }
+      )
+      .subscribe();
+
+    return () => {
+      console.log('🔔 Cleaning up subscription');
+      supabase.removeChannel(subscription);
+    };
+  }, []);
 
   const centerOnUser = () => {
     if (userLocation) {
@@ -293,20 +243,19 @@ const OptimizedMap = () => {
 
   return (
     <div className="relative min-h-screen">
-      {/* Performance stats */}
+      {/* Stats */}
       <div className="absolute top-4 left-4 z-10">
         <Card className="bg-background/90 backdrop-blur-sm">
           <CardContent className="p-2">
             <div className="text-xs text-muted-foreground">
-              <div>Total Places: {places.length}</div>
+              <div>Stores: {places.length}</div>
               <div>Active: {places.filter(p => p.is_active).length}</div>
-              <div>Status: {loading ? 'Loading...' : 'Ready'}</div>
             </div>
           </CardContent>
         </Card>
       </div>
 
-      {/* Center on user button */}
+      {/* Center button */}
       <div className="absolute top-4 right-4 z-10">
         <Button
           onClick={centerOnUser}
@@ -317,7 +266,7 @@ const OptimizedMap = () => {
         </Button>
       </div>
 
-      <Wrapper apiKey={googleMapsApiKey} render={render} libraries={['places']}>
+      <Wrapper apiKey={googleMapsApiKey} render={render}>
         <MapComponent
           center={userLocation ? { lat: userLocation.latitude, lng: userLocation.longitude } : jeddahCenter}
           zoom={13}
@@ -327,7 +276,7 @@ const OptimizedMap = () => {
         />
       </Wrapper>
 
-      {/* Place info popup */}
+      {/* Place popup */}
       {selectedPlace && (
         <div className="absolute bottom-4 left-4 right-4 z-10">
           <Card className="bg-background/95 backdrop-blur-sm border shadow-xl">
@@ -345,20 +294,9 @@ const OptimizedMap = () => {
               </div>
               
               <div className="space-y-3">
-                <div className="flex items-center space-x-2 text-muted-foreground">
-                  <MapPin className="w-4 h-4" />
-                  <span className="text-sm">
-                    {selectedPlace.distance 
-                      ? `${Math.round(selectedPlace.distance)}m away`
-                      : 'Distance unknown'
-                    }
-                  </span>
-                </div>
-
-                <Button className="w-full bg-green-600 hover:bg-green-700">
-                  <MessageSquare className="w-4 h-4 mr-2" />
-                  Join Chat
-                </Button>
+                <p className="text-sm text-muted-foreground capitalize">
+                  {selectedPlace.type}
+                </p>
               </div>
             </CardContent>
           </Card>
