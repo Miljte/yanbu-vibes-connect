@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { Store, Calendar, Gift, Users, BarChart3, MapPin, Trash2, Plus, Edit } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -109,7 +110,7 @@ const OptimizedMerchantDashboard = () => {
 
       console.log('✅ Merchant data loaded:', {
         places: placesResult.length,
-        events: eventsData?.length || 0
+        events: (placesResult.length > 0 ? events.length : 0)
       });
 
     } catch (error) {
