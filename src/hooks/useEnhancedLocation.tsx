@@ -176,17 +176,23 @@ export const useEnhancedLocation = () => {
 
       // Update location in database
       if (user) {
-        supabase
-          .from('user_locations')
-          .upsert({
-            user_id: user.id,
-            latitude: newLocation.latitude,
-            longitude: newLocation.longitude,
-            accuracy: newLocation.accuracy,
-            updated_at: new Date().toISOString()
-          }, { onConflict: 'user_id' })
-          .then(() => console.log('✅ Location updated in database'))
-          .catch((err: any) => console.error('❌ Failed to update location:', err));
+        const updateLocation = async () => {
+          try {
+            await supabase
+              .from('user_locations')
+              .upsert({
+                user_id: user.id,
+                latitude: newLocation.latitude,
+                longitude: newLocation.longitude,
+                accuracy: newLocation.accuracy,
+                updated_at: new Date().toISOString()
+              }, { onConflict: 'user_id' });
+            console.log('✅ Location updated in database');
+          } catch (err: any) {
+            console.error('❌ Failed to update location:', err);
+          }
+        };
+        updateLocation();
       }
     };
 
