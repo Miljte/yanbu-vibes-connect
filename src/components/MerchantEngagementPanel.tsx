@@ -61,6 +61,19 @@ const MerchantEngagementPanel = () => {
     window.location.href = chatUrl.toString();
   };
 
+  const getButtonState = (place: Place) => {
+    if (!location) return { disabled: true, text: 'Loading...', color: 'bg-gray-400' };
+    
+    const distance = place.distance || 0;
+    const isWithinRange = distance <= 500;
+    
+    return {
+      disabled: !isWithinRange,
+      text: isWithinRange ? 'Join Chat' : 'Move Closer',
+      color: isWithinRange ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'
+    };
+  };
+
   if (!isInJeddah) {
     return (
       <Card className="bg-card border">
@@ -102,6 +115,7 @@ const MerchantEngagementPanel = () => {
             {nearbyPlaces.map((place) => {
               const isChatAvailable = chatAvailablePlaces.has(place.id);
               const distance = place.distance || 0;
+              const buttonState = getButtonState(place);
               
               return (
                 <div
@@ -111,7 +125,7 @@ const MerchantEngagementPanel = () => {
                       ? 'border-primary bg-primary/10'
                       : isChatAvailable
                       ? 'border-green-500 bg-green-50 dark:bg-green-900/20'
-                      : 'border-muted bg-muted/50'
+                      : 'border-red-500 bg-red-50 dark:bg-red-900/20'
                   }`}
                 >
                   <div className="flex items-center justify-between mb-3">
@@ -124,8 +138,8 @@ const MerchantEngagementPanel = () => {
                         variant="outline" 
                         className={`${
                           distance <= 500 
-                            ? 'border-green-500 text-green-600' 
-                            : 'border-red-500 text-red-600'
+                            ? 'border-green-500 text-green-600 bg-green-50' 
+                            : 'border-red-500 text-red-600 bg-red-50'
                         }`}
                       >
                         {Math.round(distance)}m
@@ -140,11 +154,15 @@ const MerchantEngagementPanel = () => {
                   </div>
 
                   <div className="flex items-center justify-between">
-                    <div className="flex items-center space-x-2 text-sm text-muted-foreground">
+                    <div className="flex items-center space-x-2 text-sm">
                       <MapPin className="w-4 h-4" />
-                      <span>
+                      <span className={`${
+                        distance <= 500 
+                          ? 'text-green-600 font-medium' 
+                          : 'text-red-600'
+                      }`}>
                         {distance <= 500 
-                          ? 'Within chat range' 
+                          ? '✓ Within chat range' 
                           : `${Math.round(distance - 500)}m too far`
                         }
                       </span>
@@ -152,23 +170,27 @@ const MerchantEngagementPanel = () => {
                     
                     <Button
                       onClick={() => handleJoinChat(place)}
-                      disabled={!isChatAvailable}
+                      disabled={buttonState.disabled}
                       size="sm"
-                      className={`${
-                        isChatAvailable 
-                          ? 'bg-green-600 hover:bg-green-700' 
-                          : 'bg-muted text-muted-foreground'
-                      }`}
+                      className={`${buttonState.color} text-white transition-all duration-200`}
                     >
                       <MessageSquare className="w-4 h-4 mr-2" />
-                      {isChatAvailable ? 'Join Chat' : 'Move Closer'}
-                      {isChatAvailable && <ExternalLink className="w-3 h-3 ml-1" />}
+                      {buttonState.text}
+                      {!buttonState.disabled && <ExternalLink className="w-3 h-3 ml-1" />}
                     </Button>
                   </div>
 
                   {distance <= 500 && (
-                    <div className="mt-3 text-xs text-green-600 font-medium">
-                      ✓ Chat available - Click "Join Chat" to start messaging customers
+                    <div className="mt-3 text-xs text-green-600 font-medium flex items-center">
+                      <span className="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></span>
+                      Chat available - Click "Join Chat" to start messaging customers
+                    </div>
+                  )}
+
+                  {distance > 500 && (
+                    <div className="mt-3 text-xs text-red-600 font-medium flex items-center">
+                      <span className="w-2 h-2 bg-red-500 rounded-full mr-2"></span>
+                      Move {Math.round(distance - 500)}m closer to unlock chat
                     </div>
                   )}
                 </div>
