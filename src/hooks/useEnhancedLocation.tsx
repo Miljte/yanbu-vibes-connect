@@ -136,12 +136,13 @@ export const useEnhancedLocation = () => {
     setIsTracking(true);
     setError(null);
 
-    console.log('🌍 Starting enhanced location tracking for Jeddah...');
+    console.log('🌍 Starting CRITICAL HIGH-ACCURACY location tracking...');
 
-    const options = {
+    // Ultra-high accuracy options for critical proximity detection
+    const criticalOptions = {
       enableHighAccuracy: true,
-      timeout: 10000,
-      maximumAge: 5000
+      timeout: 5000, // Shorter timeout for faster response
+      maximumAge: 1000 // Very fresh positions only
     };
 
     const handleSuccess = (position: GeolocationPosition) => {
@@ -151,10 +152,11 @@ export const useEnhancedLocation = () => {
         accuracy: position.coords.accuracy
       };
 
-      console.log('📍 Location update:', {
+      console.log('📍 CRITICAL Location update:', {
         lat: newLocation.latitude.toFixed(6),
         lng: newLocation.longitude.toFixed(6),
-        accuracy: newLocation.accuracy ? `${Math.round(newLocation.accuracy)}m` : 'unknown'
+        accuracy: newLocation.accuracy ? `${Math.round(newLocation.accuracy)}m` : 'unknown',
+        speed: position.coords.speed ? `${position.coords.speed}m/s` : 'stationary'
       });
 
       setLocation(newLocation);
@@ -164,11 +166,11 @@ export const useEnhancedLocation = () => {
       setIsInJeddah(withinJeddah);
 
       if (withinJeddah) {
-        console.log('✅ Location confirmed within Jeddah bounds');
+        console.log('✅ CRITICAL: Location confirmed within Jeddah bounds');
         fetchNearbyPlaces(newLocation);
         setError(null);
       } else {
-        console.warn('❌ Location outside Jeddah bounds');
+        console.warn('❌ CRITICAL: Location outside Jeddah bounds');
         setError('Location outside Jeddah city limits');
         setNearbyPlaces([]);
         setChatAvailablePlaces(new Set());
@@ -187,9 +189,9 @@ export const useEnhancedLocation = () => {
                 accuracy: newLocation.accuracy,
                 updated_at: new Date().toISOString()
               }, { onConflict: 'user_id' });
-            console.log('✅ Location updated in database');
+            console.log('✅ CRITICAL: Location updated in database');
           } catch (err: any) {
-            console.error('❌ Failed to update location:', err);
+            console.error('❌ CRITICAL: Failed to update location:', err);
           }
         };
         updateLocation();
@@ -197,36 +199,47 @@ export const useEnhancedLocation = () => {
     };
 
     const handleError = (error: GeolocationPositionError) => {
-      console.error('❌ Location error:', error.message);
-      let errorMessage = 'Location error: ';
+      console.error('❌ CRITICAL GPS error:', error.message);
+      let errorMessage = 'CRITICAL Location error: ';
       
       switch (error.code) {
         case error.PERMISSION_DENIED:
-          errorMessage += 'Please enable location access in your browser settings';
+          errorMessage += 'Location permission DENIED. Enable GPS now!';
           break;
         case error.POSITION_UNAVAILABLE:
-          errorMessage += 'GPS signal unavailable';
+          errorMessage += 'GPS signal UNAVAILABLE. Move to open area.';
           break;
         case error.TIMEOUT:
-          errorMessage += 'Location request timed out';
+          errorMessage += 'GPS TIMEOUT. Trying again...';
           break;
         default:
-          errorMessage += 'Unknown location error';
+          errorMessage += 'Unknown GPS error. Check device settings.';
       }
       
       setError(errorMessage);
       setIsTracking(false);
     };
 
-    // Get initial position
-    navigator.geolocation.getCurrentPosition(handleSuccess, handleError, options);
+    // Get initial position with CRITICAL accuracy
+    navigator.geolocation.getCurrentPosition(handleSuccess, handleError, criticalOptions);
 
-    // Start watching position
-    watchId = navigator.geolocation.watchPosition(handleSuccess, handleError, options);
+    // Start CONTINUOUS high-accuracy tracking
+    watchId = navigator.geolocation.watchPosition(
+      handleSuccess, 
+      handleError, 
+      {
+        enableHighAccuracy: true,
+        timeout: 3000, // Fast timeout for continuous updates
+        maximumAge: 500 // Ultra-fresh positions
+      }
+    );
+
+    console.log('🔄 CRITICAL: Continuous high-accuracy GPS tracking started');
 
     return () => {
       if (watchId !== null) {
         navigator.geolocation.clearWatch(watchId);
+        console.log('🛑 CRITICAL: GPS tracking stopped');
       }
       setIsTracking(false);
     };
@@ -235,6 +248,7 @@ export const useEnhancedLocation = () => {
   const retryLocation = useCallback(() => {
     setError(null);
     setLocation(null);
+    console.log('🔄 CRITICAL: Manual location retry requested');
     // The useEffect will handle restarting location tracking
   }, []);
 

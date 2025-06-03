@@ -1,6 +1,6 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, MapPin, Users, AlertCircle, Crown, Clock, MessageSquare, Lock } from 'lucide-react';
+import { Send, MapPin, Users, AlertCircle, Crown, Clock, MessageSquare, Lock, Navigation } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -26,7 +26,8 @@ const EnhancedProximityChat: React.FC = () => {
     chatAvailablePlaces, 
     isInJeddah, 
     locationAccuracy,
-    error: locationError 
+    error: locationError,
+    retryLocation 
   } = useEnhancedLocation();
   const { canSendMessage, getMuteMessage } = useChatValidation();
 
@@ -90,32 +91,32 @@ const EnhancedProximityChat: React.FC = () => {
     return place?.distance || 0;
   };
 
-  const canDeleteMessage = (messageUserId: string) => {
-    return hasPermission('admin_dashboard') || messageUserId === user?.id;
-  };
-
-  // Show location error or out of bounds message
+  // CRITICAL: Show location error or out of bounds message
   if (locationError || isInJeddah === false) {
     return (
       <div className="min-h-screen bg-background p-4 pb-20">
         <div className="container mx-auto max-w-4xl">
-          <Card className="bg-card/50 backdrop-blur border">
+          <Card className="bg-card/50 backdrop-blur border border-red-500">
             <CardHeader>
               <CardTitle className="flex items-center space-x-2 text-red-600">
                 <AlertCircle className="w-5 h-5" />
-                <span>Chat Unavailable</span>
+                <span>CRITICAL: Chat Unavailable</span>
               </CardTitle>
             </CardHeader>
-            <CardContent>
+            <CardContent className="space-y-4">
               <Alert variant="destructive">
                 <AlertCircle className="h-4 w-4" />
-                <AlertDescription>
+                <AlertDescription className="text-base font-medium">
                   {isInJeddah === false 
-                    ? "Chat is only available within Jeddah city limits. Please move to Jeddah to access this feature."
-                    : locationError || "Unable to access your location. Please enable location services."
+                    ? "🚫 OUTSIDE JEDDAH: Chat is only available within Jeddah city limits. Please move to Jeddah to access this feature."
+                    : locationError || "🚫 GPS ERROR: Unable to access your location. Please enable high-accuracy GPS."
                   }
                 </AlertDescription>
               </Alert>
+              <Button onClick={retryLocation} className="w-full">
+                <Navigation className="w-4 h-4 mr-2" />
+                Retry High-Accuracy GPS
+              </Button>
             </CardContent>
           </Card>
         </div>
@@ -123,25 +124,31 @@ const EnhancedProximityChat: React.FC = () => {
     );
   }
 
-  // Show no places available
+  // CRITICAL: Show no places available with clear message
   if (nearbyPlaces.length === 0) {
     return (
       <div className="min-h-screen bg-background p-4 pb-20">
         <div className="container mx-auto max-w-4xl">
-          <Card className="bg-card/50 backdrop-blur border">
+          <Card className="bg-card/50 backdrop-blur border border-orange-500">
             <CardHeader>
-              <CardTitle className="flex items-center space-x-2">
+              <CardTitle className="flex items-center space-x-2 text-orange-600">
                 <MapPin className="w-5 h-5" />
-                <span>Proximity Chat</span>
+                <span>CHAT DISABLED: No Stores Nearby</span>
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <Alert>
+              <Alert className="border-orange-500">
                 <AlertCircle className="h-4 w-4" />
-                <AlertDescription>
-                  No stores found nearby. Move closer to stores in Jeddah to access proximity chat.
+                <AlertDescription className="text-base font-medium">
+                  🔍 NO STORES FOUND: Move closer to stores in Jeddah to access proximity chat.
+                  <br />
+                  📍 GPS Accuracy: {locationAccuracy ? `±${Math.round(locationAccuracy)}m` : 'Unknown'}
                 </AlertDescription>
               </Alert>
+              <Button onClick={retryLocation} className="w-full mt-4">
+                <Navigation className="w-4 h-4 mr-2" />
+                Refresh Location
+              </Button>
             </CardContent>
           </Card>
         </div>
@@ -152,15 +159,18 @@ const EnhancedProximityChat: React.FC = () => {
   return (
     <div className="min-h-screen bg-background p-4 pb-20">
       <div className="container mx-auto max-w-4xl space-y-6">
-        {/* Header */}
+        {/* CRITICAL STATUS HEADER */}
         <div className="text-center">
-          <h1 className="text-3xl font-bold text-foreground mb-2">Proximity Chat</h1>
+          <h1 className="text-3xl font-bold text-foreground mb-2">
+            {chatAvailablePlaces.size > 0 ? '🟢 PROXIMITY CHAT ACTIVE' : '🔴 CHAT LOCKED'}
+          </h1>
           <p className="text-muted-foreground">
-            Chat unlocks within 500m of stores • {nearbyPlaces.length} store{nearbyPlaces.length !== 1 ? 's' : ''} nearby
+            Chat unlocks within 500m • {nearbyPlaces.length} store{nearbyPlaces.length !== 1 ? 's' : ''} nearby
+            {locationAccuracy && ` • GPS: ±${Math.round(locationAccuracy)}m`}
           </p>
         </div>
 
-        {/* Chat Status Indicator */}
+        {/* CRITICAL: Chat Status Indicator */}
         <ChatStatusIndicator
           isInRange={isWithinRange}
           isLocationAvailable={!!location}
@@ -170,7 +180,7 @@ const EnhancedProximityChat: React.FC = () => {
           isInJeddah={isInJeddah}
         />
 
-        {/* Place Selection */}
+        {/* CRITICAL: Place Selection with Clear Status */}
         <Card className="bg-card/50 backdrop-blur border">
           <CardHeader>
             <CardTitle className="flex items-center justify-between">
@@ -178,9 +188,17 @@ const EnhancedProximityChat: React.FC = () => {
                 <MapPin className="w-5 h-5" />
                 <span>Available Stores ({nearbyPlaces.length})</span>
               </div>
-              <Badge variant="outline" className="text-xs">
-                {chatAvailablePlaces.size} chat{chatAvailablePlaces.size !== 1 ? 's' : ''} unlocked
-              </Badge>
+              <div className="flex items-center space-x-2">
+                <Badge 
+                  variant="outline" 
+                  className={chatAvailablePlaces.size > 0 ? 'border-green-500 text-green-600' : 'border-red-500 text-red-600'}
+                >
+                  {chatAvailablePlaces.size} ACTIVE
+                </Badge>
+                <Badge variant="outline" className="text-xs">
+                  GPS: ±{locationAccuracy ? Math.round(locationAccuracy) : '?'}m
+                </Badge>
+              </div>
             </CardTitle>
           </CardHeader>
           <CardContent>
@@ -193,36 +211,45 @@ const EnhancedProximityChat: React.FC = () => {
                   <button
                     key={place.id}
                     onClick={() => setSelectedPlace(place.id)}
-                    className={`flex items-center justify-between p-3 rounded-lg border transition-all ${
+                    className={`flex items-center justify-between p-4 rounded-lg border-2 transition-all ${
                       isSelected 
                         ? 'border-primary bg-primary/10' 
-                        : 'border-border hover:border-primary/50'
+                        : isChatAvailable
+                        ? 'border-green-500 bg-green-50 dark:bg-green-900/20'
+                        : 'border-red-500 bg-red-50 dark:bg-red-900/20'
                     }`}
                   >
                     <div className="text-left">
                       <div className="flex items-center space-x-2">
-                        <span className="font-medium">{place.name}</span>
+                        <span className="font-medium text-lg">{place.name}</span>
                         {isChatAvailable ? (
-                          <Badge className="bg-green-600 text-white text-xs">
+                          <Badge className="bg-green-600 text-white text-xs font-bold">
                             <MessageSquare className="w-3 h-3 mr-1" />
-                            Chat Active
+                            CHAT ACTIVE
                           </Badge>
                         ) : (
-                          <Badge variant="outline" className="border-orange-500 text-orange-600 text-xs">
+                          <Badge variant="outline" className="border-red-500 text-red-600 text-xs font-bold">
                             <Lock className="w-3 h-3 mr-1" />
-                            Get Closer
+                            CHAT LOCKED
                           </Badge>
                         )}
                       </div>
                       <div className="text-sm text-muted-foreground">{place.type}</div>
                     </div>
                     <div className="text-right">
-                      <Badge variant="outline">{Math.round(place.distance)}m</Badge>
+                      <Badge 
+                        variant="outline" 
+                        className={`text-lg font-bold ${
+                          place.distance <= 500 ? 'border-green-500 text-green-600' : 'border-red-500 text-red-600'
+                        }`}
+                      >
+                        {Math.round(place.distance)}m
+                      </Badge>
                       {place.distance <= 500 ? (
-                        <div className="text-xs text-green-600 mt-1">✓ In Range</div>
+                        <div className="text-xs text-green-600 mt-1 font-bold">✓ IN RANGE</div>
                       ) : (
-                        <div className="text-xs text-orange-600 mt-1">
-                          {500 - place.distance > 0 ? `${Math.abs(500 - place.distance)}m closer` : 'Too far'}
+                        <div className="text-xs text-red-600 mt-1 font-bold">
+                          Need {Math.round(place.distance - 500)}m closer
                         </div>
                       )}
                     </div>
@@ -233,7 +260,7 @@ const EnhancedProximityChat: React.FC = () => {
           </CardContent>
         </Card>
 
-        {/* Chat Interface */}
+        {/* CRITICAL: Chat Interface with Clear Status */}
         {selectedPlace && (
           <Card className="bg-card/50 backdrop-blur border">
             <CardHeader>
@@ -244,24 +271,26 @@ const EnhancedProximityChat: React.FC = () => {
                 </div>
                 <Badge 
                   variant="outline" 
-                  className={isWithinRange ? 'border-green-500 text-green-600' : 'border-red-500 text-red-600'}
+                  className={`text-lg font-bold ${
+                    isWithinRange ? 'border-green-500 text-green-600' : 'border-red-500 text-red-600'
+                  }`}
                 >
                   {Math.round(getPlaceDistance(selectedPlace))}m away
                 </Badge>
               </CardTitle>
             </CardHeader>
             <CardContent className="space-y-4">
-              {/* Moderation Status */}
+              {/* CRITICAL: Moderation Status */}
               {!canSendMessage() && (
                 <Alert variant="destructive">
                   <AlertCircle className="h-4 w-4" />
-                  <AlertDescription>
+                  <AlertDescription className="font-medium">
                     {getMuteMessage()}
                   </AlertDescription>
                 </Alert>
               )}
 
-              {/* Messages */}
+              {/* CRITICAL: Messages with Clear Lock Status */}
               <div className="h-80 overflow-y-auto space-y-3 bg-muted/20 rounded-lg p-4">
                 {loading ? (
                   <div className="flex items-center justify-center h-full">
@@ -270,14 +299,17 @@ const EnhancedProximityChat: React.FC = () => {
                 ) : !isWithinRange ? (
                   <div className="flex items-center justify-center h-full">
                     <div className="text-center text-muted-foreground">
-                      <Lock className="w-16 h-16 mx-auto mb-4 opacity-50" />
-                      <h3 className="text-xl font-medium mb-2">Chat Locked</h3>
-                      <p className="text-sm mb-4">
+                      <Lock className="w-24 h-24 mx-auto mb-4 text-red-500" />
+                      <h3 className="text-2xl font-bold mb-2 text-red-600">CHAT LOCKED</h3>
+                      <p className="text-lg mb-4">
                         Get within 500m of {getPlaceName(selectedPlace)} to unlock chat
                       </p>
-                      <Badge variant="outline" className="text-orange-600 border-orange-500">
+                      <Badge variant="outline" className="text-red-600 border-red-500 text-lg font-bold">
                         Currently {Math.round(getPlaceDistance(selectedPlace))}m away
                       </Badge>
+                      <p className="text-sm mt-4 text-red-600 font-medium">
+                        Need to move {Math.round(getPlaceDistance(selectedPlace) - 500)}m closer
+                      </p>
                     </div>
                   </div>
                 ) : messages.length === 0 ? (
@@ -327,7 +359,7 @@ const EnhancedProximityChat: React.FC = () => {
                 <div ref={messagesEndRef} />
               </div>
 
-              {/* Message Input */}
+              {/* CRITICAL: Message Input with Clear Status */}
               <div className="space-y-2">
                 <div className="flex space-x-2">
                   <Input
@@ -336,10 +368,10 @@ const EnhancedProximityChat: React.FC = () => {
                     onKeyPress={handleKeyPress}
                     placeholder={
                       !isWithinRange 
-                        ? "Move closer to unlock chat"
+                        ? "🔒 MOVE CLOSER TO UNLOCK CHAT"
                         : !canSendMessage() 
-                        ? "You cannot send messages" 
-                        : "Type your message..."
+                        ? "❌ YOU CANNOT SEND MESSAGES" 
+                        : "✅ Type your message..."
                     }
                     disabled={!isWithinRange || !canSendMessage() || sending}
                     className="flex-1"
@@ -348,15 +380,16 @@ const EnhancedProximityChat: React.FC = () => {
                     onClick={handleSendMessage}
                     disabled={!newMessage.trim() || !isWithinRange || !canSendMessage() || sending}
                     size="icon"
+                    className={isWithinRange ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600'}
                   >
                     <Send className="w-4 h-4" />
                   </Button>
                 </div>
                 
-                <div className="text-xs text-muted-foreground">
+                <div className={`text-sm font-bold ${isWithinRange ? 'text-green-600' : 'text-red-600'}`}>
                   {isWithinRange 
-                    ? `🟢 Chat active • Live GPS • ${Math.round(getPlaceDistance(selectedPlace))}m from store`
-                    : `🔴 Chat locked • Need to be within 500m • Currently ${Math.round(getPlaceDistance(selectedPlace))}m away`
+                    ? `🟢 CHAT ACTIVE • GPS: ±${locationAccuracy ? Math.round(locationAccuracy) : '?'}m • ${Math.round(getPlaceDistance(selectedPlace))}m from store`
+                    : `🔴 CHAT LOCKED • Need to be within 500m • Currently ${Math.round(getPlaceDistance(selectedPlace))}m away`
                   }
                 </div>
               </div>
