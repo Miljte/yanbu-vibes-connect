@@ -71,45 +71,53 @@ const OptimizedMerchantDashboard = () => {
 
   const { user } = useAuth();
 
-  // Fetch merchant data with caching
+  // Fetch merchant data with proper error handling
   const fetchMerchantData = useCallback(async () => {
     if (!user) return;
 
     try {
       setLoading(true);
-      console.log('🔄 Loading merchant dashboard data...');
+      console.log('🔄 Loading merchant dashboard data for user:', user.id);
 
-      // Fetch places
+      // Fetch places with better error handling
       const { data: placesData, error: placesError } = await supabase
         .from('places')
         .select('*')
         .eq('merchant_id', user.id)
         .order('created_at', { ascending: false });
 
-      if (placesError) throw placesError;
+      if (placesError) {
+        console.error('❌ Places fetch error:', placesError);
+        throw placesError;
+      }
 
       const placesResult = placesData || [];
       setPlaces(placesResult);
-      console.log('✅ Places loaded for merchant:', placesResult.length, placesResult);
+      console.log('✅ Places loaded for merchant:', placesResult.length);
 
-      // Auto-select first place
+      // Auto-select first place if none selected
       if (placesResult.length > 0 && !selectedPlace) {
         setSelectedPlace(placesResult[0]);
+        console.log('✅ Auto-selected first place:', placesResult[0].name);
       }
 
       // Fetch events for merchant's places
       let eventsResult: any[] = [];
       if (placesResult.length > 0) {
         const placeIds = placesResult.map(p => p.id).filter(Boolean);
+        console.log('🔄 Fetching events for places:', placeIds);
+        
         const { data: eventsData, error: eventsError } = await supabase
           .from('events')
           .select('*')
           .in('place_id', placeIds)
           .order('start_time', { ascending: true });
 
-        if (eventsError) throw eventsError;
+        if (eventsError) {
+          console.error('❌ Events fetch error:', eventsError);
+          throw eventsError;
+        }
         
-        // Ensure all events have the required fields with defaults
         eventsResult = (eventsData || []).map(event => ({
           ...event,
           current_attendees: event.current_attendees || 0
@@ -120,7 +128,7 @@ const OptimizedMerchantDashboard = () => {
       
       setEvents(eventsResult);
 
-      console.log('✅ Merchant data loaded:', {
+      console.log('✅ Merchant dashboard data loaded successfully:', {
         places: placesResult.length,
         events: eventsResult.length
       });
@@ -137,17 +145,25 @@ const OptimizedMerchantDashboard = () => {
     fetchMerchantData();
   }, [fetchMerchantData]);
 
-  // Handle place operations
+  // Handle place operations with better validation
   const handleSavePlace = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user) return;
+    if (!user) {
+      toast.error('User not authenticated');
+      return;
+    }
+
+    if (!formData.name.trim()) {
+      toast.error('Store name is required');
+      return;
+    }
 
     try {
       const placeData = {
-        name: formData.name,
-        description: formData.description,
+        name: formData.name.trim(),
+        description: formData.description.trim(),
         type: formData.type,
-        address: formData.address,
+        address: formData.address.trim(),
         latitude: formData.latitude,
         longitude: formData.longitude,
         image_urls: formData.image_urls,
@@ -162,10 +178,11 @@ const OptimizedMerchantDashboard = () => {
           .from('places')
           .update(placeData)
           .eq('id', selectedPlace.id)
-          .eq('merchant_id', user.id); // Extra security check
+          .eq('merchant_id', user.id);
         
         if (error) throw error;
         toast.success('Store updated successfully!');
+        console.log('✅ Store updated:', selectedPlace.id);
       } else {
         const { data, error } = await supabase
           .from('places')
@@ -177,7 +194,6 @@ const OptimizedMerchantDashboard = () => {
         console.log('✅ Store created successfully:', data);
         toast.success('Store created successfully! It will appear on the map shortly.');
         
-        // Auto-select the newly created place
         if (data) {
           setSelectedPlace(data);
         }
@@ -188,7 +204,7 @@ const OptimizedMerchantDashboard = () => {
       fetchMerchantData();
     } catch (error) {
       console.error('❌ Error saving place:', error);
-      toast.error('Failed to save store');
+      toast.error('Failed to save store. Please try again.');
     }
   };
 
@@ -198,12 +214,11 @@ const OptimizedMerchantDashboard = () => {
     try {
       console.log('🗑️ Deleting store:', placeId);
 
-      // Delete the place (cascade should handle related data)
       const { error } = await supabase
         .from('places')
         .delete()
         .eq('id', placeId)
-        .eq('merchant_id', user.id); // Ensure only the owner can delete
+        .eq('merchant_id', user.id);
 
       if (error) throw error;
 
@@ -248,7 +263,7 @@ const OptimizedMerchantDashboard = () => {
       
       if (error) throw error;
       
-      toast.success('Event created successfully! It will appear on the Events page.');
+      toast.success('Event created successfully!');
       setIsCreatingEvent(false);
       resetEventFormData();
       fetchMerchantData();
@@ -316,6 +331,9 @@ const OptimizedMerchantDashboard = () => {
         <div className="mb-8">
           <h1 className="text-3xl font-bold text-foreground mb-2">🏪 Merchant Dashboard</h1>
           <p className="text-muted-foreground">Manage your stores and events</p>
+          <div className="mt-2 text-sm text-muted-foreground">
+            Database Status: {places.length > 0 ? '✅ Connected' : '⚠️ No stores found'}
+          </div>
         </div>
 
         <Tabs defaultValue="stores" className="space-y-6">
@@ -382,7 +400,7 @@ const OptimizedMerchantDashboard = () => {
                               <AlertDialogHeader>
                                 <AlertDialogTitle>Delete Store</AlertDialogTitle>
                                 <AlertDialogDescription>
-                                  Are you sure you want to delete "{place.name}"? This will also delete all related events and chat messages.
+                                  Are you sure you want to delete "{place.name}"? This will also delete all related events and data.
                                 </AlertDialogDescription>
                               </AlertDialogHeader>
                               <AlertDialogFooter>
