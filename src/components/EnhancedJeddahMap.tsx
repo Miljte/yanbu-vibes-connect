@@ -3,11 +3,11 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Wrapper, Status } from '@googlemaps/react-wrapper';
 import { Card, CardContent } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { MapPin, Navigation, MessageSquare, Lock, RefreshCw, ZoomIn, ZoomOut } from 'lucide-react';
+import { MapPin, Navigation, MessageSquare, Lock, RefreshCw, ZoomIn, ZoomOut, ExternalLink } from 'lucide-react';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { useJeddahLocationCheck } from '@/hooks/useJeddahLocationCheck';
-import { useLocation } from '@/hooks/useLocation';
+import { useEnhancedLocation } from '@/hooks/useEnhancedLocation';
 import { toast } from 'sonner';
 
 interface Place {
@@ -342,7 +342,12 @@ const EnhancedJeddahMap = () => {
   const [places, setPlaces] = useState<Place[]>([]);
   const [isDarkMode, setIsDarkMode] = useState(false);
   const { isInJeddah, loading: locationLoading, recheckLocation, locationError, jeddahBounds } = useJeddahLocationCheck();
-  const { location, calculateDistance } = useLocation();
+  const { 
+    location, 
+    nearbyPlaces, 
+    chatAvailablePlaces, 
+    calculateDistance 
+  } = useEnhancedLocation();
   const { user } = useAuth();
 
   const googleMapsApiKey = 'AIzaSyCnHJ_b9LBpxdSOdE8jmVMmJd6Vdmm5u8o';
@@ -358,40 +363,51 @@ const EnhancedJeddahMap = () => {
     return () => mediaQuery.removeEventListener('change', handler);
   }, []);
 
-  // Fetch places with distance calculation
+  // Use enhanced location data for places with distance
   useEffect(() => {
-    if (isInJeddah && location) {
-      fetchActivePlaces();
+    if (nearbyPlaces.length > 0) {
+      setPlaces(nearbyPlaces);
     }
-  }, [isInJeddah, location]);
+  }, [nearbyPlaces]);
 
-  const fetchActivePlaces = async () => {
-    try {
-      const { data, error } = await supabase
-        .from('places')
-        .select('*')
-        .eq('is_active', true);
-
-      if (error) throw error;
-
-      const placesWithDistance = data?.map(place => {
-        let distance = null;
-        if (location) {
-          distance = calculateDistance(
-            location.latitude,
-            location.longitude,
-            place.latitude,
-            place.longitude
-          );
-        }
-        return { ...place, distance };
-      }) || [];
-
-      setPlaces(placesWithDistance);
-    } catch (error) {
-      console.error('Error fetching places:', error);
-      toast.error('Failed to load places');
+  // Handle chat button click with proximity validation
+  const handleJoinChat = (place: Place) => {
+    if (!location) {
+      toast.error('Location not available');
+      return;
     }
+
+    const distance = calculateDistance(
+      location.latitude,
+      location.longitude,
+      place.latitude,
+      place.longitude
+    );
+
+    if (distance > 500) {
+      toast.error(`You need to be within 500m to chat. Currently ${Math.round(distance)}m away.`);
+      return;
+    }
+
+    // Navigate to chat page with place context
+    const chatUrl = new URL(window.location.origin);
+    chatUrl.searchParams.set('section', 'chat');
+    chatUrl.searchParams.set('placeId', place.id);
+    window.location.href = chatUrl.toString();
+  };
+
+  // Get real-time button state based on proximity
+  const getButtonState = (place: Place) => {
+    if (!location) return { disabled: true, text: 'Loading...', color: 'bg-gray-400' };
+    
+    const distance = place.distance || 0;
+    const isWithinRange = distance <= 500;
+    
+    return {
+      disabled: !isWithinRange,
+      text: isWithinRange ? 'Join Chat' : 'Move Closer',
+      color: isWithinRange ? 'bg-green-600 hover:bg-green-700' : 'bg-red-600 hover:bg-red-700'
+    };
   };
 
   // Show location restriction if not in Jeddah
@@ -468,7 +484,7 @@ const EnhancedJeddahMap = () => {
         />
       </Wrapper>
 
-      {/* Enhanced Place Info Popup */}
+      {/* Enhanced Place Info Popup with Real-time Chat Button */}
       {selectedPlace && (
         <div className="absolute bottom-4 left-4 right-4 z-10">
           <Card className="bg-background/95 backdrop-blur-md border shadow-2xl">
@@ -486,20 +502,58 @@ const EnhancedJeddahMap = () => {
               </div>
               
               <div className="space-y-3">
-                <div className="flex items-center space-x-2 text-muted-foreground">
-                  <MapPin className="w-4 h-4" />
-                  <span className="text-sm">
-                    {selectedPlace.distance 
-                      ? `${Math.round(selectedPlace.distance)}m away`
-                      : 'Distance unknown'
-                    }
-                  </span>
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center space-x-2 text-muted-foreground">
+                    <MapPin className="w-4 h-4" />
+                    <span className="text-sm">
+                      {selectedPlace.distance 
+                        ? `${Math.round(selectedPlace.distance)}m away`
+                        : 'Distance unknown'
+                      }
+                    </span>
+                  </div>
+                  
+                  {selectedPlace.distance && (
+                    <span className={`text-xs px-2 py-1 rounded-full font-medium ${
+                      selectedPlace.distance <= 500 
+                        ? 'bg-green-100 text-green-600' 
+                        : 'bg-red-100 text-red-600'
+                    }`}>
+                      {selectedPlace.distance <= 500 ? '🟢 In Range' : '🔴 Too Far'}
+                    </span>
+                  )}
                 </div>
 
-                <Button className="w-full bg-primary hover:bg-primary/90 text-primary-foreground">
-                  <MessageSquare className="w-4 h-4 mr-2" />
-                  Join Chat
-                </Button>
+                {/* Real-time Proximity-based Chat Button */}
+                {(() => {
+                  const buttonState = getButtonState(selectedPlace);
+                  return (
+                    <Button
+                      onClick={() => handleJoinChat(selectedPlace)}
+                      disabled={buttonState.disabled}
+                      className={`w-full ${buttonState.color} text-white transition-all duration-200`}
+                    >
+                      <MessageSquare className="w-4 h-4 mr-2" />
+                      {buttonState.text}
+                      {!buttonState.disabled && <ExternalLink className="w-4 h-4 ml-2" />}
+                    </Button>
+                  );
+                })()}
+
+                {/* Status Indicator */}
+                {selectedPlace.distance && selectedPlace.distance <= 500 && (
+                  <div className="text-xs text-green-600 font-medium text-center flex items-center justify-center">
+                    <span className="w-2 h-2 bg-green-500 rounded-full mr-2 animate-pulse"></span>
+                    Chat available - Click to join
+                  </div>
+                )}
+
+                {selectedPlace.distance && selectedPlace.distance > 500 && (
+                  <div className="text-xs text-red-600 font-medium text-center flex items-center justify-center">
+                    <span className="w-2 h-2 bg-red-500 rounded-full mr-2"></span>
+                    Move {Math.round(selectedPlace.distance - 500)}m closer to unlock chat
+                  </div>
+                )}
               </div>
             </CardContent>
           </Card>
