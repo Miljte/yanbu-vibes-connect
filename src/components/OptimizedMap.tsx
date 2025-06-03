@@ -83,6 +83,8 @@ const MapComponent: React.FC<MapComponentProps> = ({
   const updateMarkers = useCallback(() => {
     if (!map) return;
 
+    console.log('📍 Updating markers:', visibleMarkers.length);
+
     const existingMarkers = markersRef.current;
     const newMarkerIds = new Set(visibleMarkers.map(place => place.id));
 
@@ -99,6 +101,7 @@ const MapComponent: React.FC<MapComponentProps> = ({
       let marker = existingMarkers.get(place.id);
       
       if (!marker) {
+        console.log('🎯 Creating marker for:', place.name);
         // Create new marker
         const isCluster = place.type === 'cluster';
         marker = new google.maps.Marker({
@@ -254,6 +257,27 @@ const OptimizedMap = () => {
     startLocationTracking();
   }, []);
 
+  // Add real-time subscription for place changes
+  useEffect(() => {
+    console.log('🔔 Setting up real-time subscription for places...');
+    
+    const placesSubscription = supabase
+      .channel('places-changes')
+      .on('postgres_changes', 
+        { event: '*', schema: 'public', table: 'places' }, 
+        (payload) => {
+          console.log('🔄 Real-time places update:', payload);
+          fetchActivePlaces(); // Refetch when places change
+        }
+      )
+      .subscribe();
+
+    return () => {
+      console.log('🔔 Cleaning up real-time subscription');
+      supabase.removeChannel(placesSubscription);
+    };
+  }, []);
+
   const fetchActivePlaces = async () => {
     try {
       console.log('🔄 Fetching all active places for map...');
@@ -265,7 +289,7 @@ const OptimizedMap = () => {
 
       if (error) throw error;
       
-      console.log('✅ Active places loaded:', data?.length || 0);
+      console.log('✅ Active places loaded:', data?.length || 0, data);
       setPlaces(data || []);
     } catch (error) {
       console.error('❌ Error fetching places:', error);
