@@ -1,12 +1,12 @@
 
 import React, { useState, useRef, useEffect } from 'react';
-import { Send, MapPin, Users, Clock, Crown, ArrowLeft, MessageSquare } from 'lucide-react';
+import { Send, MapPin, Users, Clock, Crown, ArrowLeft, MessageSquare, Wifi, WifiOff } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
 import { useAuth } from '@/hooks/useAuth';
-import { useOptimizedChat } from '@/hooks/useOptimizedChat';
+import { useStableChat } from '@/hooks/useStableChat';
 import { useEnhancedLocation } from '@/hooks/useEnhancedLocation';
 import { useRoles } from '@/hooks/useRoles';
 import { supabase } from '@/integrations/supabase/client';
@@ -43,14 +43,24 @@ const MerchantChatRoom: React.FC<MerchantChatRoomProps> = ({ placeId, onBack }) 
     : null;
   const isWithinRange = distance !== null && distance <= 500;
 
-  // Use optimized chat hook with real-time proximity checking
-  const { messages, loading: chatLoading, sending, sendMessage, canSendMessage, getMuteMessage } = useOptimizedChat({
+  // Use stable chat hook
+  const { 
+    messages, 
+    loading: chatLoading, 
+    sending, 
+    connectionStatus,
+    sendMessage, 
+    canSendMessage, 
+    getMuteMessage,
+    forceReconnect,
+    queuedMessages
+  } = useStableChat({
     placeId,
     isWithinRange,
     messageLimit: 50
   });
 
-  // Fetch place information
+  // Optimized place info fetching with caching
   useEffect(() => {
     const fetchPlaceInfo = async () => {
       if (!placeId) return;
@@ -67,7 +77,7 @@ const MerchantChatRoom: React.FC<MerchantChatRoomProps> = ({ placeId, onBack }) 
 
         if (error) {
           console.error('❌ Error fetching place info:', error);
-          toast.error('Failed to load chat room');
+          toast.error('Chat room not found');
           return;
         }
 
@@ -94,7 +104,7 @@ const MerchantChatRoom: React.FC<MerchantChatRoomProps> = ({ placeId, onBack }) 
     if (!newMessage.trim() || !isWithinRange) return;
 
     try {
-      const success = await sendMessage(newMessage);
+      const success = await sendMessage(newMessage, isPromotion);
       if (success) {
         setNewMessage('');
         setIsPromotion(false);
@@ -119,6 +129,18 @@ const MerchantChatRoom: React.FC<MerchantChatRoomProps> = ({ placeId, onBack }) 
       hour: '2-digit', 
       minute: '2-digit' 
     });
+  };
+
+  // Get connection status icon
+  const getConnectionIcon = () => {
+    switch (connectionStatus) {
+      case 'connected':
+        return <Wifi className="w-4 h-4 text-green-500" />;
+      case 'connecting':
+        return <Wifi className="w-4 h-4 text-yellow-500 animate-pulse" />;
+      default:
+        return <WifiOff className="w-4 h-4 text-red-500" />;
+    }
   };
 
   // Get message styling based on type
@@ -173,7 +195,7 @@ const MerchantChatRoom: React.FC<MerchantChatRoomProps> = ({ placeId, onBack }) 
 
   return (
     <div className="min-h-screen bg-background flex flex-col">
-      {/* Chat Header */}
+      {/* Optimized Chat Header */}
       <div className="bg-card border-b border-border p-4">
         <div className="flex items-center justify-between">
           <div className="flex items-center space-x-4">
@@ -198,6 +220,26 @@ const MerchantChatRoom: React.FC<MerchantChatRoomProps> = ({ placeId, onBack }) 
           </div>
           
           <div className="flex items-center space-x-2">
+            {/* Connection Status */}
+            <Button
+              onClick={forceReconnect}
+              variant="ghost"
+              size="sm"
+              className="flex items-center space-x-1"
+              title={`Connection: ${connectionStatus}`}
+            >
+              {getConnectionIcon()}
+              <span className="text-xs capitalize">{connectionStatus}</span>
+            </Button>
+            
+            {/* Queue Status */}
+            {queuedMessages > 0 && (
+              <Badge variant="outline" className="text-orange-600">
+                {queuedMessages} queued
+              </Badge>
+            )}
+            
+            {/* Range Status */}
             <Badge 
               variant="outline" 
               className={`${
@@ -212,7 +254,7 @@ const MerchantChatRoom: React.FC<MerchantChatRoomProps> = ({ placeId, onBack }) 
         </div>
       </div>
 
-      {/* Messages Area */}
+      {/* Optimized Messages Area */}
       <div className="flex-1 p-4 overflow-y-auto">
         {!isWithinRange ? (
           <div className="flex items-center justify-center h-full">
@@ -250,7 +292,7 @@ const MerchantChatRoom: React.FC<MerchantChatRoomProps> = ({ placeId, onBack }) 
                 return (
                   <div 
                     key={message.id} 
-                    className={`p-4 rounded-lg ${getMessageStyle(message.message_type, message.is_promotion, isOwnMessage)}`}
+                    className={`p-4 rounded-lg transition-all duration-200 ${getMessageStyle(message.message_type, message.is_promotion, isOwnMessage)}`}
                   >
                     {message.message_type !== 'system' && (
                       <div className="flex items-center justify-between mb-2">
@@ -283,7 +325,7 @@ const MerchantChatRoom: React.FC<MerchantChatRoomProps> = ({ placeId, onBack }) 
         )}
       </div>
 
-      {/* Message Input */}
+      {/* Optimized Message Input */}
       <div className="bg-card border-t border-border p-4">
         <div className="max-w-4xl mx-auto">
           {/* Merchant promotion toggle */}
@@ -311,16 +353,18 @@ const MerchantChatRoom: React.FC<MerchantChatRoomProps> = ({ placeId, onBack }) 
                   ? "Sign in to chat..."
                   : !isWithinRange
                   ? "Get within 500m to chat..."
+                  : connectionStatus !== 'connected'
+                  ? "Connecting to chat..."
                   : !canSendMessage()
                   ? getMuteMessage() || "You cannot send messages"
                   : "Type your message..."
               }
-              disabled={!user || !isWithinRange || !canSendMessage() || sending}
+              disabled={!user || !isWithinRange || !canSendMessage() || sending || connectionStatus !== 'connected'}
               className="flex-1 bg-background border-border text-foreground placeholder-muted-foreground"
             />
             <Button
               onClick={handleSendMessage}
-              disabled={!newMessage.trim() || !user || !isWithinRange || !canSendMessage() || sending}
+              disabled={!newMessage.trim() || !user || !isWithinRange || !canSendMessage() || sending || connectionStatus !== 'connected'}
               className="bg-primary hover:bg-primary/90"
             >
               {sending ? (
@@ -331,12 +375,18 @@ const MerchantChatRoom: React.FC<MerchantChatRoomProps> = ({ placeId, onBack }) 
             </Button>
           </div>
           
-          <div className="text-xs text-muted-foreground mt-2 text-center">
-            {isWithinRange ? (
-              `✅ Chat active • ${distance ? Math.round(distance) : '?'}m from ${placeInfo.name}`
-            ) : (
-              `🚫 Get within 500m of ${placeInfo.name} to chat • Currently ${distance ? Math.round(distance) : '?'}m away`
-            )}
+          <div className="text-xs text-muted-foreground mt-2 text-center flex items-center justify-center space-x-4">
+            <span>
+              {isWithinRange ? (
+                `✅ Chat active • ${distance ? Math.round(distance) : '?'}m from ${placeInfo.name}`
+              ) : (
+                `🚫 Get within 500m of ${placeInfo.name} to chat • Currently ${distance ? Math.round(distance) : '?'}m away`
+              )}
+            </span>
+            <span className="flex items-center space-x-1">
+              {getConnectionIcon()}
+              <span className="capitalize">{connectionStatus}</span>
+            </span>
           </div>
         </div>
       </div>
