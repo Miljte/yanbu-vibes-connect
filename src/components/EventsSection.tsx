@@ -1,39 +1,45 @@
+
 import React, { useState, useEffect } from 'react';
-import { Calendar, Clock, MapPin, Users, Heart, Share2, ThumbsUp } from 'lucide-react';
+import { Calendar, MapPin, Users, Clock, Heart, UserCheck } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/integrations/supabase/client';
 import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 
-interface Event {
+interface EventData {
   id: string;
   title: string;
   description: string;
   start_time: string;
   end_time: string;
+  image_url: string;
   max_attendees: number;
   current_attendees: number;
-  interested_count: number;
-  rsvp_count: number;
-  image_url: string;
   is_active: boolean;
-  place_id: string;
   organizer_id: string;
-  places?: {
+  place_id: string;
+  created_at: string;
+  updated_at: string;
+  interested_count?: number;
+  rsvp_count?: number;
+  places: {
+    id: string;
     name: string;
-    address: string;
     type: string;
+    address: string;
   };
 }
 
+interface UserResponse {
+  event_id: string;
+  response_type: string;
+}
+
 const EventsSection = () => {
-  const [events, setEvents] = useState<Event[]>([]);
-  const [userInterested, setUserInterested] = useState<Set<string>>(new Set());
-  const [userRSVPs, setUserRSVPs] = useState<Set<string>>(new Set());
-  const [activeTab, setActiveTab] = useState('all');
+  const [events, setEvents] = useState<EventData[]>([]);
+  const [userResponses, setUserResponses] = useState<UserResponse[]>([]);
   const [loading, setLoading] = useState(true);
   const { user } = useAuth();
 
@@ -46,32 +52,36 @@ const EventsSection = () => {
 
   const fetchEvents = async () => {
     try {
+      console.log('🔄 Fetching events...');
+      
       const { data, error } = await supabase
         .from('events')
         .select(`
           *,
-          places (
+          places:place_id (
+            id,
             name,
-            address,
-            type
+            type,
+            address
           )
         `)
         .eq('is_active', true)
+        .gte('start_time', new Date().toISOString())
         .order('start_time', { ascending: true });
 
       if (error) throw error;
-      
-      // Ensure all events have the required fields with defaults
+
+      // Add default values for missing fields
       const eventsWithDefaults = (data || []).map(event => ({
         ...event,
         interested_count: event.interested_count || 0,
-        rsvp_count: event.rsvp_count || 0,
-        current_attendees: event.current_attendees || 0
+        rsvp_count: event.rsvp_count || 0
       }));
-      
+
       setEvents(eventsWithDefaults);
+      console.log('✅ Events loaded:', eventsWithDefaults.length);
     } catch (error) {
-      console.error('Error fetching events:', error);
+      console.error('❌ Error fetching events:', error);
       toast.error('Failed to load events');
     } finally {
       setLoading(false);
@@ -82,291 +92,238 @@ const EventsSection = () => {
     if (!user) return;
 
     try {
-      // Since event_responses table might not exist yet in types, we'll use a raw query approach
-      const { data: interestedData } = await supabase
-        .rpc('get_user_event_responses', { 
-          user_id: user.id, 
-          response_type: 'interested' 
-        })
-        .select('event_id');
+      const { data, error } = await supabase
+        .from('event_responses')
+        .select('event_id, response_type')
+        .eq('user_id', user.id);
 
-      const { data: rsvpData } = await supabase
-        .rpc('get_user_event_responses', { 
-          user_id: user.id, 
-          response_type: 'rsvp' 
-        })
-        .select('event_id');
-
-      if (interestedData) {
-        setUserInterested(new Set(interestedData.map(r => r.event_id)));
-      }
-      if (rsvpData) {
-        setUserRSVPs(new Set(rsvpData.map(r => r.event_id)));
-      }
+      if (error) throw error;
+      setUserResponses(data || []);
     } catch (error) {
-      console.error('Error fetching user responses:', error);
-      // Don't show error to user as this is non-critical
+      console.error('❌ Error fetching user responses:', error);
     }
   };
 
-  const handleEventResponse = async (eventId: string, responseType: 'interested' | 'rsvp') => {
+  const handleInterested = async (eventId: string) => {
     if (!user) {
-      toast.error('Please log in to respond to events');
+      toast.error('Please sign in to show interest');
       return;
     }
 
     try {
-      const isCurrentlySelected = responseType === 'interested' 
-        ? userInterested.has(eventId) 
-        : userRSVPs.has(eventId);
+      const existingResponse = userResponses.find(
+        r => r.event_id === eventId && r.response_type === 'interested'
+      );
 
-      if (isCurrentlySelected) {
-        // Remove the response - using a simple approach since table types aren't available
+      if (existingResponse) {
+        // Remove interest
         const { error } = await supabase
-          .rpc('remove_event_response', {
-            event_id: eventId,
-            user_id: user.id,
-            response_type: responseType
-          });
+          .from('event_responses')
+          .delete()
+          .eq('event_id', eventId)
+          .eq('user_id', user.id)
+          .eq('response_type', 'interested');
 
         if (error) throw error;
-        
-        // Update local state
-        if (responseType === 'interested') {
-          setUserInterested(prev => {
-            const newSet = new Set(prev);
-            newSet.delete(eventId);
-            return newSet;
-          });
-        } else {
-          setUserRSVPs(prev => {
-            const newSet = new Set(prev);
-            newSet.delete(eventId);
-            return newSet;
-          });
-        }
-        
-        toast.success(`Removed ${responseType} response`);
+        toast.success('Interest removed');
       } else {
-        // Add the response
+        // Add interest
         const { error } = await supabase
-          .rpc('add_event_response', {
+          .from('event_responses')
+          .insert({
             event_id: eventId,
             user_id: user.id,
-            response_type: responseType
+            response_type: 'interested'
           });
 
         if (error) throw error;
-        
-        // Update local state
-        if (responseType === 'interested') {
-          setUserInterested(prev => new Set([...prev, eventId]));
-        } else {
-          setUserRSVPs(prev => new Set([...prev, eventId]));
-        }
-        
-        toast.success(`Marked as ${responseType}!`);
+        toast.success('Marked as interested!');
       }
 
-      // Refresh events to get updated counts
+      fetchUserResponses();
       fetchEvents();
     } catch (error) {
-      console.error('Error responding to event:', error);
-      toast.error('Failed to update response');
+      console.error('❌ Error updating interest:', error);
+      toast.error('Failed to update interest');
     }
   };
 
-  const getEventTypeColor = (type: string) => {
-    switch (type) {
-      case 'restaurant': return 'bg-orange-600';
-      case 'cafe': return 'bg-amber-600';
-      case 'mall': return 'bg-blue-600';
-      case 'beach': return 'bg-cyan-600';
-      case 'park': return 'bg-green-600';
-      case 'event_venue': return 'bg-purple-600';
-      default: return 'bg-gray-600';
+  const handleRSVP = async (eventId: string) => {
+    if (!user) {
+      toast.error('Please sign in to RSVP');
+      return;
+    }
+
+    try {
+      const existingRSVP = userResponses.find(
+        r => r.event_id === eventId && r.response_type === 'rsvp'
+      );
+
+      if (existingRSVP) {
+        // Remove RSVP
+        const { error } = await supabase
+          .from('event_responses')
+          .delete()
+          .eq('event_id', eventId)
+          .eq('user_id', user.id)
+          .eq('response_type', 'rsvp');
+
+        if (error) throw error;
+        toast.success('RSVP cancelled');
+      } else {
+        // Add RSVP
+        const { error } = await supabase
+          .from('event_responses')
+          .insert({
+            event_id: eventId,
+            user_id: user.id,
+            response_type: 'rsvp'
+          });
+
+        if (error) throw error;
+        toast.success('RSVP confirmed!');
+      }
+
+      fetchUserResponses();
+      fetchEvents();
+    } catch (error) {
+      console.error('❌ Error updating RSVP:', error);
+      toast.error('Failed to update RSVP');
     }
   };
 
-  const getEventTypeEmoji = (type: string) => {
-    switch (type) {
-      case 'restaurant': return '🍽️';
-      case 'cafe': return '☕';
-      case 'mall': return '🛍️';
-      case 'beach': return '🏖️';
-      case 'park': return '🌳';
-      case 'event_venue': return '🎪';
-      default: return '📅';
-    }
+  const isInterested = (eventId: string) => {
+    return userResponses.some(r => r.event_id === eventId && r.response_type === 'interested');
   };
 
-  const hasUserResponded = (eventId: string, responseType: 'interested' | 'rsvp') => {
-    return responseType === 'interested' 
-      ? userInterested.has(eventId)
-      : userRSVPs.has(eventId);
-  };
-
-  const filterEvents = (filter: string) => {
-    if (filter === 'all') return events;
-    if (filter === 'attending') {
-      return events.filter(event => userRSVPs.has(event.id));
-    }
-    return events.filter(event => event.places?.type === filter);
+  const hasRSVPed = (eventId: string) => {
+    return userResponses.some(r => r.event_id === eventId && r.response_type === 'rsvp');
   };
 
   const formatDate = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', { 
-      weekday: 'short', 
-      month: 'short', 
-      day: 'numeric' 
-    });
-  };
-
-  const formatTime = (dateString: string) => {
-    const date = new Date(dateString);
-    return date.toLocaleTimeString('en-US', { 
-      hour: 'numeric', 
-      minute: '2-digit',
-      hour12: true 
+    return new Date(dateString).toLocaleDateString('en-US', {
+      weekday: 'short',
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
     });
   };
 
   if (loading) {
     return (
-      <div className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-4 flex items-center justify-center">
-        <div className="text-center space-y-4">
-          <div className="w-16 h-16 border-4 border-cyan-500/30 border-t-cyan-500 rounded-full animate-spin mx-auto"></div>
-          <p className="text-white text-lg">Loading events...</p>
+      <div className="min-h-screen bg-background p-4 pb-20">
+        <div className="container mx-auto max-w-4xl">
+          <div className="text-center py-8">
+            <div className="w-16 h-16 border-4 border-primary/30 border-t-primary rounded-full animate-spin mx-auto mb-4"></div>
+            <p className="text-foreground">Loading events...</p>
+          </div>
         </div>
       </div>
     );
   }
 
   return (
-    <div id="events" className="min-h-screen bg-gradient-to-br from-slate-900 via-slate-800 to-slate-900 p-4">
-      <div className="container mx-auto max-w-6xl">
+    <div className="min-h-screen bg-background p-4 pb-20">
+      <div className="container mx-auto max-w-4xl">
         <div className="mb-8">
-          <h2 className="text-3xl font-bold text-white mb-2">Discover Events</h2>
-          <p className="text-slate-300">Join exciting events happening around you</p>
+          <h1 className="text-3xl font-bold text-foreground mb-2">🎉 Events</h1>
+          <p className="text-muted-foreground">Discover and join exciting events happening nearby</p>
         </div>
 
-        <Tabs value={activeTab} onValueChange={setActiveTab} className="mb-6">
-          <TabsList className="bg-slate-800 border-slate-700">
-            <TabsTrigger value="all" className="data-[state=active]:bg-cyan-600">All Events</TabsTrigger>
-            <TabsTrigger value="attending" className="data-[state=active]:bg-cyan-600">My RSVPs</TabsTrigger>
-            <TabsTrigger value="restaurant" className="data-[state=active]:bg-cyan-600">Food</TabsTrigger>
-            <TabsTrigger value="cafe" className="data-[state=active]:bg-cyan-600">Cafes</TabsTrigger>
-            <TabsTrigger value="event_venue" className="data-[state=active]:bg-cyan-600">Venues</TabsTrigger>
-          </TabsList>
-
-          <TabsContent value={activeTab} className="mt-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-              {filterEvents(activeTab).map((event) => (
-                <Card key={event.id} className="bg-slate-800/50 border-slate-700 backdrop-blur-sm overflow-hidden hover:border-cyan-500/50 transition-all">
-                  <div className="relative h-48 overflow-hidden">
-                    {event.image_url ? (
-                      <img 
-                        src={event.image_url} 
-                        alt={event.title}
-                        className="w-full h-full object-cover"
-                      />
-                    ) : (
-                      <div className="w-full h-full bg-gradient-to-br from-slate-700 to-slate-600 flex items-center justify-center">
-                        <Calendar className="w-16 h-16 text-slate-400" />
+        {events.length === 0 ? (
+          <Card className="bg-card border text-center py-12">
+            <CardContent>
+              <Calendar className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
+              <h3 className="text-xl font-semibold text-foreground mb-2">No Events Available</h3>
+              <p className="text-muted-foreground">Check back later for upcoming events!</p>
+            </CardContent>
+          </Card>
+        ) : (
+          <div className="grid gap-6">
+            {events.map((event) => (
+              <Card key={event.id} className="bg-card border hover:shadow-lg transition-shadow">
+                <CardContent className="p-6">
+                  <div className="flex flex-col md:flex-row gap-6">
+                    {event.image_url && (
+                      <div className="md:w-1/3">
+                        <img
+                          src={event.image_url}
+                          alt={event.title}
+                          className="w-full h-48 object-cover rounded-lg"
+                        />
                       </div>
                     )}
-                    <div className="absolute top-3 left-3">
-                      <Badge className={`${getEventTypeColor(event.places?.type || 'event_venue')} text-white`}>
-                        {getEventTypeEmoji(event.places?.type || 'event_venue')} {event.places?.type || 'Event'}
-                      </Badge>
-                    </div>
-                    <div className="absolute top-3 right-3">
-                      <Badge variant="secondary" className="bg-slate-900/80 text-white">
-                        {event.places?.name}
-                      </Badge>
+                    
+                    <div className="flex-1 space-y-4">
+                      <div>
+                        <h3 className="text-2xl font-bold text-foreground mb-2">{event.title}</h3>
+                        <p className="text-muted-foreground">{event.description}</p>
+                      </div>
+
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm text-muted-foreground">
+                        <div className="flex items-center space-x-2">
+                          <Clock className="w-4 h-4" />
+                          <span>{formatDate(event.start_time)}</span>
+                        </div>
+                        
+                        <div className="flex items-center space-x-2">
+                          <MapPin className="w-4 h-4" />
+                          <span>{event.places?.name || 'Location TBA'}</span>
+                        </div>
+                        
+                        <div className="flex items-center space-x-2">
+                          <Users className="w-4 h-4" />
+                          <span>{event.current_attendees}/{event.max_attendees} attending</span>
+                        </div>
+                        
+                        <div className="flex items-center space-x-2">
+                          <Badge variant="secondary" className="capitalize">
+                            {event.places?.type || 'Event'}
+                          </Badge>
+                        </div>
+                      </div>
+
+                      <div className="flex items-center justify-between pt-4">
+                        <div className="flex items-center space-x-4 text-sm text-muted-foreground">
+                          <span className="flex items-center space-x-1">
+                            <Heart className="w-4 h-4" />
+                            <span>{event.interested_count || 0} interested</span>
+                          </span>
+                          <span className="flex items-center space-x-1">
+                            <UserCheck className="w-4 h-4" />
+                            <span>{event.rsvp_count || 0} attending</span>
+                          </span>
+                        </div>
+
+                        <div className="flex space-x-2">
+                          <Button
+                            variant={isInterested(event.id) ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => handleInterested(event.id)}
+                          >
+                            <Heart className={`w-4 h-4 mr-1 ${isInterested(event.id) ? 'fill-current' : ''}`} />
+                            {isInterested(event.id) ? 'Interested' : 'Interest'}
+                          </Button>
+                          
+                          <Button
+                            variant={hasRSVPed(event.id) ? "default" : "outline"}
+                            size="sm"
+                            onClick={() => handleRSVP(event.id)}
+                            disabled={event.current_attendees >= event.max_attendees && !hasRSVPed(event.id)}
+                          >
+                            <UserCheck className={`w-4 h-4 mr-1 ${hasRSVPed(event.id) ? 'fill-current' : ''}`} />
+                            {hasRSVPed(event.id) ? 'Going' : 'RSVP'}
+                          </Button>
+                        </div>
+                      </div>
                     </div>
                   </div>
-
-                  <CardHeader>
-                    <CardTitle className="text-white text-lg">{event.title}</CardTitle>
-                    <p className="text-slate-300 text-sm line-clamp-2">{event.description}</p>
-                  </CardHeader>
-
-                  <CardContent className="space-y-4">
-                    <div className="space-y-2">
-                      <div className="flex items-center space-x-2 text-slate-300 text-sm">
-                        <Calendar className="w-4 h-4 text-cyan-500" />
-                        <span>{formatDate(event.start_time)}</span>
-                      </div>
-                      <div className="flex items-center space-x-2 text-slate-300 text-sm">
-                        <Clock className="w-4 h-4 text-cyan-500" />
-                        <span>{formatTime(event.start_time)} - {formatTime(event.end_time)}</span>
-                      </div>
-                      <div className="flex items-center space-x-2 text-slate-300 text-sm">
-                        <MapPin className="w-4 h-4 text-cyan-500" />
-                        <span>{event.places?.address || 'Location TBA'}</span>
-                      </div>
-                      <div className="flex items-center space-x-2 text-slate-300 text-sm">
-                        <Users className="w-4 h-4 text-cyan-500" />
-                        <span>
-                          {event.current_attendees} / {event.max_attendees} attending
-                        </span>
-                      </div>
-                    </div>
-
-                    <div className="grid grid-cols-2 gap-2 text-center">
-                      <div>
-                        <div className="text-lg font-bold text-purple-400">{event.interested_count}</div>
-                        <div className="text-xs text-slate-400">Interested</div>
-                      </div>
-                      <div>
-                        <div className="text-lg font-bold text-green-400">{event.rsvp_count}</div>
-                        <div className="text-xs text-slate-400">RSVPs</div>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between pt-4 border-t border-slate-700">
-                      <Button
-                        size="sm"
-                        variant={hasUserResponded(event.id, 'interested') ? 'default' : 'outline'}
-                        onClick={() => handleEventResponse(event.id, 'interested')}
-                        className={hasUserResponded(event.id, 'interested') 
-                          ? 'bg-purple-600 hover:bg-purple-700 text-white' 
-                          : 'border-purple-600 text-purple-400 hover:bg-purple-600 hover:text-white'
-                        }
-                      >
-                        <ThumbsUp className="w-4 h-4 mr-1" />
-                        Interested
-                      </Button>
-                      
-                      <Button
-                        size="sm"
-                        variant={hasUserResponded(event.id, 'rsvp') ? 'default' : 'outline'}
-                        onClick={() => handleEventResponse(event.id, 'rsvp')}
-                        className={hasUserResponded(event.id, 'rsvp')
-                          ? 'bg-green-600 hover:bg-green-700 text-white'
-                          : 'border-green-600 text-green-400 hover:bg-green-600 hover:text-white'
-                        }
-                      >
-                        <Heart className="w-4 h-4 mr-1" />
-                        RSVP
-                      </Button>
-                    </div>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-
-            {filterEvents(activeTab).length === 0 && (
-              <div className="text-center py-12">
-                <Calendar className="w-16 h-16 mx-auto mb-4 text-slate-400 opacity-50" />
-                <h3 className="text-xl font-semibold text-white mb-2">No events found</h3>
-                <p className="text-slate-400">Check back later for new events!</p>
-              </div>
-            )}
-          </TabsContent>
-        </Tabs>
+                </CardContent>
+              </Card>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

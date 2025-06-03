@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useCallback } from 'react';
 import { Store, Calendar, Gift, Users, BarChart3, MapPin, Trash2, Plus, Edit } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -38,8 +39,8 @@ interface Event {
   organizer_id: string;
   max_attendees: number;
   current_attendees: number;
-  interested_count: number;
-  rsvp_count: number;
+  interested_count?: number;
+  rsvp_count?: number;
   is_active: boolean;
   image_url?: string;
 }
@@ -118,11 +119,12 @@ const OptimizedMerchantDashboard = () => {
         }));
         
         setEvents(eventsWithDefaults);
+        console.log('✅ Events loaded:', eventsWithDefaults.length);
       }
 
       console.log('✅ Merchant data loaded:', {
         places: placesResult.length,
-        events: placesResult.length > 0 ? eventsData?.length || 0 : 0
+        events: placesResult.length > 0 ? (eventsData?.length || 0) : 0
       });
 
     } catch (error) {
@@ -163,7 +165,7 @@ const OptimizedMerchantDashboard = () => {
           .eq('merchant_id', user.id); // Extra security check
         
         if (error) throw error;
-        toast.success('Store updated successfully!');
+        toast.success('Store updated successfully!');\
       } else {
         const { data, error } = await supabase
           .from('places')
@@ -475,13 +477,23 @@ const OptimizedMerchantDashboard = () => {
                         <Input
                           placeholder="Image URL"
                           value={formData.image_urls[0] || ''}
-                          onChange={(e) => setFormData({...formData, image_urls: e.target.value ? [e.target.value] : []})}
+                          onChange={(e) => setFormData({
+                            ...formData, 
+                            image_urls: e.target.value ? [e.target.value] : []
+                          })}
                         />
-                        <div className="flex space-x-2">
-                          <Button type="submit">
+                        <div className="flex space-x-4">
+                          <Button type="submit" className="flex-1">
                             {selectedPlace ? 'Update Store' : 'Create Store'}
                           </Button>
-                          <Button type="button" variant="outline" onClick={() => setIsEditing(false)}>
+                          <Button 
+                            type="button" 
+                            variant="outline" 
+                            onClick={() => {
+                              setIsEditing(false);
+                              resetFormData();
+                            }}
+                          >
                             Cancel
                           </Button>
                         </div>
@@ -493,51 +505,43 @@ const OptimizedMerchantDashboard = () => {
                     <CardHeader>
                       <CardTitle className="text-foreground flex items-center justify-between">
                         <span>{selectedPlace.name}</span>
-                        <Button onClick={() => startEditing(selectedPlace)}>
-                          <Edit className="w-4 h-4 mr-2" />
-                          Edit Store
+                        <Button size="sm" onClick={() => startEditing(selectedPlace)}>
+                          <Edit className="w-4 h-4 mr-1" />
+                          Edit
                         </Button>
                       </CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-4">
-                      {selectedPlace.image_urls && selectedPlace.image_urls.length > 0 && (
-                        <img 
-                          src={selectedPlace.image_urls[0]} 
-                          alt={selectedPlace.name}
-                          className="w-full h-48 object-cover rounded-lg"
-                        />
-                      )}
-                      <p className="text-muted-foreground">{selectedPlace.description}</p>
-                      <div className="flex items-center space-x-2 text-sm text-muted-foreground">
-                        <MapPin className="w-4 h-4" />
-                        <span>{selectedPlace.address}</span>
+                      <div>
+                        <h4 className="font-medium text-foreground mb-2">Description</h4>
+                        <p className="text-muted-foreground">{selectedPlace.description || 'No description provided'}</p>
                       </div>
-                      <div className="flex items-center space-x-4">
-                        <Badge variant="outline">{selectedPlace.type}</Badge>
-                        <Badge variant={selectedPlace.is_active ? "default" : "secondary"}>
-                          {selectedPlace.is_active ? 'Active' : 'Inactive'}
-                        </Badge>
-                      </div>
-                      <div className="bg-blue-50 p-4 rounded-lg">
-                        <h4 className="font-medium text-blue-900 mb-2">🗺️ Map Integration</h4>
-                        <p className="text-blue-700 text-sm">
-                          Your store will appear on the main map with coordinates: {selectedPlace.latitude}, {selectedPlace.longitude}
-                        </p>
-                      </div>
-                      <div className="bg-green-50 p-4 rounded-lg">
-                        <h4 className="font-medium text-green-900 mb-2">💬 Chat Room</h4>
-                        <p className="text-green-700 text-sm">
-                          Users within 500 meters can join your store's dedicated chat room
-                        </p>
+                      <div className="grid grid-cols-2 gap-4 text-sm">
+                        <div>
+                          <span className="font-medium text-foreground">Type:</span>
+                          <p className="text-muted-foreground capitalize">{selectedPlace.type}</p>
+                        </div>
+                        <div>
+                          <span className="font-medium text-foreground">Status:</span>
+                          <p className="text-muted-foreground">{selectedPlace.is_active ? 'Active' : 'Inactive'}</p>
+                        </div>
+                        <div>
+                          <span className="font-medium text-foreground">Location:</span>
+                          <p className="text-muted-foreground">{selectedPlace.latitude.toFixed(4)}, {selectedPlace.longitude.toFixed(4)}</p>
+                        </div>
+                        <div>
+                          <span className="font-medium text-foreground">Address:</span>
+                          <p className="text-muted-foreground">{selectedPlace.address || 'No address provided'}</p>
+                        </div>
                       </div>
                     </CardContent>
                   </Card>
                 ) : (
-                  <Card className="bg-muted/20 border-dashed">
-                    <CardContent className="py-12 text-center">
-                      <Store className="w-16 h-16 mx-auto mb-4 text-muted-foreground opacity-50" />
-                      <h3 className="text-lg font-medium text-foreground mb-2">No store selected</h3>
-                      <p className="text-muted-foreground mb-4">Select a store or create a new one to get started</p>
+                  <Card className="bg-card border">
+                    <CardContent className="text-center py-12">
+                      <Store className="w-16 h-16 mx-auto mb-4 text-muted-foreground" />
+                      <h3 className="text-xl font-semibold text-foreground mb-2">No Store Selected</h3>
+                      <p className="text-muted-foreground">Select a store to view details or create a new one</p>
                     </CardContent>
                   </Card>
                 )}
@@ -547,31 +551,27 @@ const OptimizedMerchantDashboard = () => {
 
           <TabsContent value="events">
             <div className="space-y-6">
-              <div className="flex items-center justify-between">
-                <h2 className="text-2xl font-bold text-foreground">Event Management</h2>
-                <Button 
-                  onClick={() => setIsCreatingEvent(true)}
-                  disabled={!selectedPlace}
-                >
-                  <Plus className="w-4 h-4 mr-2" />
-                  Create Event
-                </Button>
-              </div>
-
-              {!selectedPlace && (
-                <Card className="bg-orange-50 border-orange-200">
-                  <CardContent className="p-4">
-                    <p className="text-orange-800">Please select a store first to create events.</p>
-                  </CardContent>
-                </Card>
-              )}
-
-              {isCreatingEvent && selectedPlace && (
-                <Card className="bg-card border">
-                  <CardHeader>
-                    <CardTitle className="text-foreground">Create New Event for {selectedPlace.name}</CardTitle>
-                  </CardHeader>
-                  <CardContent>
+              <Card className="bg-card border">
+                <CardHeader>
+                  <CardTitle className="text-foreground flex items-center justify-between">
+                    <span>Event Management</span>
+                    <Button 
+                      size="sm" 
+                      onClick={() => setIsCreatingEvent(true)}
+                      disabled={places.length === 0}
+                    >
+                      <Plus className="w-4 h-4 mr-1" />
+                      Create Event
+                    </Button>
+                  </CardTitle>
+                </CardHeader>
+                <CardContent>
+                  {places.length === 0 ? (
+                    <div className="text-center py-8">
+                      <Calendar className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
+                      <p className="text-muted-foreground">Create a store first to manage events</p>
+                    </div>
+                  ) : isCreatingEvent ? (
                     <form onSubmit={handleSaveEvent} className="space-y-4">
                       <Input
                         placeholder="Event title"
@@ -585,30 +585,24 @@ const OptimizedMerchantDashboard = () => {
                         onChange={(e) => setEventFormData({...eventFormData, description: e.target.value})}
                       />
                       <div className="grid grid-cols-2 gap-4">
-                        <div>
-                          <label className="block text-sm font-medium mb-1">Start Time</label>
-                          <Input
-                            type="datetime-local"
-                            value={eventFormData.start_time}
-                            onChange={(e) => setEventFormData({...eventFormData, start_time: e.target.value})}
-                            required
-                          />
-                        </div>
-                        <div>
-                          <label className="block text-sm font-medium mb-1">End Time</label>
-                          <Input
-                            type="datetime-local"
-                            value={eventFormData.end_time}
-                            onChange={(e) => setEventFormData({...eventFormData, end_time: e.target.value})}
-                            required
-                          />
-                        </div>
+                        <Input
+                          type="datetime-local"
+                          value={eventFormData.start_time}
+                          onChange={(e) => setEventFormData({...eventFormData, start_time: e.target.value})}
+                          required
+                        />
+                        <Input
+                          type="datetime-local"
+                          value={eventFormData.end_time}
+                          onChange={(e) => setEventFormData({...eventFormData, end_time: e.target.value})}
+                        />
                       </div>
                       <Input
                         type="number"
                         placeholder="Max attendees"
                         value={eventFormData.max_attendees}
                         onChange={(e) => setEventFormData({...eventFormData, max_attendees: parseInt(e.target.value)})}
+                        min="1"
                         required
                       />
                       <Input
@@ -616,103 +610,82 @@ const OptimizedMerchantDashboard = () => {
                         value={eventFormData.image_url}
                         onChange={(e) => setEventFormData({...eventFormData, image_url: e.target.value})}
                       />
-                      <div className="bg-blue-50 p-4 rounded-lg">
-                        <h4 className="font-medium text-blue-900 mb-2">📅 Event Publishing</h4>
-                        <p className="text-blue-700 text-sm">
-                          Your event will automatically appear on the public Events page with "Interested" and "RSVP" options
-                        </p>
-                      </div>
-                      <div className="flex space-x-2">
-                        <Button type="submit">Create Event</Button>
-                        <Button type="button" variant="outline" onClick={() => setIsCreatingEvent(false)}>
+                      <div className="flex space-x-4">
+                        <Button type="submit" className="flex-1">Create Event</Button>
+                        <Button 
+                          type="button" 
+                          variant="outline" 
+                          onClick={() => {
+                            setIsCreatingEvent(false);
+                            resetEventFormData();
+                          }}
+                        >
                           Cancel
                         </Button>
                       </div>
                     </form>
-                  </CardContent>
-                </Card>
-              )}
-
-              <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-                {events.map((event) => (
-                  <Card key={event.id} className="bg-card border">
-                    <CardHeader>
-                      <CardTitle className="text-foreground text-lg">{event.title}</CardTitle>
-                    </CardHeader>
-                    <CardContent className="space-y-2">
-                      {event.image_url && (
-                        <img 
-                          src={event.image_url} 
-                          alt={event.title}
-                          className="w-full h-32 object-cover rounded-lg mb-3"
-                        />
+                  ) : (
+                    <div className="space-y-4">
+                      {events.map((event) => (
+                        <div key={event.id} className="p-4 border rounded-lg">
+                          <div className="flex items-center justify-between">
+                            <div>
+                              <h4 className="font-medium text-foreground">{event.title}</h4>
+                              <p className="text-sm text-muted-foreground">
+                                {new Date(event.start_time).toLocaleDateString()}
+                              </p>
+                            </div>
+                            <div className="flex items-center space-x-2">
+                              <Badge variant="secondary">
+                                {event.current_attendees}/{event.max_attendees}
+                              </Badge>
+                              <Badge variant={event.is_active ? "default" : "secondary"}>
+                                {event.is_active ? 'Active' : 'Inactive'}
+                              </Badge>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                      {events.length === 0 && (
+                        <div className="text-center py-8">
+                          <Calendar className="w-12 h-12 mx-auto mb-4 text-muted-foreground" />
+                          <p className="text-muted-foreground">No events created yet</p>
+                        </div>
                       )}
-                      <p className="text-muted-foreground text-sm">{event.description}</p>
-                      <div className="flex items-center space-x-2 text-sm">
-                        <Calendar className="w-4 h-4 text-primary" />
-                        <span>{new Date(event.start_time).toLocaleDateString()}</span>
-                      </div>
-                      <div className="flex items-center space-x-2 text-sm">
-                        <Users className="w-4 h-4 text-primary" />
-                        <span>{event.current_attendees} / {event.max_attendees} attendees</span>
-                      </div>
-                      <div className="grid grid-cols-2 gap-2 mt-3">
-                        <div className="text-center">
-                          <div className="text-lg font-bold text-purple-600">{event.interested_count}</div>
-                          <div className="text-xs text-muted-foreground">Interested</div>
-                        </div>
-                        <div className="text-center">
-                          <div className="text-lg font-bold text-green-600">{event.rsvp_count}</div>
-                          <div className="text-xs text-muted-foreground">RSVPs</div>
-                        </div>
-                      </div>
-                      <Badge variant={event.is_active ? "default" : "secondary"}>
-                        {event.is_active ? 'Active' : 'Inactive'}
-                      </Badge>
-                    </CardContent>
-                  </Card>
-                ))}
-                {events.length === 0 && (
-                  <div className="col-span-full text-center text-muted-foreground py-8">
-                    <Calendar className="w-12 h-12 mx-auto mb-4 opacity-50" />
-                    <p>No events created yet</p>
-                  </div>
-                )}
-              </div>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
             </div>
           </TabsContent>
 
           <TabsContent value="analytics">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-              <Card className="bg-card border">
-                <CardHeader>
-                  <CardTitle className="text-foreground text-sm">Total Stores</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-3xl font-bold text-primary">{places.length}</div>
-                </CardContent>
-              </Card>
-              <Card className="bg-card border">
-                <CardHeader>
-                  <CardTitle className="text-foreground text-sm">Active Events</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-3xl font-bold text-green-600">
-                    {events.filter(e => e.is_active).length}
+            <Card className="bg-card border">
+              <CardHeader>
+                <CardTitle className="text-foreground">Analytics Overview</CardTitle>
+              </CardHeader>
+              <CardContent>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                  <div className="text-center p-6 bg-muted rounded-lg">
+                    <Store className="w-8 h-8 mx-auto mb-2 text-primary" />
+                    <h3 className="text-2xl font-bold text-foreground">{places.length}</h3>
+                    <p className="text-muted-foreground">Total Stores</p>
                   </div>
-                </CardContent>
-              </Card>
-              <Card className="bg-card border">
-                <CardHeader>
-                  <CardTitle className="text-foreground text-sm">Total Event Responses</CardTitle>
-                </CardHeader>
-                <CardContent>
-                  <div className="text-3xl font-bold text-blue-600">
-                    {events.reduce((acc, event) => acc + (event.interested_count || 0) + (event.rsvp_count || 0), 0)}
+                  <div className="text-center p-6 bg-muted rounded-lg">
+                    <Calendar className="w-8 h-8 mx-auto mb-2 text-primary" />
+                    <h3 className="text-2xl font-bold text-foreground">{events.length}</h3>
+                    <p className="text-muted-foreground">Total Events</p>
                   </div>
-                </CardContent>
-              </Card>
-            </div>
+                  <div className="text-center p-6 bg-muted rounded-lg">
+                    <Users className="w-8 h-8 mx-auto mb-2 text-primary" />
+                    <h3 className="text-2xl font-bold text-foreground">
+                      {events.reduce((sum, event) => sum + (event.current_attendees || 0), 0)}
+                    </h3>
+                    <p className="text-muted-foreground">Total RSVPs</p>
+                  </div>
+                </div>
+              </CardContent>
+            </Card>
           </TabsContent>
         </Tabs>
       </div>
