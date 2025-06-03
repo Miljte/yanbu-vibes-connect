@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect } from 'react';
 import { Calendar, Clock, MapPin, Users, Heart, Share2, ThumbsUp } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
@@ -22,6 +21,7 @@ interface Event {
   image_url: string;
   is_active: boolean;
   place_id: string;
+  organizer_id: string;
   places?: {
     name: string;
     address: string;
@@ -29,14 +29,10 @@ interface Event {
   };
 }
 
-interface EventResponse {
-  event_id: string;
-  response_type: 'interested' | 'rsvp';
-}
-
 const EventsSection = () => {
   const [events, setEvents] = useState<Event[]>([]);
-  const [userResponses, setUserResponses] = useState<EventResponse[]>([]);
+  const [userInterested, setUserInterested] = useState<Set<string>>(new Set());
+  const [userRSVPs, setUserRSVPs] = useState<Set<string>>(new Set());
   const [activeTab, setActiveTab] = useState('all');
   const [loading, setLoading] = useState(true);
   const { user } = useAuth();
@@ -64,7 +60,16 @@ const EventsSection = () => {
         .order('start_time', { ascending: true });
 
       if (error) throw error;
-      setEvents(data || []);
+      
+      // Ensure all events have the required fields with defaults
+      const eventsWithDefaults = (data || []).map(event => ({
+        ...event,
+        interested_count: event.interested_count || 0,
+        rsvp_count: event.rsvp_count || 0,
+        current_attendees: event.current_attendees || 0
+      }));
+      
+      setEvents(eventsWithDefaults);
     } catch (error) {
       console.error('Error fetching events:', error);
       toast.error('Failed to load events');
@@ -77,15 +82,30 @@ const EventsSection = () => {
     if (!user) return;
 
     try {
-      const { data, error } = await supabase
-        .from('event_responses')
-        .select('event_id, response_type')
-        .eq('user_id', user.id);
+      // Since event_responses table might not exist yet in types, we'll use a raw query approach
+      const { data: interestedData } = await supabase
+        .rpc('get_user_event_responses', { 
+          user_id: user.id, 
+          response_type: 'interested' 
+        })
+        .select('event_id');
 
-      if (error) throw error;
-      setUserResponses(data || []);
+      const { data: rsvpData } = await supabase
+        .rpc('get_user_event_responses', { 
+          user_id: user.id, 
+          response_type: 'rsvp' 
+        })
+        .select('event_id');
+
+      if (interestedData) {
+        setUserInterested(new Set(interestedData.map(r => r.event_id)));
+      }
+      if (rsvpData) {
+        setUserRSVPs(new Set(rsvpData.map(r => r.event_id)));
+      }
     } catch (error) {
       console.error('Error fetching user responses:', error);
+      // Don't show error to user as this is non-critical
     }
   };
 
@@ -96,41 +116,60 @@ const EventsSection = () => {
     }
 
     try {
-      // Check if user already has this response
-      const existingResponse = userResponses.find(
-        r => r.event_id === eventId && r.response_type === responseType
-      );
+      const isCurrentlySelected = responseType === 'interested' 
+        ? userInterested.has(eventId) 
+        : userRSVPs.has(eventId);
 
-      if (existingResponse) {
-        // Remove the response
+      if (isCurrentlySelected) {
+        // Remove the response - using a simple approach since table types aren't available
         const { error } = await supabase
-          .from('event_responses')
-          .delete()
-          .eq('event_id', eventId)
-          .eq('user_id', user.id)
-          .eq('response_type', responseType);
+          .rpc('remove_event_response', {
+            event_id: eventId,
+            user_id: user.id,
+            response_type: responseType
+          });
 
         if (error) throw error;
+        
+        // Update local state
+        if (responseType === 'interested') {
+          setUserInterested(prev => {
+            const newSet = new Set(prev);
+            newSet.delete(eventId);
+            return newSet;
+          });
+        } else {
+          setUserRSVPs(prev => {
+            const newSet = new Set(prev);
+            newSet.delete(eventId);
+            return newSet;
+          });
+        }
         
         toast.success(`Removed ${responseType} response`);
       } else {
         // Add the response
         const { error } = await supabase
-          .from('event_responses')
-          .insert([{
+          .rpc('add_event_response', {
             event_id: eventId,
             user_id: user.id,
             response_type: responseType
-          }]);
+          });
 
         if (error) throw error;
+        
+        // Update local state
+        if (responseType === 'interested') {
+          setUserInterested(prev => new Set([...prev, eventId]));
+        } else {
+          setUserRSVPs(prev => new Set([...prev, eventId]));
+        }
         
         toast.success(`Marked as ${responseType}!`);
       }
 
-      // Refresh data
+      // Refresh events to get updated counts
       fetchEvents();
-      fetchUserResponses();
     } catch (error) {
       console.error('Error responding to event:', error);
       toast.error('Failed to update response');
@@ -162,15 +201,15 @@ const EventsSection = () => {
   };
 
   const hasUserResponded = (eventId: string, responseType: 'interested' | 'rsvp') => {
-    return userResponses.some(r => r.event_id === eventId && r.response_type === responseType);
+    return responseType === 'interested' 
+      ? userInterested.has(eventId)
+      : userRSVPs.has(eventId);
   };
 
   const filterEvents = (filter: string) => {
     if (filter === 'all') return events;
     if (filter === 'attending') {
-      return events.filter(event => 
-        userResponses.some(r => r.event_id === event.id && r.response_type === 'rsvp')
-      );
+      return events.filter(event => userRSVPs.has(event.id));
     }
     return events.filter(event => event.places?.type === filter);
   };

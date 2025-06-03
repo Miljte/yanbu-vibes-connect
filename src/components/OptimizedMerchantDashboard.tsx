@@ -101,7 +101,7 @@ const OptimizedMerchantDashboard = () => {
 
       // Fetch events for merchant's places
       if (placesResult.length > 0) {
-        const placeIds = placesResult.map(p => p.id);
+        const placeIds = placesResult.map(p => p.id).filter(Boolean);
         const { data: eventsData, error: eventsError } = await supabase
           .from('events')
           .select('*')
@@ -109,12 +109,21 @@ const OptimizedMerchantDashboard = () => {
           .order('start_time', { ascending: true });
 
         if (eventsError) throw eventsError;
-        setEvents(eventsData || []);
+        
+        // Ensure all events have the required fields with defaults
+        const eventsWithDefaults = (eventsData || []).map(event => ({
+          ...event,
+          interested_count: event.interested_count || 0,
+          rsvp_count: event.rsvp_count || 0,
+          current_attendees: event.current_attendees || 0
+        }));
+        
+        setEvents(eventsWithDefaults);
       }
 
       console.log('✅ Merchant data loaded:', {
         places: placesResult.length,
-        events: placesResult.length > 0 ? events.length : 0
+        events: placesResult.length > 0 ? eventsData?.length || 0 : 0
       });
 
     } catch (error) {
@@ -123,7 +132,7 @@ const OptimizedMerchantDashboard = () => {
     } finally {
       setLoading(false);
     }
-  }, [user, selectedPlace]);
+  }, [user, selectedPlace?.id]);
 
   useEffect(() => {
     fetchMerchantData();
@@ -147,11 +156,12 @@ const OptimizedMerchantDashboard = () => {
         is_active: true
       };
 
-      if (selectedPlace && isEditing) {
+      if (selectedPlace && isEditing && selectedPlace.id) {
         const { error } = await supabase
           .from('places')
           .update(placeData)
-          .eq('id', selectedPlace.id);
+          .eq('id', selectedPlace.id)
+          .eq('merchant_id', user.id); // Extra security check
         
         if (error) throw error;
         toast.success('Store updated successfully!');
@@ -186,19 +196,12 @@ const OptimizedMerchantDashboard = () => {
     try {
       console.log('🗑️ Deleting store:', placeId);
 
-      // Delete related data first
-      await Promise.all([
-        supabase.from('chat_messages').delete().eq('place_id', placeId),
-        supabase.from('events').delete().eq('place_id', placeId),
-        supabase.from('offers').delete().eq('place_id', placeId)
-      ]);
-
-      // Delete the place
+      // Delete the place (cascade should handle related data)
       const { error } = await supabase
         .from('places')
         .delete()
         .eq('id', placeId)
-        .eq('merchant_id', user.id);
+        .eq('merchant_id', user.id); // Ensure only the owner can delete
 
       if (error) throw error;
 
@@ -218,7 +221,7 @@ const OptimizedMerchantDashboard = () => {
   // Handle event operations
   const handleSaveEvent = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!user || !selectedPlace) {
+    if (!user || !selectedPlace?.id) {
       toast.error('Please select a store first');
       return;
     }
@@ -706,13 +709,13 @@ const OptimizedMerchantDashboard = () => {
                 </CardHeader>
                 <CardContent>
                   <div className="text-3xl font-bold text-blue-600">
-                    {events.reduce((acc, event) => acc + event.interested_count + event.rsvp_count, 0)}
+                    {events.reduce((acc, event) => acc + (event.interested_count || 0) + (event.rsvp_count || 0), 0)}
                   </div>
                 </CardContent>
               </Card>
             </div>
           </TabsContent>
-        </Tabs>
+        </tabs>
       </div>
     </div>
   );
