@@ -116,6 +116,8 @@ const OptimizedMerchantDashboard = () => {
         
         setEvents(eventsWithDefaults);
         console.log('✅ Events loaded:', eventsWithDefaults.length);
+      } else {
+        setEvents([]);
       }
 
       console.log('✅ Merchant data loaded:', {
@@ -407,7 +409,7 @@ const OptimizedMerchantDashboard = () => {
                 </CardContent>
               </Card>
 
-              {/* Store Details */}
+              {/* Store Details and Form */}
               <div className="lg:col-span-2 space-y-6">
                 {isEditing ? (
                   <Card className="bg-card border">

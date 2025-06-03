@@ -1,3 +1,4 @@
+
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Wrapper, Status } from '@googlemaps/react-wrapper';
 import { Card, CardContent } from '@/components/ui/card';
@@ -202,6 +203,7 @@ const OptimizedMap = () => {
   const [selectedPlace, setSelectedPlace] = useState<Place | null>(null);
   const [places, setPlaces] = useState<Place[]>([]);
   const [userLocation, setUserLocation] = useState<{ latitude: number; longitude: number } | null>(null);
+  const [loading, setLoading] = useState(true);
   const { user } = useAuth();
 
   const googleMapsApiKey = 'AIzaSyCnHJ_b9LBpxdSOdE8jmVMmJd6Vdmm5u8o';
@@ -220,7 +222,7 @@ const OptimizedMap = () => {
 
   const { visibleMarkers, isLoading, markerCount } = useOptimizedMarkers({
     places: markersData,
-    maxDistance: 5000,
+    maxDistance: 50000, // Increased distance to show more markers
     clusterThreshold: 3
   });
 
@@ -254,16 +256,22 @@ const OptimizedMap = () => {
 
   const fetchActivePlaces = async () => {
     try {
+      console.log('🔄 Fetching all active places for map...');
+      
       const { data, error } = await supabase
         .from('places')
         .select('*')
         .eq('is_active', true);
 
       if (error) throw error;
+      
+      console.log('✅ Active places loaded:', data?.length || 0);
       setPlaces(data || []);
     } catch (error) {
-      console.error('Error fetching places:', error);
+      console.error('❌ Error fetching places:', error);
       toast.error('Failed to load stores');
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -296,6 +304,17 @@ const OptimizedMap = () => {
     }
   };
 
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-background flex items-center justify-center">
+        <div className="text-center space-y-4">
+          <div className="w-16 h-16 border-4 border-primary/30 border-t-primary rounded-full animate-spin mx-auto"></div>
+          <div className="text-foreground text-lg">Loading stores...</div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="relative min-h-screen">
       {/* Performance stats */}
@@ -303,7 +322,7 @@ const OptimizedMap = () => {
         <Card className="bg-background/90 backdrop-blur-sm">
           <CardContent className="p-2">
             <div className="text-xs text-muted-foreground">
-              <div>Markers: {markerCount}/{places.length}</div>
+              <div>Stores: {markerCount}/{places.length}</div>
               <div>Status: {isLoading ? 'Loading...' : 'Ready'}</div>
             </div>
           </CardContent>
@@ -324,7 +343,7 @@ const OptimizedMap = () => {
       <Wrapper apiKey={googleMapsApiKey} render={render} libraries={['places']}>
         <MapComponent
           center={userLocation ? { lat: userLocation.latitude, lng: userLocation.longitude } : jeddahCenter}
-          zoom={15}
+          zoom={13}
           visibleMarkers={displayMarkers}
           userLocation={userLocation}
           onPlaceClick={setSelectedPlace}
