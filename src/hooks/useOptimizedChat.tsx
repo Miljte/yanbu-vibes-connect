@@ -145,13 +145,11 @@ export const useOptimizedChat = ({
     setConnectionStatus('connecting');
     fetchMessages();
 
-    // Create new subscription with better error handling
+    // Create new subscription with simplified config
     const channel = supabase
       .channel(`optimized_chat_${placeId}`, {
         config: {
-          presence: { key: user?.id || 'anonymous' },
-          heartbeat_timeout: 30000,
-          rejoin_timeout: 3000
+          presence: { key: user?.id || 'anonymous' }
         }
       })
       .on('postgres_changes', {
