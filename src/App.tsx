@@ -7,6 +7,7 @@ import { LocalizationProvider } from "@/contexts/LocalizationContext";
 import { ThemeProvider } from "@/contexts/ThemeContext";
 import { AuthProvider } from "@/hooks/useAuth";
 import Index from "./pages/Index";
+import TestMapPage from "./pages/TestMap";
 
 const queryClient = new QueryClient();
 
@@ -21,6 +22,7 @@ function App() {
               <BrowserRouter>
                 <Routes>
                   <Route path="/" element={<Index />} />
+                  <Route path="/test-map" element={<TestMapPage />} />
                 </Routes>
               </BrowserRouter>
             </TooltipProvider>
